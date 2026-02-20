@@ -7,7 +7,9 @@
     "build": "vite build",
     "dev": "vite",
     "test": "node --test",
-    "test:redirect": "node --test tests/redirect.sanitize.test.mjs"
+    "test:redirect": "node --test tests/redirect.sanitize.test.mjs",
+    "security:smoke": "node scripts/smoke-security-checks.mjs",
+    "security:token": "node -e \"import('node:crypto').then((c)=>console.log(c.randomBytes(32).toString('hex')))\""
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
