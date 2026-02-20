@@ -23,7 +23,6 @@ export function Onboarding() {
 
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
-  const [needsSetup, setNeedsSetup] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +36,6 @@ export function Onboarding() {
       if (!user) {
         if (!cancelled) {
           setAuthed(false);
-          setNeedsSetup(false);
           setChecking(false);
         }
         return;
@@ -54,7 +52,6 @@ export function Onboarding() {
 
       if (!cancelled) {
         setAuthed(true);
-        setNeedsSetup(!!incomplete);
         setChecking(false);
       }
 
@@ -78,18 +75,8 @@ export function Onboarding() {
 
   const handleContinue = () => {
     const next = encodeURIComponent(redirect);
-
-    // If logged in, go straight to setup (if needed) or to the app
-    if (authed) {
-      if (needsSetup) {
-        navigate(`/setup?redirect=${next}`, { replace: true });
-      } else {
-        navigate(redirect, { replace: true });
-      }
-      return;
-    }
-
-    // Logged out: go to login (magic link)
+    // Always route through login from intro so first-time users
+    // explicitly enter auth before any setup/profile screen.
     navigate(`/login?redirect=${next}`);
   };
 
