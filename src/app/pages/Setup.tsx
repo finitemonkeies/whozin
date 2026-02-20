@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { toast } from "sonner";
 
 type Profile = {
   id: string;
@@ -47,6 +48,21 @@ export default function Setup() {
 
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const isDev = import.meta.env.DEV;
+
+  const showDevSupabaseError = (phase: string, err: any) => {
+    if (!isDev || !err) return;
+    const parts = [
+      err?.code ? `code=${err.code}` : null,
+      err?.message ? `message=${err.message}` : null,
+      err?.hint ? `hint=${err.hint}` : null,
+      err?.details ? `details=${err.details}` : null,
+    ].filter(Boolean);
+    toast.error(`[setup:${phase}] Supabase error`, {
+      description: parts.join(" | ") || "Unknown Supabase error",
+      duration: 12000,
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +73,7 @@ export default function Setup() {
 
       const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr) {
+        showDevSupabaseError("getSession", sessionErr);
         if (!cancelled) setError(sessionErr.message);
         setLoading(false);
         return;
@@ -90,6 +107,7 @@ export default function Setup() {
           .single();
 
         if (createErr) {
+          showDevSupabaseError("createProfile", createErr);
           // In race conditions, another client/process may have created this row.
           const refetch = await supabase
             .from("profiles")
@@ -105,6 +123,7 @@ export default function Setup() {
       }
 
       if (profErr) {
+        showDevSupabaseError("loadProfile", profErr);
         if (!cancelled) setError(profErr.message);
         setLoading(false);
         return;
@@ -181,6 +200,7 @@ export default function Setup() {
       .single();
 
     if (upErr) {
+      showDevSupabaseError("saveProfile", upErr);
       setSaving(false);
       setError(upErr.message);
       return;
