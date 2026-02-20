@@ -1,148 +1,244 @@
-
-import { useState } from "react";
-import { supabase, getServerUrl } from "../../lib/supabase";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase, getSupabaseProjectRef } from "@/lib/supabase";
+import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
-import { Zap, Mail, Lock, User, ArrowRight } from "lucide-react";
 
-export function Login() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+function useQuery() {
+  const { search } = useLocation();
+  return useMemo(() => new URLSearchParams(search), [search]);
+}
+
+export default function Login() {
+  const query = useQuery();
   const navigate = useNavigate();
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const [loading, setLoading] = useState<null | "google" | "facebook" | "magic">(null);
+  const [email, setEmail] = useState("");
 
+  // Cooldown to avoid OTP 429 during dev loops
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const cooldownTimerRef = useRef<number | null>(null);
+
+  const redirect = sanitizeRedirectTarget(query.get("redirect"));
+
+  // Must match App route: <Route path="/auth/callback" ... />
+  const callbackUrl = `${window.location.origin}/auth/callback`;
+
+  const startCooldown = (seconds: number) => {
+    if (cooldownTimerRef.current) {
+      window.clearInterval(cooldownTimerRef.current);
+      cooldownTimerRef.current = null;
+    }
+    setCooldownSeconds(seconds);
+
+    cooldownTimerRef.current = window.setInterval(() => {
+      setCooldownSeconds((s) => {
+        if (s <= 1) {
+          if (cooldownTimerRef.current) {
+            window.clearInterval(cooldownTimerRef.current);
+            cooldownTimerRef.current = null;
+          }
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) window.clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
+
+  const startOAuth = async (provider: "google" | "facebook") => {
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        toast.success("Welcome back!");
-        navigate("/");
-      } else {
-        // Use server signup to auto-confirm and create profile
-        const res = await fetch(getServerUrl("/signup"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password, name })
-        });
-        
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Signup failed");
-        
-        // Auto login after signup
-        const { error: loginError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-        if (loginError) throw loginError;
+      setLoading(provider);
 
-        toast.success("Account created! Welcome to the squad.");
-        navigate("/");
+      // Persist redirect across full-page OAuth hops
+      localStorage.setItem("whozin_post_auth_redirect", redirect);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: callbackUrl },
+      });
+
+      if (error) {
+        const msg = error.message || "OAuth failed";
+        if (msg.toLowerCase().includes("provider is not enabled")) {
+          toast.error("Provider not enabled in Supabase", {
+            description:
+              "Either this frontend points at the wrong Supabase project, or the provider isn’t enabled in Supabase Auth settings.",
+          });
+        } else {
+          toast.error("Login failed", { description: msg });
+        }
+        setLoading(null);
+        return;
       }
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setLoading(false);
+
+      if (data?.url) window.location.assign(data.url);
+    } catch (e: any) {
+      toast.error("Login failed", { description: e?.message || "Unknown error" });
+      setLoading(null);
     }
   };
 
+  const startMagicLink = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      toast.error("Enter an email");
+      return;
+    }
+
+    if (loading || cooldownSeconds > 0) return;
+
+    try {
+      setLoading("magic");
+      localStorage.setItem("whozin_post_auth_redirect", redirect);
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: { emailRedirectTo: callbackUrl },
+      });
+
+      if (error) {
+        const msg = (error as any)?.message || "Unknown error";
+
+        // Supabase can return 429 here when OTP is spammed in dev.
+        // Message formatting varies, so we check loosely.
+        const isRateLimit =
+          msg.includes("429") ||
+          msg.toLowerCase().includes("rate limit") ||
+          msg.toLowerCase().includes("too many") ||
+          msg.toLowerCase().includes("over_email_send_rate_limit");
+
+        if (isRateLimit) {
+          startCooldown(25);
+          toast.error("Slow down a sec", {
+            description: "You hit an email send limit. Wait a moment, then try again.",
+          });
+        } else {
+          toast.error("Magic link failed", { description: msg });
+        }
+
+        setLoading(null);
+        return;
+      }
+
+      toast.success("Check your email", {
+        description: "We sent you a sign-in link.",
+      });
+
+      // Cooldown prevents accidental resends and avoids 429 during testing
+      startCooldown(25);
+      setLoading(null);
+    } catch (e: any) {
+      toast.error("Magic link failed", { description: e?.message || "Unknown error" });
+      setLoading(null);
+    }
+  };
+
+  const isDev = import.meta.env.DEV;
+
+  const canSendMagic =
+    !!email.trim() && !loading && cooldownSeconds === 0;
+
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Background Gradients */}
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-            <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/20 rounded-full blur-[100px]" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-pink-600/20 rounded-full blur-[100px]" />
+    <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
+      <div className="max-w-md mx-auto">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-tight">Whozin</h1>
+          <p className="text-zinc-400 mt-2">Sign in to see who’s going.</p>
         </div>
 
-        <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-sm z-10"
+        <div className="space-y-3">
+          <button
+            onClick={() => startOAuth("google")}
+            disabled={!!loading}
+            className="w-full px-4 py-4 rounded-2xl font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-60"
+          >
+            {loading === "google" ? "Signing in with Google…" : "Continue with Google"}
+          </button>
+
+          <button
+            onClick={() => startOAuth("facebook")}
+            disabled={!!loading}
+            className="w-full px-4 py-4 rounded-2xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15 transition disabled:opacity-60"
+          >
+            {loading === "facebook" ? "Signing in with Facebook…" : "Continue with Facebook"}
+          </button>
+        </div>
+
+        <div className="my-7 flex items-center gap-3">
+          <div className="h-px flex-1 bg-white/10" />
+          <div className="text-xs text-zinc-500">or</div>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        {/* Use a form so Enter triggers the same guarded function */}
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            startMagicLink();
+          }}
         >
-            <div className="flex justify-center mb-8">
-                <div className="w-16 h-16 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(236,72,153,0.5)]">
-                    <Zap className="w-8 h-8 text-white fill-white" />
-                </div>
+          <div>
+            <label className="text-sm text-zinc-400">Email</label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="mt-2 w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-white/20"
+              inputMode="email"
+              autoComplete="email"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={!canSendMagic}
+            className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+          >
+            {loading === "magic"
+              ? "Sending link…"
+              : cooldownSeconds > 0
+              ? `Wait ${cooldownSeconds}s…`
+              : "Send magic link"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(redirect)}
+            disabled={!!loading}
+            className="w-full px-4 py-3 rounded-2xl font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </form>
+
+        {isDev && (
+          <div className="mt-8 p-4 rounded-2xl border border-white/10 bg-white/5 text-xs text-zinc-300">
+            <div className="font-semibold mb-2">Dev Debug</div>
+            <div>
+              redirect param: <code className="text-zinc-200">{redirect}</code>
             </div>
-            
-            <h1 className="text-3xl font-bold text-center mb-2">{isLogin ? "Welcome Back" : "Join the Movement"}</h1>
-            <p className="text-zinc-500 text-center mb-8 text-sm">
-                {isLogin ? "Sync your tickets and find your squad." : "Create an account to start syncing tickets."}
-            </p>
-
-            <form onSubmit={handleAuth} className="space-y-4">
-                {!isLogin && (
-                    <div className="relative">
-                        <User className="absolute left-4 top-3.5 w-5 h-5 text-zinc-500" />
-                        <input 
-                            type="text" 
-                            placeholder="Display Name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-zinc-500 focus:outline-none focus:border-pink-500 transition-colors"
-                            required
-                        />
-                    </div>
-                )}
-                
-                <div className="relative">
-                    <Mail className="absolute left-4 top-3.5 w-5 h-5 text-zinc-500" />
-                    <input 
-                        type="email" 
-                        placeholder="Email Address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-zinc-500 focus:outline-none focus:border-pink-500 transition-colors"
-                        required
-                    />
-                </div>
-
-                <div className="relative">
-                    <Lock className="absolute left-4 top-3.5 w-5 h-5 text-zinc-500" />
-                    <input 
-                        type="password" 
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white placeholder-zinc-500 focus:outline-none focus:border-pink-500 transition-colors"
-                        required
-                    />
-                </div>
-
-                <button 
-                    type="submit" 
-                    disabled={loading}
-                    className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold text-lg shadow-[0_0_20px_rgba(219,39,119,0.4)] active:scale-[0.98] transition-transform flex items-center justify-center gap-2 mt-6 disabled:opacity-50"
-                >
-                    {loading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <>
-                            {isLogin ? "Sign In" : "Create Account"}
-                            <ArrowRight className="w-5 h-5" />
-                        </>
-                    )}
-                </button>
-            </form>
-
-            <div className="mt-6 text-center">
-                <button 
-                    onClick={() => setIsLogin(!isLogin)}
-                    className="text-sm text-zinc-400 hover:text-white transition-colors"
-                >
-                    {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                </button>
+            <div>
+              callbackUrl: <code className="text-zinc-200">{callbackUrl}</code>
             </div>
-        </motion.div>
+            <div>
+              supabase project ref:{" "}
+              <code className="text-zinc-200">{getSupabaseProjectRef()}</code>
+            </div>
+            <div>
+              supabase url:{" "}
+              <code className="text-zinc-200">{import.meta.env.VITE_SUPABASE_URL}</code>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

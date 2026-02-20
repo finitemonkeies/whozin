@@ -9,10 +9,15 @@ const app = new Hono();
 
 app.use('*', logger(console.log));
 
+const corsOrigins = (Deno.env.get("CORS_ORIGINS") || "http://localhost:5173")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: corsOrigins,
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
@@ -22,12 +27,14 @@ app.use(
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const signupAdminToken = Deno.env.get("SIGNUP_ADMIN_TOKEN") || "";
 
 // Helper: Get User ID from Token
 async function getUserId(c: any) {
   const authHeader = c.req.header('Authorization');
   if (!authHeader) return null;
-  const token = authHeader.split(' ')[1];
+  const [scheme, token] = authHeader.split(' ');
+  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
@@ -41,9 +48,20 @@ app.get("/make-server-3b9fa398/health", (c) => {
 
 // Signup
 app.post("/make-server-3b9fa398/signup", async (c) => {
+  if (!signupAdminToken) {
+    return c.json({ error: "Signup endpoint is disabled" }, 403);
+  }
+  if (c.req.header("X-Admin-Token") !== signupAdminToken) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
   const body = await c.req.json();
   const { email, password, name } = body;
-  
+
+  if (!email || !password || !name) {
+    return c.json({ error: "Missing email, password, or name" }, 400);
+  }
+
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -100,6 +118,9 @@ app.put("/make-server-3b9fa398/me", async (c) => {
 
 // Get Event Attendees
 app.get("/make-server-3b9fa398/event/:id/attendees", async (c) => {
+    const userId = await getUserId(c);
+    if (!userId) return c.json({ error: "Unauthorized" }, 401);
+
     const eventId = c.req.param('id');
     const rsvps = await kv.getByPrefix(`rsvp:${eventId}:`); 
     // rsvps is array of { userId, timestamp }
