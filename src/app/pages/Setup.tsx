@@ -145,28 +145,38 @@ export default function Setup() {
       return;
     }
 
-    if (!profile) {
-      setError("Profile not loaded yet.");
+    const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession();
+    const user = sessionRes.session?.user;
+
+    if (sessionErr || !user) {
+      setError("Your session expired. Please sign in again.");
+      const next = encodeURIComponent(location.pathname + location.search);
+      navigate(`/login?redirect=${next}`, { replace: true });
       return;
     }
 
     const nextUsername =
-      profile.username && profile.username.trim().length > 0
+      profile?.username && profile.username.trim().length > 0
         ? profile.username.trim()
         : makeUsernameFromName(value);
 
     setSaving(true);
 
-    // Update and request the updated row back (helps debugging + consistency)
+    // Upsert lets first-time users complete setup even if their profile row
+    // wasn't created yet by earlier flows.
     const { data: updated, error: upErr } = await supabase
       .from("profiles")
-      .update({
-        display_name: value,
-        username: nextUsername,
-        onboarding_complete: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id)
+      .upsert(
+        {
+          id: user.id,
+          email: user.email ?? profile?.email ?? null,
+          display_name: value,
+          username: nextUsername,
+          onboarding_complete: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      )
       .select("id,display_name,onboarding_complete,username")
       .single();
 
