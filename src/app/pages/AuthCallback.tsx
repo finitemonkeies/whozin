@@ -64,7 +64,7 @@ export default function AuthCallback() {
   return (
     <div style={{ padding: 24 }}>
       <h2>Signing you in…</h2>
-      <p>Please wait a moment.</p>
+      <p>This usually takes a few seconds.</p>
     </div>
   );
 }

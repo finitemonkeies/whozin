@@ -116,9 +116,7 @@ export default function Login() {
 
         if (isRateLimit) {
           startCooldown(25);
-          toast.error("Slow down a sec", {
-            description: "You hit an email send limit. Wait a moment, then try again.",
-          });
+          toast.error("Too many tries. Please wait a moment and try again.");
         } else {
           toast.error("Magic link failed", { description: msg });
         }
@@ -127,8 +125,8 @@ export default function Login() {
         return;
       }
 
-      toast.success("Check your email", {
-        description: "We sent you a sign-in link.",
+      toast.success("Check your inbox", {
+        description: "Your sign-in link is on the way.",
       });
 
       // Cooldown prevents accidental resends and avoids 429 during testing
@@ -149,8 +147,8 @@ export default function Login() {
     <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
       <div className="max-w-md mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight">Whozin</h1>
-          <p className="text-zinc-400 mt-2">Sign in to see who’s going.</p>
+          <h1 className="text-4xl font-bold tracking-tight">Sign in to continue</h1>
+          <p className="text-zinc-400 mt-2">We’ll send a secure magic link to your email.</p>
         </div>
 
         <div className="space-y-3">
@@ -186,7 +184,7 @@ export default function Login() {
           }}
         >
           <div>
-            <label className="text-sm text-zinc-400">Email</label>
+            <label className="text-sm text-zinc-400">Email address</label>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -242,3 +240,4 @@ export default function Login() {
     </div>
   );
 }
+

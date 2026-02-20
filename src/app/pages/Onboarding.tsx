@@ -91,11 +91,11 @@ export function Onboarding() {
 
       <div className="relative max-w-md mx-auto w-full text-center">
         <h1 className="text-3xl font-bold tracking-tight mb-4">
-          Find your People
+          Find Your People
         </h1>
 
         <p className="text-zinc-400 text-base leading-relaxed mb-10">
-          RSVP to the events you’re attending & instantly see which friends (and friends of friends) will be there.
+          See which friends are going. Don't miss who you should've met.
         </p>
 
         {/* Glow background */}
@@ -117,10 +117,8 @@ export function Onboarding() {
           {checking ? "Loading…" : authed ? "Continue" : "Continue"}
         </button>
 
-        {/* Optional microcopy while checking */}
-        {checking ? (
-          <div className="mt-3 text-xs text-white/40">Checking session…</div>
-        ) : null}
+        <div className="mt-3 text-xs text-white/50">Private by default. No public profile.</div>
+        <div className="mt-1 text-xs text-white/35">Step 1 of 2</div>
       </div>
     </div>
   );
@@ -145,3 +143,4 @@ function MiniStep({
     </div>
   );
 }
+

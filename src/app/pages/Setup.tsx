@@ -160,7 +160,7 @@ export default function Setup() {
 
     const value = displayName.trim();
     if (value.length < 2) {
-      setError("Name must be at least 2 characters.");
+      setError("Display name must be at least 2 characters.");
       return;
     }
 
@@ -202,7 +202,7 @@ export default function Setup() {
     if (upErr) {
       showDevSupabaseError("saveProfile", upErr);
       setSaving(false);
-      setError(upErr.message);
+      setError("We couldn’t save your profile. Please try again.");
       return;
     }
 
@@ -232,28 +232,28 @@ export default function Setup() {
       <div className="relative mx-auto flex min-h-[100svh] max-w-md flex-col justify-center px-5 py-10">
         <div className="mb-6">
           <div className="text-sm text-white/60">Whozin</div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">One quick thing</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Complete your profile</h1>
           <p className="mt-2 text-sm text-white/70">
-            Add your name so your friends recognize you when you RSVP.
+            You’re signed in. Add the name your friends know you by.
           </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4 backdrop-blur">
           {loading ? (
-            <div className="text-sm text-white/70">Loading…</div>
+            <div className="text-sm text-white/70">Loading your profile…</div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
-                <label className="mb-2 block text-xs font-medium text-white/70">Name</label>
+                <label className="mb-2 block text-xs font-medium text-white/70">Display name</label>
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="What are we calling you?"
+                  placeholder="e.g. Alex Chen"
                   autoComplete="name"
                   className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
                 <div className="mt-2 text-xs text-white/50">
-                  You can customize your profile later.
+                  You can change this later in Settings.
                 </div>
               </div>
 
@@ -268,11 +268,11 @@ export default function Setup() {
                 disabled={saving}
                 className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold tracking-wide disabled:opacity-60"
               >
-                {saving ? "Saving…" : "Continue"}
+                {saving ? "Saving…" : "Finish setup"}
               </button>
 
               <div className="text-center text-xs text-white/40">
-                No passwords. No public profile. Just your crew.
+                No public profile. Your visibility is in your control.
               </div>
             </form>
           )}
