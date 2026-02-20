@@ -5,6 +5,7 @@ import AddFriend from "../components/AddFriend";
 
 type FriendRow = {
   friend_id: string;
+  status: string | null;
   friend_profile?: {
     username: string | null;
     avatar_url: string | null;
@@ -20,12 +21,16 @@ type SuggestedProfile = {
 export default function Friends() {
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRow[]>([]);
+  const [pending, setPending] = useState<FriendRow[]>([]);
   const [suggested, setSuggested] = useState<SuggestedProfile[]>([]);
   const [addingIds, setAddingIds] = useState<Record<string, boolean>>({});
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  const loadFriends = async () => {
+  const loadFriends = async (): Promise<{
+    acceptedIds: Set<string>;
+    pendingIds: Set<string>;
+  } | null> => {
     setLoading(true);
 
     const {
@@ -37,16 +42,18 @@ export default function Friends() {
       console.error("getSession error:", sessionErr);
       toast.error("Failed to load session");
       setFriends([]);
+      setPending([]);
       setLoading(false);
-      return;
+      return null;
     }
 
     if (!session?.user?.id) {
       toast.error("Please sign in");
       setFriends([]);
+      setPending([]);
       setSuggested([]);
       setLoading(false);
-      return;
+      return null;
     }
 
     setViewerId(session.user.id);
@@ -63,20 +70,25 @@ export default function Friends() {
     const { data, error } = await supabase
       .from("friendships")
       .select(
-        "friend_id, friend_profile:profiles!friendships_friend_id_fkey(username, avatar_url)"
+        "friend_id,status, friend_profile:profiles!friendships_friend_id_fkey(username, avatar_url)"
       )
-      .eq("user_id", session.user.id)
-      .eq("status", "accepted");
+      .eq("user_id", session.user.id);
 
     if (error) {
       console.error("Failed to load friends:", error);
       toast.error(error.message ?? "Failed to load friends");
       setFriends([]);
+      setPending([]);
     } else {
-      const accepted = (data ?? []) as FriendRow[];
+      const allRows = (data ?? []) as FriendRow[];
+      const accepted = allRows.filter((r) => r.status === "accepted");
+      const pendingRows = allRows.filter((r) => r.status !== "accepted");
       setFriends(accepted);
+      setPending(pendingRows);
 
-      const friendIds = new Set(accepted.map((f) => f.friend_id));
+      const acceptedIds = new Set(accepted.map((f) => f.friend_id));
+      const pendingIds = new Set(pendingRows.map((f) => f.friend_id));
+      const connectedIds = new Set([...acceptedIds, ...pendingIds]);
 
       const { data: profiles, error: pErr } = await supabase
         .from("profiles")
@@ -92,12 +104,16 @@ export default function Friends() {
       } else {
         const rows = (profiles ?? []) as SuggestedProfile[];
         setSuggested(
-          rows.filter((r) => !!r.id && !!r.username && !friendIds.has(r.id)).slice(0, 20)
+          rows.filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id)).slice(0, 20)
         );
       }
+
+      setLoading(false);
+      return { acceptedIds, pendingIds };
     }
 
     setLoading(false);
+    return null;
   };
 
   const addSuggestedFriend = async (row: SuggestedProfile) => {
@@ -123,9 +139,16 @@ export default function Friends() {
       }
     }
 
+    const loaded = await loadFriends();
     setSuggested((prev) => prev.filter((p) => p.id !== row.id));
-    if (row.username) toast.success(`Added @${row.username}`);
-    await loadFriends();
+
+    if (row.username && loaded?.acceptedIds.has(row.id)) {
+      toast.success(`Added @${row.username}`);
+    } else if (row.username && loaded?.pendingIds.has(row.id)) {
+      toast.success(`Request sent to @${row.username}`);
+    } else if (row.username) {
+      toast.success(`Connection updated for @${row.username}`);
+    }
   };
 
   useEffect(() => {
@@ -187,9 +210,43 @@ export default function Friends() {
         </div>
       )}
 
+      {!loading && pending.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-2">Pending requests</h2>
+          <div className="grid grid-cols-2 gap-6">
+            {pending.map((f) => {
+              const name = f.friend_profile?.username ?? "Anon";
+              const avatar = f.friend_profile?.avatar_url ?? "";
+
+              return (
+                <div
+                  key={f.friend_id}
+                  className="flex items-center gap-4 bg-zinc-900/40 border border-white/10 rounded-2xl p-4"
+                >
+                  {avatar ? (
+                    <img
+                      src={avatar}
+                      alt={name}
+                      className="w-14 h-14 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-zinc-800" />
+                  )}
+
+                  <div>
+                    <div className="font-semibold">{name}</div>
+                    <div className="text-xs text-zinc-500">Requested</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-zinc-400">Loading friends…</div>
-      ) : friends.length === 0 ? (
+      ) : friends.length === 0 && pending.length === 0 ? (
         <div className="text-zinc-500 mb-6">You don’t have any friends yet.</div>
       ) : (
         <div className="grid grid-cols-2 gap-6 mb-8">
