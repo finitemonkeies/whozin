@@ -69,11 +69,40 @@ export default function Setup() {
         return;
       }
 
-      const { data, error: profErr } = await supabase
+      let { data, error: profErr } = await supabase
         .from("profiles")
         .select("id,email,username,display_name,onboarding_complete,avatar_url")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+      // First-time user path: create profile row if it doesn't exist yet.
+      if (!profErr && !data) {
+        const { data: created, error: createErr } = await supabase
+          .from("profiles")
+          .insert({
+            id: user.id,
+            email: user.email ?? null,
+            username: null,
+            display_name: null,
+            onboarding_complete: false,
+          })
+          .select("id,email,username,display_name,onboarding_complete,avatar_url")
+          .single();
+
+        if (createErr) {
+          // In race conditions, another client/process may have created this row.
+          const refetch = await supabase
+            .from("profiles")
+            .select("id,email,username,display_name,onboarding_complete,avatar_url")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          data = refetch.data;
+          profErr = refetch.error;
+        } else {
+          data = created;
+        }
+      }
 
       if (profErr) {
         if (!cancelled) setError(profErr.message);
@@ -82,6 +111,12 @@ export default function Setup() {
       }
 
       if (cancelled) return;
+
+      if (!data) {
+        if (!cancelled) setError("Could not load your profile. Please try again.");
+        setLoading(false);
+        return;
+      }
 
       const prof = data as Profile;
       setProfile(prof);
