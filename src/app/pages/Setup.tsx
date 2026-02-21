@@ -1,8 +1,8 @@
-// src/app/pages/Setup.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 
 type Profile = {
@@ -31,7 +31,7 @@ function slugifyBase(input: string) {
 
 function makeUsernameFromName(name: string) {
   const base = slugifyBase(name) || "user";
-  const suffix = Math.floor(1000 + Math.random() * 9000); // 4-digit
+  const suffix = Math.floor(1000 + Math.random() * 9000);
   return `${base}-${suffix}`;
 }
 
@@ -39,13 +39,11 @@ export default function Setup() {
   const navigate = useNavigate();
   const location = useLocation();
   const query = useQuery();
-
   const redirectTo = sanitizeRedirectTarget(query.get("redirect"));
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const isDev = import.meta.env.DEV;
@@ -92,7 +90,6 @@ export default function Setup() {
         .eq("id", user.id)
         .maybeSingle();
 
-      // First-time user path: create profile row if it doesn't exist yet.
       if (!profErr && !data) {
         const { data: created, error: createErr } = await supabase
           .from("profiles")
@@ -108,7 +105,6 @@ export default function Setup() {
 
         if (createErr) {
           showDevSupabaseError("createProfile", createErr);
-          // In race conditions, another client/process may have created this row.
           const refetch = await supabase
             .from("profiles")
             .select("id,email,username,display_name,onboarding_complete,avatar_url")
@@ -139,11 +135,10 @@ export default function Setup() {
 
       const prof = data as Profile;
       setProfile(prof);
-      setDisplayName((prof?.display_name || "").trim());
+      setDisplayName((prof.display_name || "").trim());
       setLoading(false);
 
-      // If already complete, bounce out immediately
-      if (prof?.display_name && prof?.onboarding_complete) {
+      if (prof.display_name && prof.onboarding_complete) {
         window.location.assign(redirectTo);
       }
     }
@@ -181,8 +176,6 @@ export default function Setup() {
 
     setSaving(true);
 
-    // Upsert lets first-time users complete setup even if their profile row
-    // wasn't created yet by earlier flows.
     const { data: updated, error: upErr } = await supabase
       .from("profiles")
       .upsert(
@@ -202,14 +195,11 @@ export default function Setup() {
     if (upErr) {
       showDevSupabaseError("saveProfile", upErr);
       setSaving(false);
-      setError("We couldn’t save your profile. Please try again.");
+      setError("We couldn't save your profile. Please try again.");
       return;
     }
 
-    // Safety: verify the saved state is actually complete
-    const isComplete =
-      !!updated?.display_name && updated?.onboarding_complete === true;
-
+    const isComplete = !!updated?.display_name && updated?.onboarding_complete === true;
     setSaving(false);
 
     if (!isComplete) {
@@ -217,13 +207,12 @@ export default function Setup() {
       return;
     }
 
-    // Hard navigate to avoid any flicker/race with RequireAuth re-check
+    track("setup_completed", { redirect: redirectTo });
     window.location.assign(redirectTo);
   }
 
   return (
     <div className="min-h-[100svh] bg-black text-white">
-      {/* Soft glow background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-pink-600/20 blur-3xl" />
         <div className="absolute top-24 left-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl" />
@@ -234,13 +223,13 @@ export default function Setup() {
           <div className="text-sm text-white/60">Whozin</div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Complete your profile</h1>
           <p className="mt-2 text-sm text-white/70">
-            You’re signed in. Add the name your friends know you by.
+            You're signed in. Add the name your friends know you by.
           </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4 backdrop-blur">
           {loading ? (
-            <div className="text-sm text-white/70">Loading your profile…</div>
+            <div className="text-sm text-white/70">Loading your profile...</div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
@@ -268,7 +257,7 @@ export default function Setup() {
                 disabled={saving}
                 className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold tracking-wide disabled:opacity-60"
               >
-                {saving ? "Saving…" : "Finish setup"}
+                {saving ? "Saving..." : "Finish setup"}
               </button>
 
               <div className="text-center text-xs text-white/40">

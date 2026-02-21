@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, getSupabaseProjectRef } from "@/lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 
 function useQuery() {
@@ -16,13 +17,10 @@ export default function Login() {
   const [loading, setLoading] = useState<null | "google" | "facebook" | "magic">(null);
   const [email, setEmail] = useState("");
 
-  // Cooldown to avoid OTP 429 during dev loops
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const cooldownTimerRef = useRef<number | null>(null);
 
   const redirect = sanitizeRedirectTarget(query.get("redirect"));
-
-  // Must match App route: <Route path="/auth/callback" ... />
   const callbackUrl = `${window.location.origin}/auth/callback`;
 
   const startCooldown = (seconds: number) => {
@@ -55,8 +53,6 @@ export default function Login() {
   const startOAuth = async (provider: "google" | "facebook") => {
     try {
       setLoading(provider);
-
-      // Persist redirect across full-page OAuth hops
       localStorage.setItem("whozin_post_auth_redirect", redirect);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -69,7 +65,7 @@ export default function Login() {
         if (msg.toLowerCase().includes("provider is not enabled")) {
           toast.error("Provider not enabled in Supabase", {
             description:
-              "Either this frontend points at the wrong Supabase project, or the provider isn’t enabled in Supabase Auth settings.",
+              "Either this frontend points at the wrong Supabase project, or the provider is not enabled in Supabase Auth settings.",
           });
         } else {
           toast.error("Login failed", { description: msg });
@@ -78,6 +74,7 @@ export default function Login() {
         return;
       }
 
+      track("oauth_started", { provider, redirect });
       if (data?.url) window.location.assign(data.url);
     } catch (e: any) {
       toast.error("Login failed", { description: e?.message || "Unknown error" });
@@ -105,9 +102,6 @@ export default function Login() {
 
       if (error) {
         const msg = (error as any)?.message || "Unknown error";
-
-        // Supabase can return 429 here when OTP is spammed in dev.
-        // Message formatting varies, so we check loosely.
         const isRateLimit =
           msg.includes("429") ||
           msg.toLowerCase().includes("rate limit") ||
@@ -128,8 +122,8 @@ export default function Login() {
       toast.success("Check your inbox", {
         description: "Your sign-in link is on the way.",
       });
+      track("magic_link_requested", { redirect });
 
-      // Cooldown prevents accidental resends and avoids 429 during testing
       startCooldown(25);
       setLoading(null);
     } catch (e: any) {
@@ -139,16 +133,14 @@ export default function Login() {
   };
 
   const isDev = import.meta.env.DEV;
-
-  const canSendMagic =
-    !!email.trim() && !loading && cooldownSeconds === 0;
+  const canSendMagic = !!email.trim() && !loading && cooldownSeconds === 0;
 
   return (
     <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
       <div className="max-w-md mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight">Sign in to continue</h1>
-          <p className="text-zinc-400 mt-2">We’ll send a secure magic link to your email.</p>
+          <p className="text-zinc-400 mt-2">We'll send a secure magic link to your email.</p>
         </div>
 
         <div className="space-y-3">
@@ -157,7 +149,7 @@ export default function Login() {
             disabled={!!loading}
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-60"
           >
-            {loading === "google" ? "Signing in with Google…" : "Continue with Google"}
+            {loading === "google" ? "Signing in with Google..." : "Continue with Google"}
           </button>
 
           <button
@@ -165,7 +157,7 @@ export default function Login() {
             disabled={!!loading}
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15 transition disabled:opacity-60"
           >
-            {loading === "facebook" ? "Signing in with Facebook…" : "Continue with Facebook"}
+            {loading === "facebook" ? "Signing in with Facebook..." : "Continue with Facebook"}
           </button>
         </div>
 
@@ -175,7 +167,6 @@ export default function Login() {
           <div className="h-px flex-1 bg-white/10" />
         </div>
 
-        {/* Use a form so Enter triggers the same guarded function */}
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -201,9 +192,9 @@ export default function Login() {
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
           >
             {loading === "magic"
-              ? "Sending link…"
+              ? "Sending link..."
               : cooldownSeconds > 0
-              ? `Wait ${cooldownSeconds}s…`
+              ? `Wait ${cooldownSeconds}s...`
               : "Send magic link"}
           </button>
 
@@ -240,4 +231,3 @@ export default function Login() {
     </div>
   );
 }
-

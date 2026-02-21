@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Ticket, Users, ShieldCheck } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { track } from "@/lib/analytics";
 
 function useQuery() {
   const { search } = useLocation();
@@ -55,7 +56,7 @@ export function Onboarding() {
         setChecking(false);
       }
 
-      // If they’re already complete, don’t keep them on intro
+      // If they are already complete, do not keep them on intro.
       if (!incomplete) {
         navigate(redirect, { replace: true });
       }
@@ -75,6 +76,7 @@ export function Onboarding() {
 
   const handleContinue = () => {
     const next = encodeURIComponent(redirect);
+    track("intro_continue_clicked", { redirect });
     // Always route through login from intro so first-time users
     // explicitly enter auth before any setup/profile screen.
     navigate(`/login?redirect=${next}`);
@@ -82,7 +84,6 @@ export function Onboarding() {
 
   return (
     <div className="min-h-[100svh] bg-black text-white px-6 relative overflow-hidden flex flex-col justify-center">
-      {/* Background glow */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-purple-500/20 blur-3xl" />
         <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-pink-500/20 blur-3xl" />
@@ -90,22 +91,19 @@ export function Onboarding() {
       </div>
 
       <div className="relative max-w-md mx-auto w-full text-center">
-        <h1 className="text-3xl font-bold tracking-tight mb-4">
-          Find Your People
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-4">Find Your People</h1>
 
         <p className="text-zinc-400 text-base leading-relaxed mb-10">
           See which friends are going. Don't miss who you should've met.
         </p>
 
-        {/* Glow background */}
         <div className="absolute inset-0 flex justify-center pointer-events-none">
           <div className="w-64 h-64 rounded-full bg-gradient-to-r from-pink-600/20 to-purple-600/20 blur-3xl" />
         </div>
 
         <div className="grid grid-cols-3 gap-3 relative">
           <MiniStep icon={<Ticket className="w-4 h-4 text-pink-200" />} title="RSVP" subtitle="1 tap" />
-          <MiniStep icon={<Users className="w-4 h-4 text-purple-200" />} title="See who’s going" subtitle="friends + FOAF" />
+          <MiniStep icon={<Users className="w-4 h-4 text-purple-200" />} title="See who's going" subtitle="friends + FOAF" />
           <MiniStep icon={<ShieldCheck className="w-4 h-4 text-emerald-200" />} title="Party safely" subtitle="you decide visibility" />
         </div>
 
@@ -114,7 +112,7 @@ export function Onboarding() {
           disabled={checking}
           className="mt-10 w-full py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-pink-600 to-purple-600 hover:brightness-110 transition active:scale-[0.98] disabled:opacity-60"
         >
-          {checking ? "Loading…" : authed ? "Continue" : "Continue"}
+          {checking ? "Loading..." : "Continue"}
         </button>
 
         <div className="mt-3 text-xs text-white/50">Private by default. No public profile.</div>
@@ -143,4 +141,3 @@ function MiniStep({
     </div>
   );
 }
-

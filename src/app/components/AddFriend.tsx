@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
 function friendlyError(message?: string) {
   const m = (message ?? "").toLowerCase();
   if (m.includes("no user found")) return "No account found with that username.";
-  if (m.includes("cannot add yourself")) return "You can’t add yourself 🙂";
+  if (m.includes("cannot add yourself")) return "You can't add yourself.";
   if (m.includes("not authenticated")) return "Please sign in first.";
   if (m.includes("username is required")) return "Enter a username.";
   return message ?? "Failed to add friend";
@@ -32,8 +33,10 @@ export default function AddFriend({ onSuccess }: Props) {
     if (error) {
       console.error("add_friend_by_username error:", error);
       toast.error(friendlyError(error.message));
+      track("friend_add_failed", { source: "manual" });
     } else {
       toast.success("Connection request sent");
+      track("friend_add_submitted", { source: "manual" });
       setUsername("");
       onSuccess?.();
     }
@@ -59,14 +62,11 @@ export default function AddFriend({ onSuccess }: Props) {
           disabled={working}
           className="px-6 py-3 rounded-xl font-semibold bg-pink-600 disabled:opacity-50"
         >
-          {working ? "Adding…" : "Add"}
+          {working ? "Adding..." : "Add"}
         </button>
       </div>
 
-      <div className="text-xs text-zinc-500 mt-2">
-        Tip: your username is on your Profile page.
-      </div>
+      <div className="text-xs text-zinc-500 mt-2">Tip: your username is on your Profile page.</div>
     </div>
   );
 }
-

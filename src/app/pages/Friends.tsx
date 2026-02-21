@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { track } from "@/lib/analytics";
 import AddFriend from "../components/AddFriend";
 
 type FriendRow = {
@@ -26,6 +27,9 @@ export default function Friends() {
   const [addingIds, setAddingIds] = useState<Record<string, boolean>>({});
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [suggestionsHidden, setSuggestionsHidden] = useState(
+    localStorage.getItem("whozin_hide_friend_suggestions") === "true"
+  );
 
   const loadFriends = async (): Promise<{
     acceptedIds: Set<string>;
@@ -58,15 +62,6 @@ export default function Friends() {
 
     setViewerId(session.user.id);
 
-    /**
-     * IMPORTANT:
-     * We must disambiguate which relationship to embed because friendships links to profiles twice.
-     * This uses the FK from friendships.friend_id -> profiles.id.
-     *
-     * If your FK constraint name is different, change:
-     * profiles!friendships_friend_id_fkey
-     * to the exact name shown in Supabase Table Editor for friendships -> foreign keys.
-     */
     const { data, error } = await supabase
       .from("friendships")
       .select(
@@ -79,41 +74,40 @@ export default function Friends() {
       toast.error(error.message ?? "Failed to load friends");
       setFriends([]);
       setPending([]);
-    } else {
-      const allRows = (data ?? []) as FriendRow[];
-      const accepted = allRows.filter((r) => r.status === "accepted");
-      const pendingRows = allRows.filter((r) => r.status !== "accepted");
-      setFriends(accepted);
-      setPending(pendingRows);
-
-      const acceptedIds = new Set(accepted.map((f) => f.friend_id));
-      const pendingIds = new Set(pendingRows.map((f) => f.friend_id));
-      const connectedIds = new Set([...acceptedIds, ...pendingIds]);
-
-      const { data: profiles, error: pErr } = await supabase
-        .from("profiles")
-        .select("id,username,avatar_url")
-        .neq("id", session.user.id)
-        .not("username", "is", null)
-        .limit(40);
-
-      if (pErr) {
-        console.error("Failed to load suggested profiles:", pErr);
-        toast.error(pErr.message ?? "Failed to load suggested friends");
-        setSuggested([]);
-      } else {
-        const rows = (profiles ?? []) as SuggestedProfile[];
-        setSuggested(
-          rows.filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id)).slice(0, 20)
-        );
-      }
-
       setLoading(false);
-      return { acceptedIds, pendingIds };
+      return null;
+    }
+
+    const allRows = (data ?? []) as FriendRow[];
+    const accepted = allRows.filter((r) => r.status === "accepted");
+    const pendingRows = allRows.filter((r) => r.status !== "accepted");
+    setFriends(accepted);
+    setPending(pendingRows);
+
+    const acceptedIds = new Set(accepted.map((f) => f.friend_id));
+    const pendingIds = new Set(pendingRows.map((f) => f.friend_id));
+    const connectedIds = new Set([...acceptedIds, ...pendingIds]);
+
+    const { data: profiles, error: pErr } = await supabase
+      .from("profiles")
+      .select("id,username,avatar_url")
+      .neq("id", session.user.id)
+      .not("username", "is", null)
+      .limit(40);
+
+    if (pErr) {
+      console.error("Failed to load suggested profiles:", pErr);
+      toast.error(pErr.message ?? "Failed to load suggested friends");
+      setSuggested([]);
+    } else {
+      const rows = (profiles ?? []) as SuggestedProfile[];
+      setSuggested(
+        rows.filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id)).slice(0, 20)
+      );
     }
 
     setLoading(false);
-    return null;
+    return { acceptedIds, pendingIds };
   };
 
   const addSuggestedFriend = async (row: SuggestedProfile) => {
@@ -121,7 +115,7 @@ export default function Friends() {
     if (addingIds[row.id] || addedIds[row.id]) return;
 
     setAddingIds((prev) => ({ ...prev, [row.id]: true }));
-    setAddedIds((prev) => ({ ...prev, [row.id]: true })); // optimistic
+    setAddedIds((prev) => ({ ...prev, [row.id]: true }));
 
     const { error } = await supabase.rpc("add_friend_by_username", {
       friend_username: row.username,
@@ -135,6 +129,7 @@ export default function Friends() {
       if (!isDuplicate) {
         setAddedIds((prev) => ({ ...prev, [row.id]: false }));
         toast.error(error.message ?? "Could not add friend");
+        track("friend_add_failed", { source: "suggested" });
         return;
       }
     }
@@ -144,11 +139,26 @@ export default function Friends() {
 
     if (row.username && loaded?.acceptedIds.has(row.id)) {
       toast.success(`Added @${row.username}`);
+      track("friend_added", { source: "suggested", mode: "accepted" });
     } else if (row.username && loaded?.pendingIds.has(row.id)) {
       toast.success(`Request sent to @${row.username}`);
+      track("friend_added", { source: "suggested", mode: "pending" });
     } else if (row.username) {
       toast.success(`Connection updated for @${row.username}`);
+      track("friend_added", { source: "suggested", mode: "unknown" });
     }
+  };
+
+  const hideSuggestions = () => {
+    localStorage.setItem("whozin_hide_friend_suggestions", "true");
+    setSuggestionsHidden(true);
+    track("friend_suggestions_skipped");
+  };
+
+  const showSuggestionsAgain = () => {
+    localStorage.removeItem("whozin_hide_friend_suggestions");
+    setSuggestionsHidden(false);
+    track("friend_suggestions_reopened");
   };
 
   useEffect(() => {
@@ -159,7 +169,7 @@ export default function Friends() {
     <div className="min-h-screen bg-black text-white px-6 py-8">
       <h1 className="text-3xl font-bold mb-6">Your Friends</h1>
 
-      {!loading && (
+      {!loading && !suggestionsHidden && (
         <div className="mb-8">
           <h2 className="text-xl font-bold mb-2">Friends already on Whozin</h2>
           <p className="text-zinc-500 text-sm mb-4">One tap to connect with your crew.</p>
@@ -207,6 +217,28 @@ export default function Friends() {
               })}
             </div>
           )}
+
+          <div className="mt-4 flex items-center gap-4 text-sm">
+            <button
+              onClick={hideSuggestions}
+              className="text-zinc-400 hover:text-white transition-colors"
+            >
+              Skip for now
+            </button>
+            <span className="text-zinc-600">You can add later from this tab.</span>
+          </div>
+        </div>
+      )}
+
+      {!loading && suggestionsHidden && (
+        <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="text-sm text-zinc-400">Friend suggestions hidden for now.</div>
+          <button
+            onClick={showSuggestionsAgain}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/10 hover:bg-white/15"
+          >
+            Add later
+          </button>
         </div>
       )}
 
@@ -245,9 +277,9 @@ export default function Friends() {
       )}
 
       {loading ? (
-        <div className="text-zinc-400">Loading friends…</div>
+        <div className="text-zinc-400">Loading friends...</div>
       ) : friends.length === 0 && pending.length === 0 ? (
-        <div className="text-zinc-500 mb-6">You don’t have any friends yet.</div>
+        <div className="text-zinc-500 mb-6">You don't have any friends yet.</div>
       ) : (
         <div className="grid grid-cols-2 gap-6 mb-8">
           {friends.map((f) => {

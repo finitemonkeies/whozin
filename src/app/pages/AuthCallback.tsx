@@ -2,15 +2,12 @@ import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { supabase } from "@/lib/supabase";
+import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 
 /**
  * Central OAuth landing page.
- * Supabase will parse the URL and exchange the code automatically (detectSessionInUrl: true),
- * but we still use this page to:
- * - wait for session
- * - restore redirect path (stored in localStorage)
- * - handle errors cleanly
+ * Supabase parses the URL and exchanges the code automatically (detectSessionInUrl: true).
  */
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -31,7 +28,6 @@ export default function AuthCallback() {
         return;
       }
 
-      // Wait briefly for session to appear after OAuth redirect
       const start = Date.now();
       const timeoutMs = 8000;
 
@@ -42,6 +38,7 @@ export default function AuthCallback() {
             localStorage.getItem("whozin_post_auth_redirect")
           );
           localStorage.removeItem("whozin_post_auth_redirect");
+          track("auth_callback_success", { redirect });
           navigate(redirect);
           return;
         }
@@ -63,7 +60,7 @@ export default function AuthCallback() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2>Signing you in…</h2>
+      <h2>Signing you in...</h2>
       <p>This usually takes a few seconds.</p>
     </div>
   );
