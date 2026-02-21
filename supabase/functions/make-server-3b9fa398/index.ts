@@ -1,9 +1,9 @@
-
+﻿
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import * as kv from "./kv_store.tsx";
+import * as kv from "./kv_store.ts";
 
 const app = new Hono();
 
@@ -173,3 +173,4 @@ app.get("/make-server-3b9fa398/wallet", async (c) => {
 });
 
 Deno.serve(app.fetch);
+
