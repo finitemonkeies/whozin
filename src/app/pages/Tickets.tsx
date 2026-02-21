@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 
 export function Tickets() {
+  const comingSoon = true;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<any[]>([]);
@@ -150,6 +151,24 @@ export function Tickets() {
             </>
         )}
       </AnimatePresence>
+
+      {comingSoon ? (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-zinc-950/90 p-8 shadow-2xl">
+            <div className="text-center">
+              <div className="text-3xl font-bold tracking-tight">Coming Soon</div>
+              <p className="mt-3 text-sm text-zinc-300">
+                Ticket Wallet is launching soon.
+              </p>
+            </div>
+            <div className="mt-6 space-y-2 text-sm text-zinc-300">
+              <p>- Auto-import tickets after purchase</p>
+              <p>- One place for all upcoming event passes</p>
+              <p>- Share attendance with friends, or keep it private</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
