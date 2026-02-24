@@ -1,5 +1,4 @@
-
-import { Home, Ticket, User, Search } from "lucide-react";
+import { Home, Ticket, User, Search, Users } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import clsx from "clsx";
@@ -10,6 +9,7 @@ export function BottomNav() {
   const navItems = [
     { icon: Home, label: "Feed", path: "/" },
     { icon: Search, label: "Explore", path: "/explore" },
+    { icon: Users, label: "Friends", path: "/friends" },
     { icon: Ticket, label: "Tickets", path: "/tickets" },
     { icon: User, label: "Profile", path: "/profile" },
   ];
@@ -21,6 +21,7 @@ export function BottomNav() {
       <div className="flex justify-around items-center h-16 max-w-md mx-auto">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
+
           return (
             <Link
               key={item.path}
@@ -33,12 +34,14 @@ export function BottomNav() {
                   className="absolute -top-px h-0.5 w-8 bg-pink-500 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.7)]"
                 />
               )}
+
               <item.icon
                 className={clsx(
                   "w-6 h-6 mb-1 transition-colors",
                   isActive ? "text-pink-500" : "text-zinc-500"
                 )}
               />
+
               <span className={isActive ? "text-white" : "text-zinc-500"}>
                 {item.label}
               </span>

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
+import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { toast } from "sonner";
 
 export default function AddByInvite() {
@@ -29,6 +30,15 @@ export default function AddByInvite() {
 
     if (!session) {
       navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
+      return;
+    }
+
+    const rl = getRateLimitStatus(`friend_add_invite:${username.toLowerCase()}`, 5000);
+    if (!rl.allowed) {
+      const seconds = formatRetrySeconds(rl.retryAfterMs);
+      toast.error(`Please wait ${seconds}s before trying again.`);
+      track("friend_add_rate_limited", { source: "invite", seconds });
+      navigate("/friends");
       return;
     }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Phone, Music, Ticket, Shield, Bell, HelpCircle, LogOut, ChevronRight, Check } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export function Settings() {
   const navigate = useNavigate();

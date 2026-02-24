@@ -4,12 +4,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { Calendar, MapPin, Ticket, Users } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
+import { isEventUpcomingOrOngoing } from "@/lib/eventDates";
+import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 
 type EventRow = {
   id: string;
   title: string;
   location: string | null;
   event_date: string | null;
+  event_end_date: string | null;
   image_url: string | null;
 };
 
@@ -27,11 +30,19 @@ const coverStyle = {
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
 
-function formatDate(value?: string | null) {
-  if (!value) return "Date TBD";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "Date TBD";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function formatDateRange(startValue?: string | null, endValue?: string | null) {
+  if (!startValue) return "Date TBD";
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return "Date TBD";
+
+  const startText = start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (!endValue) return startText;
+
+  const end = new Date(endValue);
+  if (Number.isNaN(end.getTime())) return startText;
+
+  const endText = end.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${startText} - ${endText}`;
 }
 
 function uniqKeepOrder(arr: string[]) {
@@ -135,7 +146,7 @@ export function Home() {
 
     const { data: eventData, error: eErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,image_url")
+      .select("id,title,location,event_date,event_end_date,image_url")
       .order("event_date", { ascending: true });
 
     if (eErr) {
@@ -146,7 +157,10 @@ export function Home() {
       return;
     }
 
-    const rows = (eventData ?? []) as EventRow[];
+    const nowTs = Date.now();
+    const rows = ((eventData ?? []) as EventRow[]).filter((e) =>
+      isEventUpcomingOrOngoing(e, nowTs)
+    );
     setEvents(rows);
 
     if (!uid) {
@@ -280,6 +294,14 @@ export function Home() {
     const uid = session.user.id;
     if (workingByEvent[eventId]) return;
 
+    const rl = getRateLimitStatus(`rsvp_home:${uid}:${eventId}`, 2000);
+    if (!rl.allowed) {
+      const seconds = formatRetrySeconds(rl.retryAfterMs);
+      toast.error(`Please wait ${seconds}s before trying again.`);
+      track("rsvp_rate_limited", { source: "home", eventId, seconds });
+      return;
+    }
+
     const currentlyGoing = myGoing.has(eventId);
     const nextGoing = !currentlyGoing;
 
@@ -411,7 +433,9 @@ export function Home() {
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-400">
                           <div className="inline-flex items-center gap-1.5 max-w-full">
                             <Calendar className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                            <span className="truncate">{formatDate(event.event_date)}</span>
+                            <span className="truncate">
+                              {formatDateRange(event.event_date, event.event_end_date)}
+                            </span>
                           </div>
 
                           <div className="inline-flex items-center gap-1.5 max-w-full">

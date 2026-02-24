@@ -19,20 +19,8 @@ function useQuery() {
   return useMemo(() => new URLSearchParams(search), [search]);
 }
 
-function slugifyBase(input: string) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 20);
-}
-
-function makeUsernameFromName(name: string) {
-  const base = slugifyBase(name) || "user";
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return `${base}-${suffix}`;
+function sanitizeUsername(input: string) {
+  return input.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
 }
 
 export default function Setup() {
@@ -45,6 +33,7 @@ export default function Setup() {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const isDev = import.meta.env.DEV;
 
@@ -136,7 +125,9 @@ export default function Setup() {
       const prof = data as Profile;
       setProfile(prof);
       setDisplayName((prof.display_name || "").trim());
+      setUsername((prof.username || "").trim());
       setLoading(false);
+      track("setup_viewed", { has_profile: true, complete: !!prof.onboarding_complete });
 
       if (prof.display_name && prof.onboarding_complete) {
         window.location.assign(redirectTo);
@@ -152,10 +143,21 @@ export default function Setup() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    track("setup_submit_attempted");
 
     const value = displayName.trim();
+    const normalizedUsername = sanitizeUsername(username);
+
     if (value.length < 2) {
       setError("Display name must be at least 2 characters.");
+      return;
+    }
+    if (!normalizedUsername) {
+      setError("Username is required.");
+      return;
+    }
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 20) {
+      setError("Username must be 3-20 characters.");
       return;
     }
 
@@ -169,10 +171,23 @@ export default function Setup() {
       return;
     }
 
-    const nextUsername =
-      profile?.username && profile.username.trim().length > 0
-        ? profile.username.trim()
-        : makeUsernameFromName(value);
+    const { data: existingUsername, error: usernameErr } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", normalizedUsername)
+      .neq("id", user.id)
+      .limit(1);
+
+    if (usernameErr) {
+      showDevSupabaseError("checkUsername", usernameErr);
+      setError("Couldn't verify username availability. Please try again.");
+      return;
+    }
+
+    if ((existingUsername ?? []).length > 0) {
+      setError("That username is already in use. Try a different display name.");
+      return;
+    }
 
     setSaving(true);
 
@@ -183,7 +198,7 @@ export default function Setup() {
           id: user.id,
           email: user.email ?? profile?.email ?? null,
           display_name: value,
-          username: nextUsername,
+          username: normalizedUsername,
           onboarding_complete: true,
           updated_at: new Date().toISOString(),
         },
@@ -242,7 +257,24 @@ export default function Setup() {
                   className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
                 <div className="mt-2 text-xs text-white/50">
-                  You can change this later in Settings.
+                  Display name is what friends see in the app.
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-medium text-white/70">Username</label>
+                <input
+                  value={username}
+                  onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
+                  placeholder="e.g. alex_raves"
+                  autoComplete="username"
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/20"
+                />
+                <div className="mt-2 text-xs text-white/50">
+                  Username is your unique @handle for invites and friend search.
+                </div>
+                <div className="mt-1 text-xs text-white/50">
+                  Use 3-20 characters: letters, numbers, and underscores only.
                 </div>
               </div>
 

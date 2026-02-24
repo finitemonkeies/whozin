@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
+import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import AddFriend from "../components/AddFriend";
 
 type FriendRow = {
   friend_id: string;
   status: string | null;
   friend_profile?: {
+    display_name: string | null;
     username: string | null;
     avatar_url: string | null;
   } | null;
@@ -15,6 +17,7 @@ type FriendRow = {
 
 type SuggestedProfile = {
   id: string;
+  display_name: string | null;
   username: string | null;
   avatar_url: string | null;
 };
@@ -65,7 +68,7 @@ export default function Friends() {
     const { data, error } = await supabase
       .from("friendships")
       .select(
-        "friend_id,status, friend_profile:profiles!friendships_friend_id_fkey(username, avatar_url)"
+        "friend_id,status, friend_profile:profiles!friendships_friend_id_fkey(display_name, username, avatar_url)"
       )
       .eq("user_id", session.user.id);
 
@@ -90,7 +93,7 @@ export default function Friends() {
 
     const { data: profiles, error: pErr } = await supabase
       .from("profiles")
-      .select("id,username,avatar_url")
+      .select("id,display_name,username,avatar_url")
       .neq("id", session.user.id)
       .not("username", "is", null)
       .limit(40);
@@ -113,6 +116,14 @@ export default function Friends() {
   const addSuggestedFriend = async (row: SuggestedProfile) => {
     if (!row.id || !row.username) return;
     if (addingIds[row.id] || addedIds[row.id]) return;
+
+    const rl = getRateLimitStatus(`friend_add_suggested:${row.username.toLowerCase()}`, 5000);
+    if (!rl.allowed) {
+      const seconds = formatRetrySeconds(rl.retryAfterMs);
+      toast.error(`Please wait ${seconds}s before trying again.`);
+      track("friend_add_rate_limited", { source: "suggested", seconds });
+      return;
+    }
 
     setAddingIds((prev) => ({ ...prev, [row.id]: true }));
     setAddedIds((prev) => ({ ...prev, [row.id]: true }));
@@ -179,7 +190,7 @@ export default function Friends() {
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {suggested.map((p) => {
-                const name = p.username ?? "anon";
+                const displayName = p.display_name?.trim() || p.username || "Anon";
                 const avatar = p.avatar_url ?? "";
                 const adding = !!addingIds[p.id];
                 const added = !!addedIds[p.id];
@@ -191,16 +202,17 @@ export default function Friends() {
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       {avatar ? (
-                        <img
-                          src={avatar}
-                          alt={name}
-                          className="w-11 h-11 rounded-full object-cover"
-                        />
+                          <img
+                            src={avatar}
+                            alt={displayName}
+                            className="w-11 h-11 rounded-full object-cover"
+                          />
                       ) : (
                         <div className="w-11 h-11 rounded-full bg-zinc-800" />
                       )}
                       <div className="min-w-0">
-                        <div className="font-semibold truncate">@{name}</div>
+                        <div className="font-semibold truncate">{displayName}</div>
+                        {p.username ? <div className="text-xs text-zinc-500 truncate">@{p.username}</div> : null}
                         <div className="text-xs text-zinc-500">Suggested</div>
                       </div>
                     </div>
@@ -247,7 +259,9 @@ export default function Friends() {
           <h2 className="text-xl font-bold mb-2">Pending requests</h2>
           <div className="grid grid-cols-2 gap-6">
             {pending.map((f) => {
-              const name = f.friend_profile?.username ?? "Anon";
+              const displayName =
+                f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
+              const handle = f.friend_profile?.username ? `@${f.friend_profile.username}` : "";
               const avatar = f.friend_profile?.avatar_url ?? "";
 
               return (
@@ -256,17 +270,18 @@ export default function Friends() {
                   className="flex items-center gap-4 bg-zinc-900/40 border border-white/10 rounded-2xl p-4"
                 >
                   {avatar ? (
-                    <img
-                      src={avatar}
-                      alt={name}
-                      className="w-14 h-14 rounded-full object-cover"
-                    />
+                      <img
+                        src={avatar}
+                        alt={displayName}
+                        className="w-14 h-14 rounded-full object-cover"
+                      />
                   ) : (
                     <div className="w-14 h-14 rounded-full bg-zinc-800" />
                   )}
 
                   <div>
-                    <div className="font-semibold">{name}</div>
+                    <div className="font-semibold">{displayName}</div>
+                    {handle ? <div className="text-xs text-zinc-500">{handle}</div> : null}
                     <div className="text-xs text-zinc-500">Requested</div>
                   </div>
                 </div>
@@ -283,7 +298,9 @@ export default function Friends() {
       ) : (
         <div className="grid grid-cols-2 gap-6 mb-8">
           {friends.map((f) => {
-            const name = f.friend_profile?.username ?? "Anon";
+            const displayName =
+              f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
+            const handle = f.friend_profile?.username ? `@${f.friend_profile.username}` : "";
             const avatar = f.friend_profile?.avatar_url ?? "";
 
             return (
@@ -294,7 +311,7 @@ export default function Friends() {
                 {avatar ? (
                   <img
                     src={avatar}
-                    alt={name}
+                    alt={displayName}
                     className="w-14 h-14 rounded-full object-cover"
                   />
                 ) : (
@@ -302,7 +319,8 @@ export default function Friends() {
                 )}
 
                 <div>
-                  <div className="font-semibold">{name}</div>
+                  <div className="font-semibold">{displayName}</div>
+                  {handle ? <div className="text-xs text-zinc-500">{handle}</div> : null}
                   <div className="text-xs text-zinc-500">Connected</div>
                 </div>
               </div>

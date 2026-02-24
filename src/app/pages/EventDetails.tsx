@@ -12,12 +12,15 @@ import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
+import { formatEventDateTimeRange } from "@/lib/eventDates";
+import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 
 type EventRow = {
   id: string;
   title: string;
   location: string | null;
   event_date: string | null;
+  event_end_date: string | null;
   image_url: string | null;
   description?: string | null;
 };
@@ -25,24 +28,11 @@ type EventRow = {
 type AttendeeRow = {
   user_id: string;
   profiles?: {
+    display_name: string | null;
     username: string | null;
     avatar_url: string | null;
   } | null;
 };
-
-function formatEventDate(value?: string | null) {
-  if (!value) return "Date TBD";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function isUuid(value: string) {
   const uuidRegex =
@@ -113,7 +103,7 @@ export function EventDetails() {
 
     const { data: attData, error: attErr } = await supabase
       .from("attendees")
-      .select("user_id, profiles(username, avatar_url)")
+      .select("user_id, profiles(display_name, username, avatar_url)")
       .eq("event_id", eventId);
 
     if (attErr) {
@@ -165,7 +155,7 @@ export function EventDetails() {
 
       const { data: eventData, error: eventErr } = await supabase
         .from("events")
-        .select("id,title,location,event_date,image_url,description")
+        .select("id,title,location,event_date,event_end_date,image_url,description")
         .eq("id", id)
         .single();
 
@@ -215,6 +205,14 @@ export function EventDetails() {
     const uid = session.user.id;
 
     if (working) return;
+
+    const rl = getRateLimitStatus(`rsvp_details:${uid}:${id}`, 2000);
+    if (!rl.allowed) {
+      const seconds = formatRetrySeconds(rl.retryAfterMs);
+      toast.error(`Please wait ${seconds}s before trying again.`);
+      track("rsvp_rate_limited", { source: "event_details", eventId: id, seconds });
+      return;
+    }
 
     const nextGoing = !isGoing;
     setWorking(true);
@@ -319,7 +317,7 @@ export function EventDetails() {
             </div>
             <div>
               <div className="text-xs text-zinc-400">Date</div>
-              <div className="text-sm font-semibold">{formatEventDate(event.event_date)}</div>
+              <div className="text-sm font-semibold">{formatEventDateTimeRange(event)}</div>
             </div>
           </div>
 
@@ -369,7 +367,7 @@ export function EventDetails() {
           ) : friendsGoing.length > 0 ? (
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
               {friendsGoing.map((a) => {
-                const name = a.profiles?.username ?? "Anon";
+                const name = a.profiles?.display_name?.trim() || a.profiles?.username || "Anon";
                 const avatar = a.profiles?.avatar_url ?? "";
                 return (
                   <div key={a.user_id} className="flex flex-col items-center gap-2 min-w-[70px]">
@@ -417,7 +415,7 @@ export function EventDetails() {
           ) : othersGoing.length > 0 ? (
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
               {othersGoing.map((a) => {
-                const name = a.profiles?.username ?? "Anon";
+                const name = a.profiles?.display_name?.trim() || a.profiles?.username || "Anon";
                 const avatar = a.profiles?.avatar_url ?? "";
                 return (
                   <div key={a.user_id} className="flex flex-col items-center gap-2 min-w-[70px]">
