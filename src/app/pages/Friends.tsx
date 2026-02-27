@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
-import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import AddFriend from "../components/AddFriend";
 
 type FriendRow = {
@@ -116,14 +115,6 @@ export default function Friends() {
   const addSuggestedFriend = async (row: SuggestedProfile) => {
     if (!row.id || !row.username) return;
     if (addingIds[row.id] || addedIds[row.id]) return;
-
-    const rl = getRateLimitStatus(`friend_add_suggested:${row.username.toLowerCase()}`, 5000);
-    if (!rl.allowed) {
-      const seconds = formatRetrySeconds(rl.retryAfterMs);
-      toast.error(`Please wait ${seconds}s before trying again.`);
-      track("friend_add_rate_limited", { source: "suggested", seconds });
-      return;
-    }
 
     setAddingIds((prev) => ({ ...prev, [row.id]: true }));
     setAddedIds((prev) => ({ ...prev, [row.id]: true }));

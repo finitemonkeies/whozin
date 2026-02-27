@@ -7,7 +7,14 @@ type Props = {
 };
 
 export default function SocialAuthButtons({ redirectTo }: Props) {
+  const oauthEnabled = false;
+
   const signIn = async (provider: "facebook" | "google") => {
+    if (!oauthEnabled) {
+      toast.message(`${provider === "google" ? "Google" : "Facebook"} login is coming soon.`);
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -25,16 +32,18 @@ export default function SocialAuthButtons({ redirectTo }: Props) {
     <div className="space-y-3">
       <button
         onClick={() => signIn("facebook")}
-        className="w-full px-6 py-3 rounded-xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15"
+        disabled={!oauthEnabled}
+        className="w-full px-6 py-3 rounded-xl font-semibold bg-zinc-800 text-zinc-400 border border-white/10 disabled:cursor-not-allowed"
       >
-        Continue with Facebook
+        Continue with Facebook (Coming soon)
       </button>
 
       <button
         onClick={() => signIn("google")}
-        className="w-full px-6 py-3 rounded-xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15"
+        disabled={!oauthEnabled}
+        className="w-full px-6 py-3 rounded-xl font-semibold bg-zinc-800 text-zinc-400 border border-white/10 disabled:cursor-not-allowed"
       >
-        Continue with Google
+        Continue with Google (Coming soon)
       </button>
 
       <div className="text-xs text-zinc-500 text-center">

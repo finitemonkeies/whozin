@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
-import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { toast } from "sonner";
 
 type Props = {
@@ -24,14 +23,6 @@ export default function AddFriend({ onSuccess }: Props) {
   const handleAdd = async () => {
     const trimmed = username.trim();
     if (!trimmed) return;
-
-    const rl = getRateLimitStatus(`friend_add_manual:${trimmed.toLowerCase()}`, 5000);
-    if (!rl.allowed) {
-      const seconds = formatRetrySeconds(rl.retryAfterMs);
-      toast.error(`Please wait ${seconds}s before trying again.`);
-      track("friend_add_rate_limited", { source: "manual", seconds });
-      return;
-    }
 
     setWorking(true);
 

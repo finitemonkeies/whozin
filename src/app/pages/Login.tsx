@@ -12,6 +12,7 @@ function useQuery() {
 }
 
 export default function Login() {
+  const oauthEnabled = false;
   const query = useQuery();
   const navigate = useNavigate();
 
@@ -52,6 +53,11 @@ export default function Login() {
   }, []);
 
   const startOAuth = async (provider: "google" | "facebook") => {
+    if (!oauthEnabled) {
+      toast.message(`${provider === "google" ? "Google" : "Facebook"} login is coming soon.`);
+      return;
+    }
+
     try {
       setLoading(provider);
       localStorage.setItem("whozin_post_auth_redirect", redirect);
@@ -147,18 +153,22 @@ export default function Login() {
         <div className="space-y-3">
           <button
             onClick={() => startOAuth("google")}
-            disabled={!!loading}
-            className="w-full px-4 py-4 rounded-2xl font-semibold bg-white text-black hover:bg-zinc-200 transition disabled:opacity-60"
+            disabled={!oauthEnabled || !!loading}
+            className="w-full px-4 py-4 rounded-2xl font-semibold bg-zinc-800 text-zinc-400 border border-white/10 transition disabled:opacity-80 disabled:cursor-not-allowed"
           >
-            {loading === "google" ? "Signing in with Google..." : "Continue with Google"}
+            {loading === "google"
+              ? "Signing in with Google..."
+              : "Continue with Google (Coming soon)"}
           </button>
 
           <button
             onClick={() => startOAuth("facebook")}
-            disabled={!!loading}
-            className="w-full px-4 py-4 rounded-2xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15 transition disabled:opacity-60"
+            disabled={!oauthEnabled || !!loading}
+            className="w-full px-4 py-4 rounded-2xl font-semibold bg-zinc-800 text-zinc-400 border border-white/10 transition disabled:opacity-80 disabled:cursor-not-allowed"
           >
-            {loading === "facebook" ? "Signing in with Facebook..." : "Continue with Facebook"}
+            {loading === "facebook"
+              ? "Signing in with Facebook..."
+              : "Continue with Facebook (Coming soon)"}
           </button>
         </div>
 
