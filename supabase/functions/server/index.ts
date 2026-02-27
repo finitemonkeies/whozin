@@ -9,7 +9,7 @@ const app = new Hono();
 
 app.use('*', logger(console.log));
 
-const corsOrigins = (Deno.env.get("CORS_ORIGINS") || "http://localhost:5173")
+const corsOrigins = (Deno.env.get("CORS_ORIGINS") || "https://whozin.app,https://www.whozin.app,http://localhost:5173")
   .split(",")
   .map((v) => v.trim())
   .filter(Boolean);

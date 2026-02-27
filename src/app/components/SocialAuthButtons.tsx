@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { getSiteOrigin } from "@/lib/site";
 import { toast } from "sonner";
 
 type Props = {
@@ -10,7 +11,7 @@ export default function SocialAuthButtons({ redirectTo }: Props) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: redirectTo || window.location.origin,
+        redirectTo: redirectTo || getSiteOrigin(),
       },
     });
 

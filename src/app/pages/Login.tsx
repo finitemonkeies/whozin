@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, getSupabaseProjectRef } from "@/lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { buildSiteUrl } from "@/lib/site";
 import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 
@@ -21,7 +22,7 @@ export default function Login() {
   const cooldownTimerRef = useRef<number | null>(null);
 
   const redirect = sanitizeRedirectTarget(query.get("redirect"));
-  const callbackUrl = `${window.location.origin}/auth/callback`;
+  const callbackUrl = buildSiteUrl("/auth/callback");
 
   const startCooldown = (seconds: number) => {
     if (cooldownTimerRef.current) {

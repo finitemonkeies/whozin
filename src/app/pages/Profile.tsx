@@ -2,6 +2,7 @@
 import { Link } from "react-router-dom";
 import { Settings } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { buildSiteUrl } from "@/lib/site";
 import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
 
@@ -287,7 +288,7 @@ export function Profile() {
                   toast.error("Set a username first");
                   return;
                 }
-                const link = `${window.location.origin}/add/@${username}`;
+                const link = buildSiteUrl(`/add/@${username}`);
                 navigator.clipboard.writeText(link);
                 toast.success("Invite link copied");
               }}
