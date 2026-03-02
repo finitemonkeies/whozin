@@ -9,38 +9,39 @@ function safeTitle(title?: string | null) {
   return t.length > 0 ? t : "Event";
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 export function EventCard({ event }: { event: Event }) {
   const title = useMemo(() => safeTitle(event.title), [event.title]);
   const didTrackImpression = useRef(false);
+  const canOpenDetails = isUuid(event.id);
 
   const hasImageProp = !!event.image && event.image.trim().length > 0;
   const [imageOk, setImageOk] = useState(true);
-
   const showImage = hasImageProp && imageOk;
 
   useEffect(() => {
     if (didTrackImpression.current) return;
     didTrackImpression.current = true;
-    void logProductEvent({
-      eventName: "explore_event_impression",
-      eventId: event.id,
-      source: "explore",
-    });
-  }, [event.id]);
 
-  return (
-    <Link
-      to={`/event/${event.id}?src=explore`}
-      onClick={() =>
-        void logProductEvent({
-          eventName: "explore_event_click",
-          eventId: event.id,
-          source: "explore",
-        })
-      }
-      className="group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
-    >
-      {/* Media */}
+    if (canOpenDetails) {
+      void logProductEvent({
+        eventName: "explore_event_impression",
+        eventId: event.id,
+        source: "explore",
+      });
+    }
+  }, [canOpenDetails, event.id]);
+
+  const className =
+    "group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200";
+
+  const body = (
+    <>
       <div className="relative h-44 bg-zinc-900">
         {showImage ? (
           <img
@@ -52,11 +53,8 @@ export function EventCard({ event }: { event: Event }) {
           />
         ) : (
           <div className="w-full h-full relative">
-            {/* Premium fallback — no initials */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/25 to-pink-500/25" />
             <div className="absolute inset-0 bg-black/35" />
-
-            {/* Soft “badge-like” glow element */}
             <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-purple-500/20 blur-3xl" />
             <div className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full bg-pink-500/20 blur-3xl" />
 
@@ -69,11 +67,9 @@ export function EventCard({ event }: { event: Event }) {
           </div>
         )}
 
-        {/* Subtle fade to connect to body */}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
       </div>
 
-      {/* Content */}
       <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -89,7 +85,6 @@ export function EventCard({ event }: { event: Event }) {
           ) : null}
         </div>
 
-        {/* Meta row */}
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-400">
           {event.location ? (
             <div className="inline-flex items-center gap-1.5 max-w-full">
@@ -106,14 +101,12 @@ export function EventCard({ event }: { event: Event }) {
           ) : null}
         </div>
 
-        {/* Description */}
         {event.description ? (
           <div className="mt-3 text-sm text-zinc-500 leading-relaxed line-clamp-2">
             {event.description}
           </div>
         ) : null}
 
-        {/* Tags */}
         {Array.isArray(event.tags) && event.tags.length > 0 ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {event.tags.slice(0, 3).map((t) => (
@@ -128,9 +121,29 @@ export function EventCard({ event }: { event: Event }) {
         ) : null}
 
         <div className="mt-4 text-[11px] text-zinc-600 group-hover:text-zinc-500 transition">
-          View details →
+          {canOpenDetails ? "View details ->" : "Preview only"}
         </div>
       </div>
+    </>
+  );
+
+  if (!canOpenDetails) {
+    return <div className={className}>{body}</div>;
+  }
+
+  return (
+    <Link
+      to={`/event/${event.id}?src=explore`}
+      onClick={() =>
+        void logProductEvent({
+          eventName: "explore_event_click",
+          eventId: event.id,
+          source: "explore",
+        })
+      }
+      className={className}
+    >
+      {body}
     </Link>
   );
 }

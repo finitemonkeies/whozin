@@ -5,7 +5,7 @@ import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
 import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
 import {
-  hasSpotifyProviderToken,
+  getSpotifyConnectionStatus,
   startSpotifyOAuthRedirect,
   syncSpotifyTasteFromSession,
 } from "@/lib/spotify";
@@ -93,8 +93,12 @@ export function Explore() {
 
   useEffect(() => {
     const run = async () => {
-      const hasToken = await hasSpotifyProviderToken().catch(() => false);
-      if (!hasToken) {
+      const status = await getSpotifyConnectionStatus().catch(() => ({
+        linked: false,
+        hasToken: false,
+      }));
+
+      if (!status.linked) {
         localStorage.removeItem("spotify_connected");
         localStorage.removeItem("whozin_spotify_taste");
         localStorage.removeItem("whozin_spotify_last_sync");
@@ -103,14 +107,15 @@ export function Explore() {
       }
 
       setConnected(true);
-      const taste = await syncSpotifyTasteFromSession().catch(() => null);
-      if (!taste) {
-        toast.error("Spotify session found, but taste sync failed. Reconnect to refresh.");
+
+      if (status.hasToken) {
+        const taste = await syncSpotifyTasteFromSession().catch(() => null);
+        if (!taste) {
+          toast.error("Spotify connected, but taste sync failed. Try reconnecting.");
+        }
       }
-      if (hasToken) {
-        setConnected(true);
-        await refreshRecommendations(cityHint);
-      }
+
+      await refreshRecommendations(cityHint);
     };
     void run();
   }, []);

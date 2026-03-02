@@ -14,6 +14,11 @@ type SpotifyTaste = {
   genres: string[];
 };
 
+type SpotifyConnectionStatus = {
+  linked: boolean;
+  hasToken: boolean;
+};
+
 function normalizeList(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -91,6 +96,32 @@ export async function hasSpotifyProviderToken(): Promise<boolean> {
 
   const providerToken = (session as any)?.provider_token as string | undefined;
   return !!providerToken;
+}
+
+export async function getSpotifyConnectionStatus(): Promise<SpotifyConnectionStatus> {
+  const [
+    {
+      data: { session },
+    },
+    {
+      data: { user },
+    },
+  ] = await Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]);
+
+  const providerToken = (session as any)?.provider_token as string | undefined;
+  const identities = ((user as any)?.identities ?? []) as Array<{ provider?: string }>;
+  const appProviders = ((user as any)?.app_metadata?.providers ?? []) as string[];
+  const appProvider = (user as any)?.app_metadata?.provider as string | undefined;
+
+  const linked =
+    identities.some((i) => i?.provider === "spotify") ||
+    appProviders.includes("spotify") ||
+    appProvider === "spotify";
+
+  return {
+    linked,
+    hasToken: !!providerToken,
+  };
 }
 
 export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Promise<void> {

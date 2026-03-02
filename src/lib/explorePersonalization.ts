@@ -30,6 +30,12 @@ const DEFAULT_TASTE: TasteProfile = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 function normalize(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -215,7 +221,12 @@ export async function loadPersonalizedExplore(cityHint: string): Promise<Recomme
       const score = affinity.score * 0.55 + geo * 0.25 + date * 0.2;
       return toUiEvent(row, Number(score.toFixed(4)), affinity.reason);
     })
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      const aValid = isUuid(a.id) ? 1 : 0;
+      const bValid = isUuid(b.id) ? 1 : 0;
+      if (aValid !== bValid) return bValid - aValid;
+      return b.score - a.score;
+    })
     .slice(0, 40);
 
   return ranked;
