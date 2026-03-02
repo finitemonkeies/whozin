@@ -97,13 +97,31 @@ export async function hasSpotifyProviderToken(): Promise<boolean> {
 export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Promise<void> {
   localStorage.setItem("whozin_post_auth_redirect", redirectPath);
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "spotify",
-    options: {
-      redirectTo: buildSiteUrl("/auth/callback"),
-      scopes: "user-top-read",
-    },
-  });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // If user is already signed in, link Spotify identity to the same Whozin account.
+  // This prevents accidental account-switch and extra login hops.
+  const oauthFn = session
+    ? () =>
+        supabase.auth.linkIdentity({
+          provider: "spotify",
+          options: {
+            redirectTo: buildSiteUrl("/auth/callback"),
+            scopes: "user-top-read",
+          },
+        } as any)
+    : () =>
+        supabase.auth.signInWithOAuth({
+          provider: "spotify",
+          options: {
+            redirectTo: buildSiteUrl("/auth/callback"),
+            scopes: "user-top-read",
+          },
+        });
+
+  const { data, error } = await oauthFn();
 
   if (error) throw error;
   if (data?.url) {
