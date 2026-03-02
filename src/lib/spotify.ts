@@ -106,14 +106,23 @@ export async function getSpotifyConnectionStatus(): Promise<SpotifyConnectionSta
     {
       data: { user },
     },
-  ] = await Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]);
+    identitiesRes,
+  ] = await Promise.all([
+    supabase.auth.getSession(),
+    supabase.auth.getUser(),
+    supabase.auth.getUserIdentities(),
+  ]);
 
   const providerToken = (session as any)?.provider_token as string | undefined;
+  const identityProviders =
+    identitiesRes.data?.identities?.map((i: any) => i?.provider).filter(Boolean) ?? [];
+
   const identities = ((user as any)?.identities ?? []) as Array<{ provider?: string }>;
   const appProviders = ((user as any)?.app_metadata?.providers ?? []) as string[];
   const appProvider = (user as any)?.app_metadata?.provider as string | undefined;
 
   const linked =
+    identityProviders.includes("spotify") ||
     identities.some((i) => i?.provider === "spotify") ||
     appProviders.includes("spotify") ||
     appProvider === "spotify";
