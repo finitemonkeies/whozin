@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Users, Ticket } from "lucide-react";
 import type { Event } from "../../data/mock";
+import { logProductEvent } from "@/lib/productEvents";
 
 function safeTitle(title?: string | null) {
   const t = (title ?? "").trim();
@@ -10,15 +11,33 @@ function safeTitle(title?: string | null) {
 
 export function EventCard({ event }: { event: Event }) {
   const title = useMemo(() => safeTitle(event.title), [event.title]);
+  const didTrackImpression = useRef(false);
 
   const hasImageProp = !!event.image && event.image.trim().length > 0;
   const [imageOk, setImageOk] = useState(true);
 
   const showImage = hasImageProp && imageOk;
 
+  useEffect(() => {
+    if (didTrackImpression.current) return;
+    didTrackImpression.current = true;
+    void logProductEvent({
+      eventName: "explore_event_impression",
+      eventId: event.id,
+      source: "explore",
+    });
+  }, [event.id]);
+
   return (
     <Link
-      to={`/event/${event.id}`}
+      to={`/event/${event.id}?src=explore`}
+      onClick={() =>
+        void logProductEvent({
+          eventName: "explore_event_click",
+          eventId: event.id,
+          source: "explore",
+        })
+      }
       className="group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
     >
       {/* Media */}

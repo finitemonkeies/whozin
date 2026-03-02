@@ -313,6 +313,7 @@ export function Home() {
         const { error } = await supabase.from("attendees").insert({
           event_id: eventId,
           user_id: uid,
+          rsvp_source: "home",
         });
         if (error) throw error;
         toast.success("RSVP added");
@@ -389,7 +390,7 @@ export function Home() {
           return (
             <Link
               key={event.id}
-              to={`/event/${event.id}`}
+              to={`/event/${event.id}?src=home`}
               className="group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
             >
               <div className="p-5">

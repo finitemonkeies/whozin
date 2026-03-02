@@ -332,7 +332,7 @@ export function Profile() {
                 return (
                   <Link
                     key={e.id}
-                    to={`/event/${e.id}`}
+                    to={`/event/${e.id}?src=profile`}
                     className="block rounded-2xl bg-zinc-900/60 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
                   >
                     <div className="flex gap-4 p-4">
@@ -391,7 +391,7 @@ export function Profile() {
                 return (
                   <Link
                     key={e.id}
-                    to={`/event/${e.id}`}
+                    to={`/event/${e.id}?src=profile`}
                     className="block rounded-2xl bg-zinc-900/45 border border-white/10 hover:border-white/20 transition overflow-hidden"
                   >
                     <div className="flex gap-4 p-4">

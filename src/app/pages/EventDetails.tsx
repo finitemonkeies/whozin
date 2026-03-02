@@ -1,4 +1,4 @@
-﻿import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   Calendar,
@@ -9,11 +9,13 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
 import { formatEventDateTimeRange } from "@/lib/eventDates";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
+import { getRsvpSourceFromSearch } from "@/lib/rsvpSource";
+import { logProductEvent } from "@/lib/productEvents";
 
 type EventRow = {
   id: string;
@@ -49,6 +51,7 @@ function bumpRsvp() {
 export function EventDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [event, setEvent] = useState<EventRow | null>(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
@@ -62,8 +65,26 @@ export function EventDetails() {
 
   const [isGoing, setIsGoing] = useState(false);
   const [working, setWorking] = useState(false);
+  const lastTrackedViewKeyRef = useRef<string>("");
 
   const eventImage = useMemo(() => event?.image_url ?? "", [event?.image_url]);
+  const rsvpSource = useMemo(
+    () => getRsvpSourceFromSearch(location.search),
+    [location.search]
+  );
+
+  useEffect(() => {
+    if (!id || !isUuid(id) || !event) return;
+    const key = `${id}:${rsvpSource}`;
+    if (lastTrackedViewKeyRef.current === key) return;
+    lastTrackedViewKeyRef.current = key;
+
+    void logProductEvent({
+      eventName: "event_detail_view",
+      eventId: id,
+      source: rsvpSource,
+    });
+  }, [event, id, rsvpSource]);
 
   const friendsGoing = useMemo(() => {
     return attendees.filter((a) => friendIds.has(a.user_id));
@@ -210,7 +231,7 @@ export function EventDetails() {
     if (!rl.allowed) {
       const seconds = formatRetrySeconds(rl.retryAfterMs);
       toast.error(`Please wait ${seconds}s before trying again.`);
-      track("rsvp_rate_limited", { source: "event_details", eventId: id, seconds });
+      track("rsvp_rate_limited", { source: rsvpSource, eventId: id, seconds });
       return;
     }
 
@@ -237,11 +258,12 @@ export function EventDetails() {
         const { error } = await supabase.from("attendees").insert({
           event_id: id,
           user_id: uid,
+          rsvp_source: rsvpSource,
         });
         if (error) throw error;
 
         toast.success("You are on the list.");
-        track("rsvp_updated", { source: "event_details", action: "add", eventId: id });
+        track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
       } else {
         const { error } = await supabase
           .from("attendees")
@@ -251,7 +273,7 @@ export function EventDetails() {
         if (error) throw error;
 
         toast.message("RSVP removed");
-        track("rsvp_updated", { source: "event_details", action: "remove", eventId: id });
+        track("rsvp_updated", { source: rsvpSource, action: "remove", eventId: id });
       }
     } catch (e: any) {
       console.error(e);
@@ -267,7 +289,7 @@ export function EventDetails() {
 
       toast.error(e?.message ?? "Failed to update RSVP");
       track("rsvp_failed", {
-        source: "event_details",
+        source: rsvpSource,
         action: nextGoing ? "add" : "remove",
         eventId: id,
         message: e?.message ?? "unknown_error",
@@ -463,3 +485,5 @@ export function EventDetails() {
     </div>
   );
 }
+
+
