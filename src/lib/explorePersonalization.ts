@@ -221,6 +221,49 @@ async function fetchTicketmasterKeywordEvents(
   });
 }
 
+async function fetchTicketmasterNearbyFallback(
+  cityHint: string,
+  apiKey: string
+): Promise<InternalEventRow[]> {
+  if (!cityHint.trim()) return [];
+
+  const params = new URLSearchParams({
+    apikey: apiKey,
+    city: cityHint,
+    classificationName: "music",
+    size: "30",
+    sort: "date,asc",
+  });
+
+  const url = `https://app.ticketmaster.com/discovery/v2/events.json?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  const events = (json?._embedded?.events ?? []) as any[];
+
+  return events.map((e) => {
+    const attractions = ((e?._embedded?.attractions ?? []) as any[])
+      .map((a) => a?.name)
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      id: `tm_${e.id}`,
+      title: e?.name ?? "Live Event",
+      location: [e?._embedded?.venues?.[0]?.name, e?._embedded?.venues?.[0]?.city?.name]
+        .filter(Boolean)
+        .join(", "),
+      event_date: e?.dates?.start?.dateTime ?? null,
+      event_end_date: null,
+      image_url: Array.isArray(e?.images) ? e.images[0]?.url ?? null : null,
+      description: attractions ? `Nearby live event. Featuring: ${attractions}` : "Nearby live event",
+      event_source: "ticketmaster_nearby",
+      ticket_url: e?.url ?? null,
+    } as InternalEventRow;
+  });
+}
+
 async function fetchTicketmasterEvents(cityHint: string, taste: TasteProfile): Promise<InternalEventRow[]> {
   const apiKey = (import.meta.env.VITE_TICKETMASTER_API_KEY as string | undefined)?.trim();
   if (!apiKey || !cityHint.trim()) return [];
@@ -232,10 +275,12 @@ async function fetchTicketmasterEvents(cityHint: string, taste: TasteProfile): P
 
   if (uniqueQueries.length === 0) return [];
 
-  const results = await Promise.all(
+  const artistResults = await Promise.all(
     uniqueQueries.map((artist) => fetchTicketmasterKeywordEvents(cityHint, artist, apiKey))
   );
-  return results.flat();
+
+  const nearby = await fetchTicketmasterNearbyFallback(cityHint, apiKey);
+  return [...artistResults.flat(), ...nearby];
 }
 
 function toUiEvent(

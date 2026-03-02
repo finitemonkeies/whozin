@@ -120,6 +120,17 @@ async function reverseGeocodeCity(lat: number, lon: number): Promise<string> {
     .trim();
 }
 
+async function inferCityFromIp(): Promise<string> {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    if (!res.ok) return "";
+    const json = await res.json();
+    return (json?.city ?? "").toString().trim();
+  } catch {
+    return "";
+  }
+}
+
 export function Explore() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -153,11 +164,19 @@ export function Explore() {
       try {
         const { lat, lon } = await getBrowserPosition();
         const city = await reverseGeocodeCity(lat, lon);
-        if (!city) return;
-        setAutoCityHint(city);
-        localStorage.setItem("whozin_explore_auto_city", city);
+        if (city) {
+          setAutoCityHint(city);
+          localStorage.setItem("whozin_explore_auto_city", city);
+          return;
+        }
       } catch {
         // User denied geolocation or unavailable.
+      }
+
+      const ipCity = await inferCityFromIp();
+      if (ipCity) {
+        setAutoCityHint(ipCity);
+        localStorage.setItem("whozin_explore_auto_city", ipCity);
       }
     };
     void resolveAutoCity();
