@@ -3,6 +3,7 @@ import { Music, CheckCircle, Loader2, Sparkles, AudioWaveform } from "lucide-rea
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
+import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
 
 // Mock data for Spotify recommendations
 const RECOMMENDED_EVENTS: Event[] = [
@@ -79,19 +80,33 @@ const exploreCoverStyle = {
 } as const;
 
 export function Explore() {
-  const comingSoon = true;
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
+  const [cityHint, setCityHint] = useState(localStorage.getItem("whozin_explore_city") || "");
 
   useEffect(() => {
     const isConnected = localStorage.getItem("spotify_connected") === "true";
     if (isConnected) {
       setConnected(true);
-      setEvents(RECOMMENDED_EVENTS);
+      void refreshRecommendations(cityHint);
     }
   }, []);
+
+  const refreshRecommendations = async (city: string) => {
+    setLoadingEvents(true);
+    try {
+      const ranked = await loadPersonalizedExplore(city);
+      setEvents(ranked.length > 0 ? ranked : RECOMMENDED_EVENTS);
+    } catch (e: any) {
+      console.error("Explore personalization failed:", e);
+      setEvents(RECOMMENDED_EVENTS);
+      toast.error("Could not refresh personalized events. Showing fallback picks.");
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
   const handleConnect = () => {
     setConnecting(true);
@@ -101,12 +116,7 @@ export function Explore() {
       setConnected(true);
       localStorage.setItem("spotify_connected", "true");
       toast.success("Spotify connected successfully!");
-
-      setLoadingEvents(true);
-      setTimeout(() => {
-        setEvents(RECOMMENDED_EVENTS);
-        setLoadingEvents(false);
-      }, 1200);
+      void refreshRecommendations(cityHint);
     }, 1400);
   };
 
@@ -198,6 +208,25 @@ export function Explore() {
               </div>
             </div>
 
+            <div className="flex gap-2">
+              <input
+                value={cityHint}
+                onChange={(e) => setCityHint(e.target.value)}
+                placeholder="City for nearby events (ex: Chicago)"
+                className="flex-1 bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem("whozin_explore_city", cityHint);
+                  void refreshRecommendations(cityHint);
+                }}
+                className="px-3 py-2 rounded-xl text-sm bg-white/10 border border-white/10 hover:bg-white/15"
+              >
+                Refresh
+              </button>
+            </div>
+
             {loadingEvents ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
@@ -241,16 +270,6 @@ export function Explore() {
         )}
       </div>
 
-      {comingSoon ? (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-6">
-          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-zinc-950/90 p-8 text-center shadow-2xl">
-            <div className="text-3xl font-bold tracking-tight">Coming Soon</div>
-            <p className="mt-3 text-sm text-zinc-300">
-              Explore is in progress. We will unlock this soon.
-            </p>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

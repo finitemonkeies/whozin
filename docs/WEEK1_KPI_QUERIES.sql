@@ -147,6 +147,7 @@ d1_retained as (
   group by w.day_local, w.last_full_day_local
 )
 select
+  'Q1_7day_trend'::text as query_name,
   w.day_local,
   coalesce(n.new_users, 0) as new_users,
   coalesce(au.active_users, 0) as active_users,
@@ -204,6 +205,7 @@ source_counts as (
   group by 1
 )
 select
+  'Q2_rsvp_source_split'::text as query_name,
   rsvp_source,
   rsvp_count,
   round(
@@ -247,6 +249,7 @@ rsvps as (
   group by a.event_id
 )
 select
+  'Q3_event_source_quality'::text as query_name,
   le.event_source,
   count(*)::bigint as event_count,
   coalesce(sum(r.rsvp_count), 0)::bigint as rsvp_count,
@@ -314,6 +317,7 @@ weekly_rsvps as (
   group by ww.week_start_local
 )
 select
+  'Q4_rsvps_per_active_user_weekly'::text as query_name,
   ww.week_start_local,
   coalesce(wr.rsvps, 0) as rsvps,
   coalesce(wa.active_users, 0) as active_users,
@@ -367,6 +371,7 @@ clicks as (
   from explore_events
 )
 select
+  'Q5_explore_to_detail_ctr'::text as query_name,
   i.impressions,
   c.clicks,
   round((c.clicks::numeric / nullif(i.impressions, 0)::numeric) * 100, 2) as ctr_pct,
@@ -416,6 +421,7 @@ detail_conversions as (
   )
 )
 select
+  'Q6_detail_to_rsvp_cvr'::text as query_name,
   count(*)::bigint as detail_views_user_event,
   (select count(*)::bigint from detail_conversions) as converted_user_event,
   round(
@@ -461,6 +467,7 @@ friend_add_conversions as (
   )
 )
 select
+  'Q7_friend_add_to_rsvp_72h'::text as query_name,
   count(*)::bigint as friend_adds,
   (select count(*)::bigint from friend_add_conversions) as friend_adds_with_rsvp_72h,
   round(
