@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
 import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
-import { startSpotifyOAuthRedirect, syncSpotifyTasteFromSession } from "@/lib/spotify";
+import {
+  hasSpotifyProviderToken,
+  startSpotifyOAuthRedirect,
+  syncSpotifyTasteFromSession,
+} from "@/lib/spotify";
 
 // Mock data for Spotify recommendations
 const RECOMMENDED_EVENTS: Event[] = [
@@ -89,9 +93,21 @@ export function Explore() {
 
   useEffect(() => {
     const run = async () => {
+      const hasToken = await hasSpotifyProviderToken().catch(() => false);
+      if (!hasToken) {
+        localStorage.removeItem("spotify_connected");
+        localStorage.removeItem("whozin_spotify_taste");
+        localStorage.removeItem("whozin_spotify_last_sync");
+        setConnected(false);
+        return;
+      }
+
+      setConnected(true);
       const taste = await syncSpotifyTasteFromSession().catch(() => null);
-      const isConnected = localStorage.getItem("spotify_connected") === "true" || !!taste;
-      if (isConnected) {
+      if (!taste) {
+        toast.error("Spotify session found, but taste sync failed. Reconnect to refresh.");
+      }
+      if (hasToken) {
         setConnected(true);
         await refreshRecommendations(cityHint);
       }

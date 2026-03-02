@@ -85,6 +85,15 @@ export async function syncSpotifyTasteFromSession(): Promise<SpotifyTaste | null
   return taste;
 }
 
+export async function hasSpotifyProviderToken(): Promise<boolean> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const providerToken = (session as any)?.provider_token as string | undefined;
+  return !!providerToken;
+}
+
 export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Promise<void> {
   localStorage.setItem("whozin_post_auth_redirect", redirectPath);
 
