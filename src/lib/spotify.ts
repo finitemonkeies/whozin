@@ -1,5 +1,4 @@
 import { supabase } from "@/lib/supabase";
-import { buildSiteUrl } from "@/lib/site";
 
 type SpotifyArtist = {
   name: string;
@@ -96,6 +95,10 @@ export async function hasSpotifyProviderToken(): Promise<boolean> {
 
 export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Promise<void> {
   localStorage.setItem("whozin_post_auth_redirect", redirectPath);
+  const redirectTo =
+    typeof window !== "undefined" && window.location?.origin
+      ? `${window.location.origin}/auth/callback`
+      : "/auth/callback";
 
   const {
     data: { session },
@@ -108,7 +111,7 @@ export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Prom
         supabase.auth.linkIdentity({
           provider: "spotify",
           options: {
-            redirectTo: buildSiteUrl("/auth/callback"),
+            redirectTo,
             scopes: "user-top-read",
           },
         } as any)
@@ -116,7 +119,7 @@ export async function startSpotifyOAuthRedirect(redirectPath = "/explore"): Prom
         supabase.auth.signInWithOAuth({
           provider: "spotify",
           options: {
-            redirectTo: buildSiteUrl("/auth/callback"),
+            redirectTo,
             scopes: "user-top-read",
           },
         });
