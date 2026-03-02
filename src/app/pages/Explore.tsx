@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Music, CheckCircle, Loader2, Sparkles, AudioWaveform } from "lucide-react";
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
@@ -12,79 +12,38 @@ import {
   syncSpotifyTasteFromSession,
 } from "@/lib/spotify";
 
-// Mock data for Spotify recommendations
-const RECOMMENDED_EVENTS: Event[] = [
-  {
-    id: "r1",
-    title: "Afterlife: Tale of Us",
-    date: "NOV 10 • 11:00 PM",
-    location: "Avant Gardner, NY",
-    image:
-      "https://images.unsplash.com/photo-1666682115302-a767a7b585f8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    attendees: 3200,
-    price: "$95",
-    description:
-      "Experience the realm of consciousness. Tale of Us brings their signature melodic techno sound to Brooklyn.",
-    tags: ["Melodic Techno", "Visuals", "Immersive"],
-  },
-  {
-    id: "r2",
-    title: "Laserface: Gareth Emery",
-    date: "DEC 05 • 8:00 PM",
-    location: "Bill Graham Civic, SF",
-    image:
-      "https://images.unsplash.com/photo-1574154894072-18ba0d48321b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    attendees: 5000,
-    price: "$75",
-    description:
-      "The world's greatest laser show returns. Perfect synchronization of lasers and trance music.",
-    tags: ["Trance", "Lasers", "Arena"],
-  },
-  {
-    id: "r3",
-    title: "Berlin Underground",
-    date: "OCT 28 • 11:59 PM",
-    location: "Secret Warehouse, LA",
-    image:
-      "https://images.unsplash.com/photo-1589742117142-4c08de5aabcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    attendees: 450,
-    price: "$40",
-    description:
-      "Strictly techno. No photos. Black attire only. The true underground experience.",
-    tags: ["Hard Techno", "Underground", "Secret"],
-  },
-  {
-    id: "r4",
-    title: "Bass Canyon 2026",
-    date: "AUG 20 • 2:00 PM",
-    location: "The Gorge, WA",
-    image:
-      "https://images.unsplash.com/photo-1571900267799-debdb80d1617?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    attendees: 25000,
-    price: "$250",
-    description:
-      "Headbangers assemble. 3 days of heavy bass at the most beautiful venue in the world.",
-    tags: ["Dubstep", "Camping", "Bass"],
-  },
-  {
-    id: "r5",
-    title: "Dreamstate SoCal",
-    date: "NOV 18 • 5:00 PM",
-    location: "NOS Events Center, CA",
-    image:
-      "https://images.unsplash.com/photo-1520242739010-44e95bde329e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
-    attendees: 15000,
-    price: "$160",
-    description:
-      "Your trance destination. Uplifting, psy, tech, and progressive trance across 4 stages.",
-    tags: ["Trance", "Psytrance", "Festival"],
-  },
-];
-
 const exploreCoverStyle = {
   background:
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
+
+type StoredSpotifyTaste = {
+  genres?: string[];
+};
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function loadTasteGenresFromStorage(): string[] {
+  try {
+    const raw = localStorage.getItem("whozin_spotify_taste");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as StoredSpotifyTaste;
+    if (!Array.isArray(parsed.genres)) return [];
+    return parsed.genres
+      .map((g) => g.trim())
+      .filter(Boolean)
+      .slice(0, 6)
+      .map(toTitleCase);
+  } catch {
+    return [];
+  }
+}
 
 function getBrowserPosition(): Promise<{ lat: number; lon: number }> {
   return new Promise((resolve, reject) => {
@@ -109,12 +68,7 @@ async function reverseGeocodeCity(lat: number, lon: number): Promise<string> {
   const json = await res.json();
   const addr = json?.address ?? {};
   return (
-    addr.city ??
-    addr.town ??
-    addr.village ??
-    addr.municipality ??
-    addr.county ??
-    ""
+    addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.county ?? ""
   )
     .toString()
     .trim();
@@ -136,28 +90,34 @@ export function Explore() {
   const [connecting, setConnecting] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
-  const [cityHint, setCityHint] = useState(localStorage.getItem("whozin_explore_city") || "");
+
+  const [cityInput, setCityInput] = useState(localStorage.getItem("whozin_explore_city") || "");
   const [autoCityHint, setAutoCityHint] = useState(
     localStorage.getItem("whozin_explore_auto_city") || ""
   );
+  const [activeCity, setActiveCity] = useState(localStorage.getItem("whozin_explore_city") || "");
+  const [tasteGenres, setTasteGenres] = useState<string[]>(loadTasteGenresFromStorage());
 
-  const effectiveCity = cityHint.trim() || autoCityHint.trim();
+  const effectiveCity = activeCity.trim() || autoCityHint.trim();
 
   useEffect(() => {
     const resolveAutoCity = async () => {
-      if (cityHint.trim()) return;
+      if (cityInput.trim()) return;
       if (autoCityHint.trim()) return;
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       const profileCity =
         (user?.user_metadata?.city as string | undefined)?.trim() ||
         (user?.user_metadata?.location as string | undefined)?.trim() ||
         "";
+
       if (profileCity) {
         setAutoCityHint(profileCity);
         localStorage.setItem("whozin_explore_auto_city", profileCity);
+        if (!activeCity.trim()) setActiveCity(profileCity);
         return;
       }
 
@@ -167,6 +127,7 @@ export function Explore() {
         if (city) {
           setAutoCityHint(city);
           localStorage.setItem("whozin_explore_auto_city", city);
+          if (!activeCity.trim()) setActiveCity(city);
           return;
         }
       } catch {
@@ -177,45 +138,19 @@ export function Explore() {
       if (ipCity) {
         setAutoCityHint(ipCity);
         localStorage.setItem("whozin_explore_auto_city", ipCity);
+        if (!activeCity.trim()) setActiveCity(ipCity);
       }
     };
+
     void resolveAutoCity();
-  }, [cityHint, autoCityHint]);
-
-  useEffect(() => {
-    const run = async () => {
-      const status = await getSpotifyConnectionStatus().catch(() => ({
-        linked: false,
-        hasToken: false,
-      }));
-
-      if (!status.linked) {
-        localStorage.removeItem("spotify_connected");
-        localStorage.removeItem("whozin_spotify_taste");
-        localStorage.removeItem("whozin_spotify_last_sync");
-        setConnected(false);
-        return;
-      }
-
-      setConnected(true);
-
-      if (status.hasToken) {
-        const taste = await syncSpotifyTasteFromSession().catch(() => null);
-        if (!taste) {
-          toast.error("Spotify connected, but taste sync failed. Try reconnecting.");
-        }
-      }
-
-      await refreshRecommendations(effectiveCity);
-    };
-    void run();
-  }, [effectiveCity]);
+  }, [cityInput, autoCityHint, activeCity]);
 
   const refreshRecommendations = async (city: string) => {
     setLoadingEvents(true);
     try {
       const ranked = await loadPersonalizedExplore(city);
       setEvents(ranked);
+
       void logProductEvent({
         eventName: "explore_feed_loaded",
         source: "explore",
@@ -240,6 +175,38 @@ export function Explore() {
     }
   };
 
+  useEffect(() => {
+    const run = async () => {
+      const status = await getSpotifyConnectionStatus().catch(() => ({
+        linked: false,
+        hasToken: false,
+      }));
+
+      if (!status.linked) {
+        localStorage.removeItem("spotify_connected");
+        localStorage.removeItem("whozin_spotify_taste");
+        localStorage.removeItem("whozin_spotify_last_sync");
+        setConnected(false);
+        setTasteGenres([]);
+        return;
+      }
+
+      setConnected(true);
+
+      if (status.hasToken) {
+        const taste = await syncSpotifyTasteFromSession().catch(() => null);
+        if (!taste) {
+          toast.error("Spotify connected, but taste sync failed. Try reconnecting.");
+        }
+      }
+
+      setTasteGenres(loadTasteGenresFromStorage());
+      await refreshRecommendations(effectiveCity);
+    };
+
+    void run();
+  }, [effectiveCity]);
+
   const handleConnect = async () => {
     setConnecting(true);
     try {
@@ -253,7 +220,6 @@ export function Explore() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-24 relative">
-      {/* Header */}
       <div className="relative h-48" style={exploreCoverStyle}>
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black" />
         <div className="relative px-5 pt-12">
@@ -266,7 +232,6 @@ export function Explore() {
       </div>
 
       <div className="px-5 pt-4 space-y-6">
-        {/* Spotify Connect */}
         {!connected ? (
           <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6 text-center space-y-4 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-tr from-green-500/10 to-transparent pointer-events-none" />
@@ -304,7 +269,7 @@ export function Explore() {
             </button>
 
             <div className="text-[11px] text-zinc-500">
-              We only use listening signals to recommend events — you control visibility.
+              We only use listening signals to recommend events - you control visibility.
             </div>
           </div>
         ) : (
@@ -326,7 +291,6 @@ export function Explore() {
           </div>
         )}
 
-        {/* Recommendations */}
         {connected && (
           <div className="space-y-4">
             <div className="flex items-end justify-between">
@@ -339,25 +303,48 @@ export function Explore() {
               </div>
             </div>
 
+            {tasteGenres.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-[0.16em] text-zinc-500">Your Taste</div>
+                <div className="flex flex-wrap gap-2">
+                  {tasteGenres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800/70 border border-white/10 text-zinc-200"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex gap-2">
               <input
-                value={cityHint}
-                onChange={(e) => setCityHint(e.target.value)}
+                value={cityInput}
+                onChange={(e) => setCityInput(e.target.value)}
                 placeholder="City for nearby events (ex: Chicago)"
                 className="flex-1 bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2 text-sm"
               />
               <button
                 type="button"
                 onClick={() => {
-                  localStorage.setItem("whozin_explore_city", cityHint);
-                  void refreshRecommendations(effectiveCity);
+                  const city = cityInput.trim() || autoCityHint.trim();
+                  if (cityInput.trim()) {
+                    localStorage.setItem("whozin_explore_city", cityInput.trim());
+                  } else {
+                    localStorage.removeItem("whozin_explore_city");
+                  }
+                  setActiveCity(city);
+                  void refreshRecommendations(city);
                 }}
                 className="px-3 py-2 rounded-xl text-sm bg-white/10 border border-white/10 hover:bg-white/15"
               >
                 Refresh
               </button>
             </div>
-            {!cityHint.trim() && autoCityHint.trim() ? (
+
+            {!cityInput.trim() && autoCityHint.trim() ? (
               <div className="text-xs text-zinc-500">
                 Using nearby fallback city: <span className="text-zinc-300">{autoCityHint}</span>
               </div>
@@ -386,7 +373,6 @@ export function Explore() {
           </div>
         )}
 
-        {/* Categories */}
         {!connected && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Browse by Vibe</h3>
@@ -409,7 +395,6 @@ export function Explore() {
           </div>
         )}
       </div>
-
     </div>
   );
 }
