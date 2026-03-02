@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
 import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
+import { startSpotifyOAuthRedirect, syncSpotifyTasteFromSession } from "@/lib/spotify";
 
 // Mock data for Spotify recommendations
 const RECOMMENDED_EVENTS: Event[] = [
@@ -87,11 +88,15 @@ export function Explore() {
   const [cityHint, setCityHint] = useState(localStorage.getItem("whozin_explore_city") || "");
 
   useEffect(() => {
-    const isConnected = localStorage.getItem("spotify_connected") === "true";
-    if (isConnected) {
-      setConnected(true);
-      void refreshRecommendations(cityHint);
-    }
+    const run = async () => {
+      const taste = await syncSpotifyTasteFromSession().catch(() => null);
+      const isConnected = localStorage.getItem("spotify_connected") === "true" || !!taste;
+      if (isConnected) {
+        setConnected(true);
+        await refreshRecommendations(cityHint);
+      }
+    };
+    void run();
   }, []);
 
   const refreshRecommendations = async (city: string) => {
@@ -108,16 +113,15 @@ export function Explore() {
     }
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     setConnecting(true);
-
-    setTimeout(() => {
+    try {
+      await startSpotifyOAuthRedirect("/explore");
+    } catch (e: any) {
+      console.error("Spotify OAuth failed:", e);
+      toast.error(e?.message ?? "Could not start Spotify connection");
       setConnecting(false);
-      setConnected(true);
-      localStorage.setItem("spotify_connected", "true");
-      toast.success("Spotify connected successfully!");
-      void refreshRecommendations(cityHint);
-    }, 1400);
+    }
   };
 
   return (
