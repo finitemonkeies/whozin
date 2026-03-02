@@ -17,6 +17,9 @@ export interface Event {
   price: string;
   description: string;
   tags: string[];
+  ticketUrl?: string;
+  eventSource?: string;
+  matchReason?: string;
 }
 
 export interface Squad {

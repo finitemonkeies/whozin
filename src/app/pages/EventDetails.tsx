@@ -239,6 +239,17 @@ export function EventDetails() {
     setWorking(true);
     setIsGoing(nextGoing);
 
+    if (rsvpSource === "explore") {
+      void logProductEvent({
+        eventName: "explore_rsvp_click",
+        eventId: id,
+        source: "explore",
+        metadata: {
+          action: nextGoing ? "add" : "remove",
+        },
+      });
+    }
+
     setAttendees((prev) => {
       if (nextGoing) {
         if (prev.some((r) => r.user_id === uid)) return prev;

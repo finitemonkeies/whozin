@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
 type SpotifyArtist = {
+  id: string;
   name: string;
   genres: string[];
 };
@@ -12,6 +13,7 @@ type SpotifyTopArtistsResponse = {
 type SpotifyTaste = {
   artists: string[];
   genres: string[];
+  suggestedArtists: string[];
 };
 
 type SpotifyConnectionStatus = {
@@ -49,6 +51,22 @@ async function fetchTopArtists(providerToken: string): Promise<SpotifyArtist[]> 
   return Array.isArray(json.items) ? json.items : [];
 }
 
+async function fetchRelatedArtists(providerToken: string, artistId: string): Promise<SpotifyArtist[]> {
+  const url = `https://api.spotify.com/v1/artists/${artistId}/related-artists`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${providerToken}`,
+    },
+  });
+
+  if (!res.ok) {
+    return [];
+  }
+
+  const json = (await res.json()) as { artists?: SpotifyArtist[] };
+  return Array.isArray(json.artists) ? json.artists : [];
+}
+
 export async function syncSpotifyTasteFromSession(): Promise<SpotifyTaste | null> {
   const {
     data: { session },
@@ -77,9 +95,20 @@ export async function syncSpotifyTasteFromSession(): Promise<SpotifyTaste | null
     .slice(0, 12)
     .map(([genre]) => genre);
 
+  const related = await Promise.all(
+    artists
+      .slice(0, 5)
+      .filter((a) => !!a.id)
+      .map((a) => fetchRelatedArtists(providerToken, a.id))
+  );
+  const suggestedArtists = normalizeList(related.flat().map((a) => a.name))
+    .filter((name) => !topArtists.some((a) => a.toLowerCase() === name.toLowerCase()))
+    .slice(0, 20);
+
   const taste: SpotifyTaste = {
     artists: topArtists,
     genres: topGenres,
+    suggestedArtists,
   };
 
   localStorage.setItem("spotify_connected", "true");

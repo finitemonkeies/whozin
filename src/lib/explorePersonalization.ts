@@ -10,22 +10,26 @@ type InternalEventRow = {
   image_url: string | null;
   description?: string | null;
   event_source?: string | null;
+  ticket_url?: string | null;
 };
 
 type TasteProfile = {
   artists: string[];
   genres: string[];
+  suggestedArtists: string[];
 };
 
 type Recommendation = Event & {
   score: number;
   eventSource: string;
   matchReason: string;
+  rankTier: number;
 };
 
 const DEFAULT_TASTE: TasteProfile = {
   artists: ["Tale of Us", "Charlotte de Witte", "Gareth Emery", "Eric Prydz", "Amelie Lens"],
   genres: ["techno", "melodic techno", "trance", "house"],
+  suggestedArtists: [],
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -81,16 +85,21 @@ function locationScore(eventLocation: string | null | undefined, cityHint: strin
   return Math.min(1, overlap / cityTokens.length);
 }
 
-function affinityScore(row: InternalEventRow, taste: TasteProfile): { score: number; reason: string } {
+function affinityScore(
+  row: InternalEventRow,
+  taste: TasteProfile
+): { score: number; reason: string; matchTier: number } {
   const text = normalize([row.title, row.description, row.location].filter(Boolean).join(" "));
   let hits = 0;
   let reason = "General music match";
+  let matchTier = 0;
 
   for (const artist of taste.artists) {
     if (!artist.trim()) continue;
     if (text.includes(normalize(artist))) {
       hits += 3;
       reason = `Because you like ${artist}`;
+      matchTier = 3;
       break;
     }
   }
@@ -100,8 +109,24 @@ function affinityScore(row: InternalEventRow, taste: TasteProfile): { score: num
     if (text.includes(normalize(genre))) hits += 1;
   }
 
+  for (const artist of taste.suggestedArtists) {
+    if (!artist.trim()) continue;
+    if (text.includes(normalize(artist))) {
+      hits += 2;
+      if (reason === "General music match") {
+        reason = `Suggested from your taste: ${artist}`;
+      }
+      matchTier = Math.max(matchTier, 2);
+      break;
+    }
+  }
+
+  if (matchTier === 0 && hits > 0) {
+    matchTier = 1;
+  }
+
   const score = Math.min(1, hits / 5);
-  return { score, reason };
+  return { score, reason, matchTier };
 }
 
 async function getSpotifyTasteProfile(): Promise<TasteProfile> {
@@ -112,9 +137,13 @@ async function getSpotifyTasteProfile(): Promise<TasteProfile> {
       const artists = Array.isArray(parsed.artists) ? parsed.artists.filter(Boolean) : [];
       const genres = Array.isArray(parsed.genres) ? parsed.genres.filter(Boolean) : [];
       if (artists.length > 0 || genres.length > 0) {
+        const suggestedArtists = Array.isArray((parsed as any).suggestedArtists)
+          ? ((parsed as any).suggestedArtists as string[]).filter(Boolean)
+          : [];
         return {
           artists: artists.length > 0 ? artists : DEFAULT_TASTE.artists,
           genres: genres.length > 0 ? genres : DEFAULT_TASTE.genres,
+          suggestedArtists,
         };
       }
     }
@@ -145,15 +174,19 @@ async function fetchInternalEvents(): Promise<InternalEventRow[]> {
   });
 }
 
-async function fetchTicketmasterEvents(cityHint: string): Promise<InternalEventRow[]> {
-  const apiKey = (import.meta.env.VITE_TICKETMASTER_API_KEY as string | undefined)?.trim();
-  if (!apiKey || !cityHint.trim()) return [];
+async function fetchTicketmasterKeywordEvents(
+  cityHint: string,
+  keyword: string,
+  apiKey: string
+): Promise<InternalEventRow[]> {
+  if (!cityHint.trim() || !keyword.trim()) return [];
 
   const params = new URLSearchParams({
     apikey: apiKey,
     city: cityHint,
     classificationName: "music",
-    size: "40",
+    keyword,
+    size: "15",
     sort: "date,asc",
   });
 
@@ -179,13 +212,38 @@ async function fetchTicketmasterEvents(cityHint: string): Promise<InternalEventR
       event_date: e?.dates?.start?.dateTime ?? null,
       event_end_date: null,
       image_url: Array.isArray(e?.images) ? e.images[0]?.url ?? null : null,
-      description: attractions ? `Featuring: ${attractions}` : null,
-      event_source: "ticketmaster",
+      description: attractions
+        ? `Matched artist: ${keyword}. Featuring: ${attractions}`
+        : `Matched artist: ${keyword}`,
+      event_source: "ticketmaster_artist",
+      ticket_url: e?.url ?? null,
     } as InternalEventRow;
   });
 }
 
-function toUiEvent(row: InternalEventRow, score: number, reason: string): Recommendation {
+async function fetchTicketmasterEvents(cityHint: string, taste: TasteProfile): Promise<InternalEventRow[]> {
+  const apiKey = (import.meta.env.VITE_TICKETMASTER_API_KEY as string | undefined)?.trim();
+  if (!apiKey || !cityHint.trim()) return [];
+
+  const artistQueries = [...taste.artists.slice(0, 6), ...taste.suggestedArtists.slice(0, 4)];
+  const uniqueQueries = Array.from(
+    new Set(artistQueries.map((q) => q.trim()).filter((q) => q.length > 0))
+  ).slice(0, 8);
+
+  if (uniqueQueries.length === 0) return [];
+
+  const results = await Promise.all(
+    uniqueQueries.map((artist) => fetchTicketmasterKeywordEvents(cityHint, artist, apiKey))
+  );
+  return results.flat();
+}
+
+function toUiEvent(
+  row: InternalEventRow,
+  score: number,
+  reason: string,
+  rankTier: number
+): Recommendation {
   return {
     id: row.id,
     title: row.title,
@@ -196,17 +254,19 @@ function toUiEvent(row: InternalEventRow, score: number, reason: string): Recomm
     price: "RSVP",
     description: row.description ?? reason,
     tags: [reason, row.event_source ?? "internal"].filter(Boolean),
+    ticketUrl: row.ticket_url ?? undefined,
     score,
     eventSource: row.event_source ?? "internal",
     matchReason: reason,
+    rankTier,
   };
 }
 
 export async function loadPersonalizedExplore(cityHint: string): Promise<Recommendation[]> {
-  const [taste, internal, ticketmaster] = await Promise.all([
-    getSpotifyTasteProfile(),
+  const taste = await getSpotifyTasteProfile();
+  const [internal, ticketmaster] = await Promise.all([
     fetchInternalEvents(),
-    fetchTicketmasterEvents(cityHint),
+    fetchTicketmasterEvents(cityHint, taste),
   ]);
 
   const combined = [...internal, ...ticketmaster];
@@ -219,9 +279,16 @@ export async function loadPersonalizedExplore(cityHint: string): Promise<Recomme
       const geo = locationScore(row.location, cityHint);
       const date = dateProximityScore(row.event_date);
       const score = affinity.score * 0.55 + geo * 0.25 + date * 0.2;
-      return toUiEvent(row, Number(score.toFixed(4)), affinity.reason);
+      const hasArtistMatch = affinity.matchTier >= 2;
+      const hasNearbyMatch = cityHint.trim().length > 0 ? geo >= 0.34 : true;
+      const rankTier = hasArtistMatch ? 3 : hasNearbyMatch ? 2 : 1;
+      return toUiEvent(row, Number(score.toFixed(4)), affinity.reason, rankTier);
     })
     .sort((a, b) => {
+      if (a.rankTier !== b.rankTier) return b.rankTier - a.rankTier;
+      const aExternal = a.eventSource.startsWith("ticketmaster") ? 1 : 0;
+      const bExternal = b.eventSource.startsWith("ticketmaster") ? 1 : 0;
+      if (aExternal !== bExternal) return bExternal - aExternal;
       const aValid = isUuid(a.id) ? 1 : 0;
       const bValid = isUuid(b.id) ? 1 : 0;
       if (aValid !== bValid) return bValid - aValid;

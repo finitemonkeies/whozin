@@ -4,7 +4,10 @@ import { sanitizeRsvpSource } from "@/lib/rsvpSource";
 type ProductEventName =
   | "explore_event_impression"
   | "explore_event_click"
-  | "event_detail_view";
+  | "event_detail_view"
+  | "explore_feed_loaded"
+  | "explore_buy_ticket_click"
+  | "explore_rsvp_click";
 
 type LogProductEventArgs = {
   eventName: ProductEventName;

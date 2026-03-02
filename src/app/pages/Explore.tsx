@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
 import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
+import { supabase } from "@/lib/supabase";
+import { logProductEvent } from "@/lib/productEvents";
 import {
   getSpotifyConnectionStatus,
   startSpotifyOAuthRedirect,
@@ -84,12 +86,82 @@ const exploreCoverStyle = {
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
 
+function getBrowserPosition(): Promise<{ lat: number; lon: number }> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("Geolocation unavailable"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) => reject(err),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 }
+    );
+  });
+}
+
+async function reverseGeocodeCity(lat: number, lon: number): Promise<string> {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
+    String(lat)
+  )}&lon=${encodeURIComponent(String(lon))}`;
+  const res = await fetch(url);
+  if (!res.ok) return "";
+  const json = await res.json();
+  const addr = json?.address ?? {};
+  return (
+    addr.city ??
+    addr.town ??
+    addr.village ??
+    addr.municipality ??
+    addr.county ??
+    ""
+  )
+    .toString()
+    .trim();
+}
+
 export function Explore() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [cityHint, setCityHint] = useState(localStorage.getItem("whozin_explore_city") || "");
+  const [autoCityHint, setAutoCityHint] = useState(
+    localStorage.getItem("whozin_explore_auto_city") || ""
+  );
+
+  const effectiveCity = cityHint.trim() || autoCityHint.trim();
+
+  useEffect(() => {
+    const resolveAutoCity = async () => {
+      if (cityHint.trim()) return;
+      if (autoCityHint.trim()) return;
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const profileCity =
+        (user?.user_metadata?.city as string | undefined)?.trim() ||
+        (user?.user_metadata?.location as string | undefined)?.trim() ||
+        "";
+      if (profileCity) {
+        setAutoCityHint(profileCity);
+        localStorage.setItem("whozin_explore_auto_city", profileCity);
+        return;
+      }
+
+      try {
+        const { lat, lon } = await getBrowserPosition();
+        const city = await reverseGeocodeCity(lat, lon);
+        if (!city) return;
+        setAutoCityHint(city);
+        localStorage.setItem("whozin_explore_auto_city", city);
+      } catch {
+        // User denied geolocation or unavailable.
+      }
+    };
+    void resolveAutoCity();
+  }, [cityHint, autoCityHint]);
 
   useEffect(() => {
     const run = async () => {
@@ -115,20 +187,35 @@ export function Explore() {
         }
       }
 
-      await refreshRecommendations(cityHint);
+      await refreshRecommendations(effectiveCity);
     };
     void run();
-  }, []);
+  }, [effectiveCity]);
 
   const refreshRecommendations = async (city: string) => {
     setLoadingEvents(true);
     try {
       const ranked = await loadPersonalizedExplore(city);
-      setEvents(ranked.length > 0 ? ranked : RECOMMENDED_EVENTS);
+      setEvents(ranked);
+      void logProductEvent({
+        eventName: "explore_feed_loaded",
+        source: "explore",
+        metadata: {
+          city: city || null,
+          spotify_connected: connected,
+          result_count: ranked.length,
+          artist_matched_count: ranked.filter(
+            (e) =>
+              (e.matchReason ?? "").toLowerCase().includes("because you like") ||
+              (e.matchReason ?? "").toLowerCase().includes("suggested")
+          ).length,
+          ticketed_count: ranked.filter((e) => !!e.ticketUrl).length,
+        },
+      });
     } catch (e: any) {
       console.error("Explore personalization failed:", e);
-      setEvents(RECOMMENDED_EVENTS);
-      toast.error("Could not refresh personalized events. Showing fallback picks.");
+      setEvents([]);
+      toast.error("Could not refresh personalized events right now.");
     } finally {
       setLoadingEvents(false);
     }
@@ -213,7 +300,7 @@ export function Explore() {
 
               <div>
                 <div className="font-medium text-sm">Spotify Connected</div>
-                <div className="text-xs text-zinc-500">Based on your recent listening</div>
+                <div className="text-xs text-zinc-500">Top + suggested artists, matched to your city</div>
               </div>
             </div>
             <CheckCircle className="w-5 h-5 text-[#1DB954]" />
@@ -229,7 +316,7 @@ export function Explore() {
                   Recommended for You
                   {loadingEvents && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
                 </h3>
-                <div className="text-xs text-zinc-600 mt-0.5">Powered by Spotify</div>
+                <div className="text-xs text-zinc-600 mt-0.5">Nearby concerts from your top and suggested artists</div>
               </div>
             </div>
 
@@ -244,13 +331,18 @@ export function Explore() {
                 type="button"
                 onClick={() => {
                   localStorage.setItem("whozin_explore_city", cityHint);
-                  void refreshRecommendations(cityHint);
+                  void refreshRecommendations(effectiveCity);
                 }}
                 className="px-3 py-2 rounded-xl text-sm bg-white/10 border border-white/10 hover:bg-white/15"
               >
                 Refresh
               </button>
             </div>
+            {!cityHint.trim() && autoCityHint.trim() ? (
+              <div className="text-xs text-zinc-500">
+                Using nearby fallback city: <span className="text-zinc-300">{autoCityHint}</span>
+              </div>
+            ) : null}
 
             {loadingEvents ? (
               <div className="space-y-4">
@@ -263,9 +355,13 @@ export function Explore() {
               </div>
             ) : (
               <div className="grid gap-6">
-                {events.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
+                {events.length > 0 ? (
+                  events.map((event) => <EventCard key={event.id} event={event} />)
+                ) : (
+                  <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
+                    No artist-matched concerts found yet. Try a nearby city for fallback events.
+                  </div>
+                )}
               </div>
             )}
           </div>

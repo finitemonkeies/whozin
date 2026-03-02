@@ -19,26 +19,56 @@ export function EventCard({ event }: { event: Event }) {
   const title = useMemo(() => safeTitle(event.title), [event.title]);
   const didTrackImpression = useRef(false);
   const canOpenDetails = isUuid(event.id);
+  const hasTicketUrl = !!event.ticketUrl;
 
   const hasImageProp = !!event.image && event.image.trim().length > 0;
   const [imageOk, setImageOk] = useState(true);
   const showImage = hasImageProp && imageOk;
+  const source = event.eventSource ?? "explore";
+  const matchedArtist = (event.matchReason ?? "").toLowerCase().includes("like") ||
+    (event.matchReason ?? "").toLowerCase().includes("suggested");
 
   useEffect(() => {
     if (didTrackImpression.current) return;
     didTrackImpression.current = true;
 
-    if (canOpenDetails) {
-      void logProductEvent({
-        eventName: "explore_event_impression",
-        eventId: event.id,
-        source: "explore",
-      });
-    }
-  }, [canOpenDetails, event.id]);
+    void logProductEvent({
+      eventName: "explore_event_impression",
+      eventId: canOpenDetails ? event.id : null,
+      source: "explore",
+      metadata: {
+        source,
+        matched_artist: matchedArtist,
+        has_ticket_url: hasTicketUrl,
+      },
+    });
+  }, [canOpenDetails, event.id, hasTicketUrl, matchedArtist, source]);
 
   const className =
     "group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200";
+
+  const handleDetailClick = () =>
+    void logProductEvent({
+      eventName: "explore_event_click",
+      eventId: canOpenDetails ? event.id : null,
+      source: "explore",
+      metadata: {
+        source,
+        matched_artist: matchedArtist,
+      },
+    });
+
+  const handleBuyClick = () =>
+    void logProductEvent({
+      eventName: "explore_buy_ticket_click",
+      eventId: canOpenDetails ? event.id : null,
+      source: "explore",
+      metadata: {
+        provider: source,
+        external_event_id: event.id,
+        matched_artist: matchedArtist,
+      },
+    });
 
   const body = (
     <>
@@ -120,30 +150,34 @@ export function EventCard({ event }: { event: Event }) {
           </div>
         ) : null}
 
-        <div className="mt-4 text-[11px] text-zinc-600 group-hover:text-zinc-500 transition">
-          {canOpenDetails ? "View details ->" : "Preview only"}
+        <div className="mt-4 flex items-center gap-2">
+          {canOpenDetails ? (
+            <Link
+              to={`/event/${event.id}?src=explore`}
+              onClick={handleDetailClick}
+              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15"
+            >
+              View details
+            </Link>
+          ) : (
+            <span className="text-[11px] text-zinc-600">Preview only</span>
+          )}
+
+          {hasTicketUrl ? (
+            <a
+              href={event.ticketUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={handleBuyClick}
+              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/25"
+            >
+              Buy Tickets
+            </a>
+          ) : null}
         </div>
       </div>
     </>
   );
 
-  if (!canOpenDetails) {
-    return <div className={className}>{body}</div>;
-  }
-
-  return (
-    <Link
-      to={`/event/${event.id}?src=explore`}
-      onClick={() =>
-        void logProductEvent({
-          eventName: "explore_event_click",
-          eventId: event.id,
-          source: "explore",
-        })
-      }
-      className={className}
-    >
-      {body}
-    </Link>
-  );
+  return <div className={className}>{body}</div>;
 }
