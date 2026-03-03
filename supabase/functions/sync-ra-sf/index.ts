@@ -170,12 +170,12 @@ function buildApifyUrl(actorId: string, token: string): string {
 
 function buildApifyInput() {
   const today = new Date();
-  const plus90 = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const plus45 = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
   return {
     startUrls: [{ url: "https://ra.co/events/us/sanfrancisco" }],
     dateRangeFrom: today.toISOString().slice(0, 10),
-    dateRangeTo: plus90.toISOString().slice(0, 10),
-    maxItems: 600,
+    dateRangeTo: plus45.toISOString().slice(0, 10),
+    maxItems: 120,
   };
 }
 
@@ -321,16 +321,19 @@ Deno.serve(async (req) => {
     source_event_id: e.sourceEventId,
   }));
 
-  const { data: upsertedRows, error: upsertErr } = await service
-    .from("events")
-    .upsert(rows, { onConflict: "event_source,source_event_id" })
-    .select("source_event_id");
+  const chunkSize = 25;
+  let upserted = 0;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error: upsertErr } = await service
+      .from("events")
+      .upsert(chunk, { onConflict: "event_source,source_event_id" });
 
-  if (upsertErr) {
-    return jsonResponse(500, { error: upsertErr.message });
+    if (upsertErr) {
+      return jsonResponse(500, { error: upsertErr.message, chunk_start: i });
+    }
+    upserted += chunk.length;
   }
-
-  const upserted = upsertedRows?.length ?? rows.length;
   const inserted = rows.filter((r) => !existingSet.has(r.source_event_id)).length;
   const updated = Math.max(0, upserted - inserted);
 
