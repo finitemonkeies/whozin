@@ -294,11 +294,13 @@ export default function Admin() {
     setSyncingRa(true);
     setRaSyncSummary(null);
     try {
+      const { data: refreshedSessionData } = await supabase.auth.refreshSession();
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const accessToken = session?.access_token;
+      const accessToken = refreshedSessionData?.session?.access_token ?? session?.access_token;
       if (!accessToken) {
         throw new Error("Missing auth session. Please sign in again.");
       }
@@ -308,7 +310,6 @@ export default function Admin() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({}),
