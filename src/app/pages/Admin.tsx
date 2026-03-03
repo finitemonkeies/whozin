@@ -47,6 +47,8 @@ export default function Admin() {
 
   const [working, setWorking] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [syncingRa, setSyncingRa] = useState(false);
+  const [raSyncSummary, setRaSyncSummary] = useState<Record<string, unknown> | null>(null);
 
   const [form, setForm] = useState<FormState>({
     id: null,
@@ -287,6 +289,28 @@ export default function Admin() {
     }
   };
 
+  const syncRaSf = async () => {
+    if (!isAllowed || syncingRa) return;
+    setSyncingRa(true);
+    setRaSyncSummary(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-ra-sf", {
+        body: {},
+      });
+      if (error) throw error;
+      setRaSyncSummary((data ?? null) as Record<string, unknown> | null);
+      toast.success("RA sync completed");
+      await loadEvents();
+    } catch (err: any) {
+      console.error("RA sync failed:", err);
+      const message = err?.message ?? "RA sync failed";
+      setRaSyncSummary({ error: message });
+      toast.error(message);
+    } finally {
+      setSyncingRa(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white px-6 py-8">
@@ -311,13 +335,31 @@ export default function Admin() {
           <h1 className="text-3xl font-bold">Admin</h1>
           <p className="text-zinc-400">Create, edit, and seed events.</p>
         </div>
-        <button
-          onClick={resetForm}
-          className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
-        >
-          + New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={syncRaSf}
+            disabled={syncingRa}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+          >
+            {syncingRa ? "Syncing RA..." : "Sync RA (SF/Oakland)"}
+          </button>
+          <button
+            onClick={resetForm}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
+          >
+            + New
+          </button>
+        </div>
       </div>
+
+      {raSyncSummary && (
+        <div className="mb-6 bg-zinc-900/40 border border-white/10 rounded-2xl p-4">
+          <div className="text-sm text-zinc-300 mb-2">RA Sync Summary</div>
+          <pre className="text-xs text-zinc-400 whitespace-pre-wrap break-words">
+            {JSON.stringify(raSyncSummary, null, 2)}
+          </pre>
+        </div>
+      )}
 
       {/* Event lists */}
       <div className="mb-8">
