@@ -294,7 +294,19 @@ export default function Admin() {
     setSyncingRa(true);
     setRaSyncSummary(null);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        throw new Error("Missing auth session. Please sign in again.");
+      }
+
       const { data, error } = await supabase.functions.invoke("sync-ra-sf", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: {},
       });
       if (error) throw error;
