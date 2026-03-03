@@ -170,12 +170,15 @@ function buildApifyUrl(actorId: string, token: string): string {
 
 function buildApifyInput() {
   const today = new Date();
-  const plus45 = new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000);
+  const plus21 = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
   return {
     startUrls: [{ url: "https://ra.co/events/us/sanfrancisco" }],
     dateRangeFrom: today.toISOString().slice(0, 10),
-    dateRangeTo: plus45.toISOString().slice(0, 10),
-    maxItems: 120,
+    dateRangeTo: plus21.toISOString().slice(0, 10),
+    maxItems: 40,
+    enforceMaxItems: true,
+    maxErrors: 0,
+    downloadDelay: 500,
   };
 }
 
@@ -224,7 +227,7 @@ Deno.serve(async (req) => {
 
   const apifyUrl = buildApifyUrl(actorId, apifyToken);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 180_000);
+  const timeout = setTimeout(() => controller.abort(), 120_000);
 
   let items: RaRawItem[] = [];
   try {
