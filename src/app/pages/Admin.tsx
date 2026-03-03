@@ -303,14 +303,23 @@ export default function Admin() {
         throw new Error("Missing auth session. Please sign in again.");
       }
 
-      const { data, error } = await supabase.functions.invoke("sync-ra-sf", {
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-ra-sf`;
+      const res = await fetch(functionUrl, {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          "Content-Type": "application/json",
         },
-        body: {},
+        body: JSON.stringify({}),
       });
-      if (error) throw error;
-      setRaSyncSummary((data ?? null) as Record<string, unknown> | null);
+
+      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error((payload?.error as string) || "RA sync failed");
+      }
+
+      setRaSyncSummary(payload);
       toast.success("RA sync completed");
       await loadEvents();
     } catch (err: any) {
