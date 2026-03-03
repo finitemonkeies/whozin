@@ -314,9 +314,25 @@ export default function Admin() {
         body: JSON.stringify({}),
       });
 
-      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const rawText = await res.text();
+      let payload: Record<string, unknown> = {};
+      if (rawText) {
+        try {
+          payload = JSON.parse(rawText) as Record<string, unknown>;
+        } catch {
+          payload = {};
+        }
+      }
       if (!res.ok) {
-        throw new Error((payload?.error as string) || "RA sync failed");
+        throw new Error(
+          [
+            `RA sync failed (HTTP ${res.status})`,
+            typeof payload?.error === "string" ? payload.error : null,
+            rawText && !payload?.error ? rawText.slice(0, 400) : null,
+          ]
+            .filter(Boolean)
+            .join(" - ")
+        );
       }
 
       setRaSyncSummary(payload);
