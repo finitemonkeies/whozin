@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { track } from "@/lib/analytics";
 import { toast } from "sonner";
+import { claimPendingReferral } from "@/lib/referrals";
 
 type Profile = {
   id: string;
@@ -130,6 +131,15 @@ export default function Setup() {
       track("setup_viewed", { has_profile: true, complete: !!prof.onboarding_complete });
 
       if (prof.display_name && prof.onboarding_complete) {
+        try {
+          const claimed = await claimPendingReferral("share_link");
+          if (claimed?.eventId) {
+            window.location.assign(`/event/${claimed.eventId}?src=share_link`);
+            return;
+          }
+        } catch (err) {
+          console.error("Pending referral claim failed:", err);
+        }
         window.location.assign(redirectTo);
       }
     }
@@ -223,6 +233,17 @@ export default function Setup() {
     }
 
     track("setup_completed", { redirect: redirectTo });
+
+    try {
+      const claimed = await claimPendingReferral("share_link");
+      if (claimed?.eventId) {
+        window.location.assign(`/event/${claimed.eventId}?src=share_link`);
+        return;
+      }
+    } catch (err) {
+      console.error("Pending referral claim failed:", err);
+    }
+
     window.location.assign(redirectTo);
   }
 

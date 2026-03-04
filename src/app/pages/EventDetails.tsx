@@ -16,6 +16,7 @@ import { formatEventDateTimeRange } from "@/lib/eventDates";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { getRsvpSourceFromSearch } from "@/lib/rsvpSource";
 import { logProductEvent } from "@/lib/productEvents";
+import { createReferralInviteLink } from "@/lib/referrals";
 
 type EventRow = {
   id: string;
@@ -43,6 +44,7 @@ function isUuid(value: string) {
 }
 
 const RSVP_BUMP_KEY = "whozin_rsvp_bump";
+const INVITE_PROMPT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
 function bumpRsvp() {
   localStorage.setItem(RSVP_BUMP_KEY, String(Date.now()));
@@ -65,12 +67,20 @@ export function EventDetails() {
 
   const [isGoing, setIsGoing] = useState(false);
   const [working, setWorking] = useState(false);
+  const [showInvitePrompt, setShowInvitePrompt] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
+  const [creatingInviteLink, setCreatingInviteLink] = useState(false);
   const lastTrackedViewKeyRef = useRef<string>("");
 
   const eventImage = useMemo(() => event?.image_url ?? "", [event?.image_url]);
   const rsvpSource = useMemo(
     () => getRsvpSourceFromSearch(location.search),
     [location.search]
+  );
+
+  const invitePromptKey = useMemo(
+    () => (viewerId && id ? `whozin_invite_prompt:${viewerId}:${id}` : ""),
+    [viewerId, id]
   );
 
   useEffect(() => {
@@ -275,6 +285,20 @@ export function EventDetails() {
 
         toast.success("You are on the list.");
         track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
+
+        if (rsvpSource === "share_link") {
+          void logProductEvent({
+            eventName: "invite_rsvp_completed",
+            eventId: id,
+            source: "share_link",
+          });
+        }
+
+        const lastPromptAtRaw = localStorage.getItem(`whozin_invite_prompt:${uid}:${id}`);
+        const lastPromptAt = lastPromptAtRaw ? Number(lastPromptAtRaw) : 0;
+        if (!lastPromptAt || Date.now() - lastPromptAt >= INVITE_PROMPT_COOLDOWN_MS) {
+          setShowInvitePrompt(true);
+        }
       } else {
         const { error } = await supabase
           .from("attendees")
@@ -317,6 +341,83 @@ export function EventDetails() {
   if (!event) {
     return <div className="bg-black min-h-screen text-white p-10">Event not found</div>;
   }
+
+  const createInviteLink = async () => {
+    if (!id || !isUuid(id)) return "";
+    if (inviteLink) return inviteLink;
+
+    setCreatingInviteLink(true);
+    try {
+      const created = await createReferralInviteLink({
+        eventId: id,
+        source: "rsvp_share",
+      });
+      setInviteLink(created.url);
+      return created.url;
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not create invite link");
+      return "";
+    } finally {
+      setCreatingInviteLink(false);
+    }
+  };
+
+  const handleCopyInvite = async () => {
+    const url = await createInviteLink();
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+
+    await logProductEvent({
+      eventName: "invite_link_copied",
+      eventId: id,
+      source: "rsvp_share",
+      metadata: { channel: "copy" },
+    });
+    await logProductEvent({
+      eventName: "invite_sent",
+      eventId: id,
+      source: "rsvp_share",
+      metadata: { channel: "copy" },
+    });
+
+    toast.success("Invite link copied");
+    if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
+    setShowInvitePrompt(false);
+  };
+
+  const handleShareInvite = async () => {
+    const url = await createInviteLink();
+    if (!url) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join me at ${event.title}`,
+          text: `I'm going to ${event.title} on Whozin. Join me here:`,
+          url,
+        });
+      } catch {
+        // Ignore canceled share sheets.
+      }
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast.success("Invite link copied");
+    }
+
+    await logProductEvent({
+      eventName: "invite_sent",
+      eventId: id,
+      source: "rsvp_share",
+      metadata: { channel: navigator.share ? "native_share" : "copy_fallback" },
+    });
+    if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
+    setShowInvitePrompt(false);
+  };
+
+  const handleSkipInvite = () => {
+    if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
+    setShowInvitePrompt(false);
+  };
 
   return (
     <div className="bg-black min-h-screen pb-24 text-white">
@@ -383,6 +484,40 @@ export function EventDetails() {
           <p className="text-center text-xs text-zinc-500 mt-3">
             {isGoing ? "You can now see everyone going." : "RSVP to unlock more attendees."}
           </p>
+
+          {showInvitePrompt ? (
+            <div className="mt-4 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
+              <div className="text-sm font-semibold">Invite your friends</div>
+              <div className="text-xs text-zinc-400 mt-1">
+                I'm going to {event.title} on Whozin. Let your crew know.
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleCopyInvite()}
+                  disabled={creatingInviteLink}
+                  className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+                >
+                  {creatingInviteLink ? "Preparing..." : "Copy link"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleShareInvite()}
+                  disabled={creatingInviteLink}
+                  className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+                >
+                  Share
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSkipInvite}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mb-8">

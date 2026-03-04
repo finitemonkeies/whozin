@@ -3,7 +3,7 @@ import { Music, CheckCircle, Loader2, Sparkles, AudioWaveform } from "lucide-rea
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
-import { loadPersonalizedExplore } from "@/lib/explorePersonalization";
+import { loadPersonalizedExplore, loadTrendingExplore } from "@/lib/explorePersonalization";
 import { supabase } from "@/lib/supabase";
 import { logProductEvent } from "@/lib/productEvents";
 import {
@@ -89,7 +89,9 @@ export function Explore() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [loadingTrending, setLoadingTrending] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
+  const [trendingEvents, setTrendingEvents] = useState<Event[]>([]);
 
   const [cityInput, setCityInput] = useState(localStorage.getItem("whozin_explore_city") || "");
   const [autoCityHint, setAutoCityHint] = useState(
@@ -147,9 +149,14 @@ export function Explore() {
 
   const refreshRecommendations = async (city: string) => {
     setLoadingEvents(true);
+    setLoadingTrending(true);
     try {
-      const ranked = await loadPersonalizedExplore(city);
+      const [ranked, trending] = await Promise.all([
+        loadPersonalizedExplore(city),
+        loadTrendingExplore(city),
+      ]);
       setEvents(ranked);
+      setTrendingEvents(trending);
 
       void logProductEvent({
         eventName: "explore_feed_loaded",
@@ -158,6 +165,7 @@ export function Explore() {
           city: city || null,
           spotify_connected: connected,
           result_count: ranked.length,
+          trending_count: trending.length,
           artist_matched_count: ranked.filter(
             (e) =>
               (e.matchReason ?? "").toLowerCase().includes("because you like") ||
@@ -169,9 +177,11 @@ export function Explore() {
     } catch (e: any) {
       console.error("Explore personalization failed:", e);
       setEvents([]);
+      setTrendingEvents([]);
       toast.error("Could not refresh personalized events right now.");
     } finally {
       setLoadingEvents(false);
+      setLoadingTrending(false);
     }
   };
 
@@ -293,6 +303,39 @@ export function Explore() {
 
         {connected && (
           <div className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  Trending Nearby
+                  {loadingTrending && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
+                </h3>
+                <div className="text-xs text-zinc-600 mt-0.5">
+                  Events getting the most RSVP momentum near you
+                </div>
+              </div>
+            </div>
+
+            {loadingTrending ? (
+              <div className="space-y-4">
+                {[1, 2].map((i) => (
+                  <div
+                    key={`trending-skeleton-${i}`}
+                    className="bg-zinc-900/50 border border-white/10 h-56 rounded-2xl animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : trendingEvents.length > 0 ? (
+              <div className="grid gap-6">
+                {trendingEvents.map((event) => (
+                  <EventCard key={`trending-${event.id}`} event={event} />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
+                No trending events yet for this city.
+              </div>
+            )}
+
             <div className="flex items-end justify-between">
               <div>
                 <h3 className="text-lg font-semibold flex items-center gap-2">

@@ -5,6 +5,10 @@ const ALLOWED_RSVP_SOURCES = new Set([
   "profile",
   "feed_friend",
   "share_link",
+  "rsvp_share",
+  "profile_share",
+  "event_detail_share",
+  "invite_link",
   "unknown",
 ]);
 

@@ -2,9 +2,10 @@
 import { Link } from "react-router-dom";
 import { Settings } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { buildSiteUrl } from "@/lib/site";
 import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
+import { createReferralInviteLink } from "@/lib/referrals";
+import { logProductEvent } from "@/lib/productEvents";
 
 type ProfileRow = {
   id: string;
@@ -282,15 +283,31 @@ export function Profile() {
             </Link>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 const username = profile?.username;
                 if (!username) {
                   toast.error("Set a username first");
                   return;
                 }
-                const link = buildSiteUrl(`/add/@${username}`);
-                navigator.clipboard.writeText(link);
-                toast.success("Invite link copied");
+                try {
+                  const { url } = await createReferralInviteLink({
+                    source: "profile_share",
+                  });
+                  await navigator.clipboard.writeText(url);
+                  await logProductEvent({
+                    eventName: "invite_link_copied",
+                    source: "profile_share",
+                    metadata: { channel: "copy" },
+                  });
+                  await logProductEvent({
+                    eventName: "invite_sent",
+                    source: "profile_share",
+                    metadata: { channel: "copy" },
+                  });
+                  toast.success("Invite link copied");
+                } catch (err: any) {
+                  toast.error(err?.message ?? "Could not create invite link");
+                }
               }}
               className="px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
             >

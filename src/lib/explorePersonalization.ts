@@ -85,6 +85,12 @@ function locationScore(eventLocation: string | null | undefined, cityHint: strin
   return Math.min(1, overlap / cityTokens.length);
 }
 
+function locationMatchesCity(eventLocation: string | null | undefined, cityHint: string): boolean {
+  const hint = cityHint.trim();
+  if (!hint) return true;
+  return locationScore(eventLocation, hint) >= 0.34;
+}
+
 function affinityScore(
   row: InternalEventRow,
   taste: TasteProfile
@@ -157,7 +163,7 @@ async function getSpotifyTasteProfile(): Promise<TasteProfile> {
 async function fetchInternalEvents(): Promise<InternalEventRow[]> {
   const { data, error } = await supabase
     .from("events")
-    .select("id,title,location,event_date,event_end_date,image_url,description,event_source")
+    .select("id,title,location,event_date,event_end_date,image_url,description,event_source,ticket_url")
     .order("event_date", { ascending: true })
     .limit(120);
 
@@ -287,24 +293,132 @@ function toUiEvent(
   row: InternalEventRow,
   score: number,
   reason: string,
-  rankTier: number
+  rankTier: number,
+  overrides?: {
+    attendees?: number;
+    tags?: string[];
+    price?: string;
+    description?: string;
+    eventSource?: string;
+  }
 ): Recommendation {
+  const eventSource = overrides?.eventSource ?? row.event_source ?? "internal";
   return {
     id: row.id,
     title: row.title,
     date: formatDateLabel(row.event_date),
     location: row.location ?? "Location TBD",
     image: row.image_url ?? "",
-    attendees: 0,
-    price: "RSVP",
-    description: row.description ?? reason,
-    tags: [reason, row.event_source ?? "internal"].filter(Boolean),
+    attendees: overrides?.attendees ?? 0,
+    price: overrides?.price ?? "RSVP",
+    description: overrides?.description ?? row.description ?? reason,
+    tags: (overrides?.tags ?? [reason, eventSource]).filter(Boolean),
     ticketUrl: row.ticket_url ?? undefined,
     score,
-    eventSource: row.event_source ?? "internal",
+    eventSource,
     matchReason: reason,
     rankTier,
   };
+}
+
+type AttendeeRow = {
+  event_id: string;
+  user_id: string;
+  created_at: string | null;
+};
+
+export async function loadTrendingExplore(cityHint: string): Promise<Recommendation[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const viewerId = sessionData.session?.user?.id ?? null;
+
+  const { data: internalRows, error: eventsErr } = await supabase
+    .from("events")
+    .select("id,title,location,event_date,event_end_date,image_url,description,event_source,ticket_url")
+    .order("event_date", { ascending: true })
+    .limit(250);
+  if (eventsErr) throw eventsErr;
+
+  const nowTs = Date.now();
+  const upcoming = ((internalRows ?? []) as InternalEventRow[]).filter((r) => {
+    const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
+    const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
+    if (Number.isNaN(startTs)) return false;
+    if (Number.isNaN(endTs)) return startTs >= nowTs;
+    return endTs >= nowTs;
+  });
+
+  const cityScoped = upcoming.filter((r) => locationMatchesCity(r.location, cityHint));
+  const pool = cityScoped.length > 0 ? cityScoped : upcoming;
+  if (pool.length === 0) return [];
+
+  const eventIds = pool.map((r) => r.id);
+  const { data: attendeeRows, error: attendeesErr } = await supabase
+    .from("attendees")
+    .select("event_id,user_id,created_at")
+    .in("event_id", eventIds);
+  if (attendeesErr) throw attendeesErr;
+
+  const byEvent = new Map<
+    string,
+    {
+      total: number;
+      recent7: number;
+      users: Set<string>;
+      viewerGoing: boolean;
+    }
+  >();
+
+  const recentThreshold = Date.now() - 7 * DAY_MS;
+  for (const row of (attendeeRows ?? []) as AttendeeRow[]) {
+    const id = row.event_id;
+    if (!id) continue;
+    if (!byEvent.has(id)) {
+      byEvent.set(id, { total: 0, recent7: 0, users: new Set<string>(), viewerGoing: false });
+    }
+    const agg = byEvent.get(id)!;
+    if (agg.users.has(row.user_id)) {
+      if (viewerId && row.user_id === viewerId) agg.viewerGoing = true;
+      continue;
+    }
+    agg.users.add(row.user_id);
+    agg.total += 1;
+    const createdTs = row.created_at ? new Date(row.created_at).getTime() : NaN;
+    if (!Number.isNaN(createdTs) && createdTs >= recentThreshold) agg.recent7 += 1;
+    if (viewerId && row.user_id === viewerId) agg.viewerGoing = true;
+  }
+
+  const ranked = pool
+    .map((row) => {
+      const agg = byEvent.get(row.id) ?? {
+        total: 0,
+        recent7: 0,
+        users: new Set<string>(),
+        viewerGoing: false,
+      };
+      return { row, ...agg };
+    })
+    .filter((r) => r.total > 0 && !r.viewerGoing)
+    .map(({ row, total, recent7 }) => {
+      const date = dateProximityScore(row.event_date);
+      const velocity = Math.min(1, recent7 / 8);
+      const volume = Math.min(1, total / 25);
+      const score = Number((velocity * 0.5 + volume * 0.35 + date * 0.15).toFixed(4));
+      const reason = recent7 > 0 ? `Trending now (${recent7} new RSVPs)` : "Popular nearby";
+      return toUiEvent(row, score, reason, 2, {
+        attendees: total,
+        tags: ["Trending", row.event_source ?? "internal"],
+        description:
+          row.description ??
+          `${total} people are going${recent7 > 0 ? `, with ${recent7} new RSVPs this week` : ""}.`,
+      });
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return (b.attendees ?? 0) - (a.attendees ?? 0);
+    })
+    .slice(0, 12);
+
+  return ranked;
 }
 
 export async function loadPersonalizedExplore(cityHint: string): Promise<Recommendation[]> {

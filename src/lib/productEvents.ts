@@ -7,7 +7,12 @@ type ProductEventName =
   | "event_detail_view"
   | "explore_feed_loaded"
   | "explore_buy_ticket_click"
-  | "explore_rsvp_click";
+  | "explore_rsvp_click"
+  | "invite_sent"
+  | "invite_link_copied"
+  | "invite_link_opened"
+  | "invite_signup_completed"
+  | "invite_rsvp_completed";
 
 type LogProductEventArgs = {
   eventName: ProductEventName;

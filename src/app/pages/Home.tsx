@@ -105,10 +105,6 @@ export function Home() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [onlyWithFriends, setOnlyWithFriends] = useState(
-    localStorage.getItem("whozin_only_friends") === "true"
-  );
-
   const [viewerId, setViewerId] = useState<string | null>(null);
 
   const [myGoing, setMyGoing] = useState<Set<string>>(new Set());
@@ -125,10 +121,6 @@ export function Home() {
   const [badThumbs, setBadThumbs] = useState<Set<string>>(new Set());
 
   const [workingByEvent, setWorkingByEvent] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    localStorage.setItem("whozin_only_friends", String(onlyWithFriends));
-  }, [onlyWithFriends]);
 
   useEffect(() => {
     void load();
@@ -252,10 +244,9 @@ export function Home() {
     setLoading(false);
   };
 
-  const filteredEvents = useMemo(() => {
-    if (!onlyWithFriends) return events;
+  const feedEvents = useMemo(() => {
     return events.filter((e) => (friendCounts[e.id] ?? 0) > 0);
-  }, [events, friendCounts, onlyWithFriends]);
+  }, [events, friendCounts]);
 
   const applyLocalRsvpChange = (eventId: string, nextGoing: boolean) => {
     setMyGoing((prev) => {
@@ -354,26 +345,15 @@ export function Home() {
         <div className="relative px-5 pt-12">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Upcoming Events</h1>
-              <p className="text-zinc-400 mt-1">Do not miss who you should have met.</p>
+              <h1 className="text-3xl font-bold tracking-tight">Feed</h1>
+              <p className="text-zinc-400 mt-1">See where your friends are going.</p>
             </div>
-
-            <button
-              onClick={() => setOnlyWithFriends((v) => !v)}
-              className={`text-xs px-3 py-1 rounded-full border transition whitespace-nowrap ${
-                onlyWithFriends
-                  ? "bg-pink-600/20 border-pink-500/40 text-pink-400"
-                  : "bg-white/5 border-white/10 text-zinc-400"
-              }`}
-            >
-              {onlyWithFriends ? "Friends only" : "All events"}
-            </button>
           </div>
         </div>
       </div>
 
       <div className="px-5 pt-5 space-y-4">
-        {filteredEvents.map((event) => {
+        {feedEvents.map((event) => {
           const hasImage = !!event.image_url && event.image_url.trim().length > 0;
           const thumbOk = !badThumbs.has(event.id);
           const showThumb = hasImage && thumbOk;
@@ -507,8 +487,16 @@ export function Home() {
           );
         })}
 
-        {filteredEvents.length === 0 ? (
-          <div className="text-center text-zinc-500 mt-12">No matching events.</div>
+        {feedEvents.length === 0 ? (
+          <div className="text-center text-zinc-500 mt-12">
+            <div>No friend activity yet.</div>
+            <Link
+              to="/explore"
+              className="inline-flex mt-3 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-sm text-zinc-200 hover:bg-white/15"
+            >
+              Explore new events
+            </Link>
+          </div>
         ) : null}
       </div>
     </div>
