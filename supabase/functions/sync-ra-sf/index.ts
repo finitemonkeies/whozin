@@ -178,7 +178,7 @@ function buildApifyInput() {
     maxItems: 40,
     enforceMaxItems: true,
     maxErrors: 0,
-    downloadDelay: 500,
+    downloadDelay: 1000,
   };
 }
 
