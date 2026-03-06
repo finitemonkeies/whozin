@@ -3,10 +3,7 @@ import {
   ArrowLeft,
   Calendar,
   MapPin,
-  Share2,
   Ticket,
-  Users,
-  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -26,10 +23,12 @@ type EventRow = {
   event_end_date: string | null;
   image_url: string | null;
   description?: string | null;
+  event_source?: string | null;
 };
 
 type AttendeeRow = {
   user_id: string;
+  created_at?: string | null;
   profiles?: {
     display_name: string | null;
     username: string | null;
@@ -45,9 +44,66 @@ function isUuid(value: string) {
 
 const RSVP_BUMP_KEY = "whozin_rsvp_bump";
 const INVITE_PROMPT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+const surfaceIngestedSources =
+  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
+const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
 
 function bumpRsvp() {
   localStorage.setItem(RSVP_BUMP_KEY, String(Date.now()));
+}
+
+function displayName(
+  profile?: { display_name: string | null; username: string | null } | null
+): string {
+  const d = profile?.display_name?.trim();
+  if (d) return d;
+  const u = profile?.username?.trim();
+  if (u) return u;
+  return "Friend";
+}
+
+function relativeRsvp(ts?: string | null): string {
+  if (!ts) return "";
+  const t = new Date(ts).getTime();
+  if (Number.isNaN(t)) return "";
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 0) return "";
+  if (mins < 10) return "just RSVPed";
+  if (mins < 60) return `RSVPed ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `RSVPed ${hrs}h ago`;
+  return "";
+}
+
+function AvatarStack({ urls, total }: { urls: string[]; total: number }) {
+  const show = urls.slice(0, 5);
+  const extra = Math.max(0, total - show.length);
+  if (total <= 0) return null;
+
+  return (
+    <div className="flex items-center -space-x-2">
+      {show.map((u, idx) => (
+        <div
+          key={`${u}-${idx}`}
+          className="h-9 w-9 overflow-hidden rounded-full border border-black bg-zinc-800"
+        >
+          <img src={u} alt="" className="h-full w-full object-cover" loading="lazy" />
+        </div>
+      ))}
+      {extra > 0 ? (
+        <div className="h-9 w-9 rounded-full border border-black bg-white/10 text-xs font-semibold text-white/90 flex items-center justify-center">
+          +{extra}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function canSurfaceSource(source: string | null | undefined): boolean {
+  const s = (source ?? "").trim().toLowerCase();
+  if (!s) return true;
+  if (!hiddenSources.has(s)) return true;
+  return surfaceIngestedSources;
 }
 
 export function EventDetails() {
@@ -103,6 +159,45 @@ export function EventDetails() {
   const othersGoing = useMemo(() => {
     return attendees.filter((a) => !friendIds.has(a.user_id) && a.user_id !== viewerId);
   }, [attendees, friendIds, viewerId]);
+  const totalGoing = attendees.length;
+  const friendNames = useMemo(
+    () => friendsGoing.map((a) => displayName(a.profiles)).filter(Boolean),
+    [friendsGoing]
+  );
+  const friendClusterLabel = useMemo(() => {
+    if (friendNames.length === 0) return "";
+    if (friendNames.length === 1) return `${friendNames[0]} is going`;
+    if (friendNames.length === 2) return `${friendNames[0]}, ${friendNames[1]} are going`;
+    return `${friendNames[0]}, ${friendNames[1]} + ${friendNames.length - 2}`;
+  }, [friendNames]);
+  const friendRecentCue = useMemo(() => {
+    const latest = [...friendsGoing]
+      .filter((a) => !!a.created_at)
+      .sort(
+        (a, b) =>
+          new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      )[0];
+    if (!latest) return "";
+    const rel = relativeRsvp(latest.created_at);
+    if (!rel) return "";
+    return `${displayName(latest.profiles)} ${rel}`;
+  }, [friendsGoing]);
+  const friendAvatarUrls = useMemo(
+    () =>
+      friendsGoing
+        .map((a) => a.profiles?.avatar_url ?? "")
+        .filter(Boolean)
+        .slice(0, 5),
+    [friendsGoing]
+  );
+  const allVisibleAvatars = useMemo(
+    () =>
+      [...friendsGoing, ...(isGoing ? othersGoing : [])]
+        .map((a) => a.profiles?.avatar_url ?? "")
+        .filter(Boolean)
+        .slice(0, 5),
+    [friendsGoing, isGoing, othersGoing]
+  );
 
   const loadFriendMap = async (userId: string, attendeeUserIds: string[]) => {
     setLoadingFriendMap(true);
@@ -134,7 +229,7 @@ export function EventDetails() {
 
     const { data: attData, error: attErr } = await supabase
       .from("attendees")
-      .select("user_id, profiles(display_name, username, avatar_url)")
+      .select("user_id,created_at, profiles(display_name, username, avatar_url)")
       .eq("event_id", eventId);
 
     if (attErr) {
@@ -186,13 +281,22 @@ export function EventDetails() {
 
       const { data: eventData, error: eventErr } = await supabase
         .from("events")
-        .select("id,title,location,event_date,event_end_date,image_url,description")
+        .select("id,title,location,event_date,event_end_date,image_url,description,event_source")
         .eq("id", id)
         .single();
 
       if (eventErr) {
         console.error("Failed loading event:", eventErr);
         toast.error(eventErr.message ?? "Failed to load event");
+        setEvent(null);
+        setLoadingEvent(false);
+        setLoadingAttendees(false);
+        setLoadingFriendMap(false);
+        return;
+      }
+
+      if (!canSurfaceSource((eventData as EventRow | null)?.event_source)) {
+        toast.error("Event unavailable");
         setEvent(null);
         setLoadingEvent(false);
         setLoadingAttendees(false);
@@ -283,7 +387,7 @@ export function EventDetails() {
         });
         if (error) throw error;
 
-        toast.success("You are on the list.");
+        toast.success("You're going 🎉");
         track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
 
         if (rsvpSource === "share_link") {
@@ -420,7 +524,7 @@ export function EventDetails() {
   };
 
   return (
-    <div className="bg-black min-h-screen pb-24 text-white">
+    <div className="bg-black min-h-screen pb-40 text-white">
       <div className="relative h-72">
         {eventImage ? (
           <img src={eventImage} alt={event.title} className="w-full h-full object-cover" />
@@ -435,14 +539,38 @@ export function EventDetails() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <button className="p-2 bg-black/30 backdrop-blur-md rounded-full border border-white/10">
-            <Share2 className="w-5 h-5" />
-          </button>
+          <div className="px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-xs font-semibold">
+            {totalGoing} going
+          </div>
         </div>
       </div>
 
       <div className="px-5 -mt-10 relative">
         <h1 className="text-3xl font-bold mb-2 leading-none drop-shadow-xl">{event.title}</h1>
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/45 p-4">
+          <AvatarStack
+            urls={isGoing ? allVisibleAvatars : friendAvatarUrls}
+            total={Math.max(
+              totalGoing,
+              isGoing ? allVisibleAvatars.length : friendAvatarUrls.length
+            )}
+          />
+          {friendClusterLabel ? (
+            <div className="mt-3 text-sm font-semibold text-zinc-100 truncate">{friendClusterLabel}</div>
+          ) : totalGoing > 0 ? (
+            <div className="mt-3 text-sm font-semibold text-zinc-100">People are going</div>
+          ) : (
+            <div className="mt-3 text-sm font-semibold text-zinc-200">Be first to go</div>
+          )}
+          {friendRecentCue ? <div className="mt-1 text-xs text-zinc-400">{friendRecentCue}</div> : null}
+          <div className="mt-2 text-xs text-zinc-300">
+            {totalGoing > 0 ? `🔥 ${totalGoing} going` : "No RSVPs yet"}
+          </div>
+          <div className="mt-2 text-xs text-zinc-500">
+            {isGoing ? "You unlocked attendee visibility." : "RSVP to see everyone"}
+          </div>
+        </div>
 
         <div className="flex gap-4 my-6">
           <div className="flex-1 bg-zinc-900/50 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
@@ -467,63 +595,9 @@ export function EventDetails() {
         </div>
 
         <div className="mb-8">
-          <button
-            onClick={handleToggleGoing}
-            disabled={working}
-            className={`w-full py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 ${
-              isGoing
-                ? "bg-green-500/20 border border-green-500/50 text-green-400"
-                : "bg-gradient-to-r from-pink-600 to-purple-600"
-            }`}
-          >
-            <Ticket className="w-5 h-5" />
-            {isGoing ? "Going (Tap to undo)" : "I'm Going"}
-            {working && <div className="absolute inset-0 bg-white/10 animate-pulse" />}
-          </button>
-
-          <p className="text-center text-xs text-zinc-500 mt-3">
-            {isGoing ? "You can now see everyone going." : "RSVP to unlock more attendees."}
-          </p>
-
-          {showInvitePrompt ? (
-            <div className="mt-4 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
-              <div className="text-sm font-semibold">Invite your friends</div>
-              <div className="text-xs text-zinc-400 mt-1">
-                I'm going to {event.title} on Whozin. Let your crew know.
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleCopyInvite()}
-                  disabled={creatingInviteLink}
-                  className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
-                >
-                  {creatingInviteLink ? "Preparing..." : "Copy link"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleShareInvite()}
-                  disabled={creatingInviteLink}
-                  className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
-                >
-                  Share
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSkipInvite}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10"
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              Friends Going{" "}
+              See who's going{" "}
               <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded-full">
                 {loadingAttendees || loadingFriendMap ? "..." : friendsGoing.length}
               </span>
@@ -612,21 +686,55 @@ export function EventDetails() {
           )}
         </div>
 
-        <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 mb-8">
-          <h3 className="font-bold mb-3 flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-purple-400" />
-            Squad Chat
-          </h3>
-          <p className="text-sm text-zinc-400 mb-4">(MVP later) Chat for {event.title}.</p>
-          <button className="w-full py-2.5 bg-white/10 hover:bg-white/15 rounded-xl font-medium text-sm transition-colors border border-white/5">
-            Join Chat Room
-          </button>
-        </div>
+        {showInvitePrompt ? (
+          <div className="mb-8 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
+            <div className="text-sm font-semibold">Invite your friends</div>
+            <div className="text-xs text-zinc-400 mt-1">
+              I'm going to {event.title} on Whozin. Let your crew know.
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleCopyInvite()}
+                disabled={creatingInviteLink}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+              >
+                {creatingInviteLink ? "Preparing..." : "Copy link"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleShareInvite()}
+                disabled={creatingInviteLink}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+              >
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipInvite}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-        <div className="text-zinc-500 text-sm leading-relaxed pb-8">
-          <h3 className="text-white font-bold mb-2">About Event</h3>
-          <p>{event.description ?? "No description yet."}</p>
-        </div>
+      <div className="fixed bottom-24 left-0 right-0 z-40 px-5">
+        <button
+          onClick={handleToggleGoing}
+          disabled={working}
+          className={`w-full py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 ${
+            isGoing
+              ? "bg-green-500/20 border border-green-500/50 text-green-300"
+              : "bg-gradient-to-r from-pink-600 to-purple-600"
+          }`}
+        >
+          <Ticket className="w-5 h-5" />
+          {isGoing ? "You're going 🎉 (tap to undo)" : "I'm Going"}
+          {working && <div className="absolute inset-0 bg-white/10 animate-pulse" />}
+        </button>
       </div>
     </div>
   );

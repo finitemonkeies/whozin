@@ -4,7 +4,8 @@ import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
 type ProfileGate = {
-  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
   onboarding_complete: boolean;
 };
 
@@ -51,7 +52,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
 
       const { data: prof, error } = await supabase
         .from("profiles")
-        .select("display_name,onboarding_complete")
+        .select("username,avatar_url,onboarding_complete")
         .eq("id", user.id)
         .single();
 
@@ -59,7 +60,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
         setAuthed(true);
         setProfile(
           error
-            ? { display_name: null, onboarding_complete: false }
+            ? { username: null, avatar_url: null, onboarding_complete: false }
             : (prof as ProfileGate)
         );
         setChecking(false);
@@ -97,7 +98,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
   }
 
   const needsSetup =
-    !profile?.display_name || profile?.onboarding_complete !== true;
+    !profile?.username || !profile?.avatar_url || profile?.onboarding_complete !== true;
 
   if (needsSetup && !isSetupRoute) {
     const redirect = encodeURIComponent(pathWithSearch);

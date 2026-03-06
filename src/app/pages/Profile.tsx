@@ -9,7 +9,6 @@ import { logProductEvent } from "@/lib/productEvents";
 
 type ProfileRow = {
   id: string;
-  display_name: string | null;
   username: string | null;
   avatar_url: string | null;
 };
@@ -21,6 +20,7 @@ type EventRow = {
   event_date: string | null;
   event_end_date: string | null;
   image_url: string | null;
+  event_source?: string | null;
 };
 
 function formatDateTime(value?: string | null) {
@@ -45,18 +45,23 @@ function titleize(username?: string | null) {
     .join(" ");
 }
 
-function resolveDisplayName(profile?: ProfileRow | null) {
-  const byDisplayName = profile?.display_name?.trim();
-  if (byDisplayName) return byDisplayName;
-  return titleize(profile?.username);
-}
-
 function initials(title?: string | null) {
   if (!title) return "EV";
   const parts = title.trim().split(/\s+/).filter(Boolean);
   const a = parts[0]?.[0] ?? "E";
   const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "V";
   return (a + b).toUpperCase();
+}
+
+const surfaceIngestedSources =
+  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
+const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
+
+function canSurfaceSource(source: string | null | undefined): boolean {
+  const s = (source ?? "").trim().toLowerCase();
+  if (!s) return true;
+  if (!hiddenSources.has(s)) return true;
+  return surfaceIngestedSources;
 }
 
 function Stat({
@@ -93,7 +98,7 @@ export function Profile() {
   const [eventsCount, setEventsCount] = useState(0);
   const [friendsCount, setFriendsCount] = useState(0);
 
-  const displayName = useMemo(() => resolveDisplayName(profile), [profile]);
+  const displayName = useMemo(() => titleize(profile?.username), [profile]);
   const handle = useMemo(() => (profile?.username ? `@${profile.username}` : "@unknown"), [
     profile?.username,
   ]);
@@ -126,7 +131,7 @@ export function Profile() {
     // Profile row
     const { data: p, error: pErr } = await supabase
       .from("profiles")
-      .select("id,display_name,username,avatar_url")
+      .select("id,username,avatar_url")
       .eq("id", userId)
       .single();
 
@@ -177,7 +182,7 @@ export function Profile() {
 
     const { data: events, error: eventsErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url")
+      .select("id,title,location,event_date,event_end_date,image_url,event_source")
       .in("id", eventIds)
       .order("event_date", { ascending: true });
 
@@ -189,7 +194,7 @@ export function Profile() {
       return;
     }
 
-    const rows = (events ?? []) as EventRow[];
+    const rows = ((events ?? []) as EventRow[]).filter((e) => canSurfaceSource(e.event_source));
     const nowTs = Date.now();
     setUpcoming(rows.filter((e) => isEventUpcomingOrOngoing(e, nowTs)));
     setPastEvents(

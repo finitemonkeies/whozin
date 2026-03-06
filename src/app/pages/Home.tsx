@@ -14,12 +14,15 @@ type EventRow = {
   event_date: string | null;
   event_end_date: string | null;
   image_url: string | null;
+  event_source?: string | null;
 };
 
 type AttendeeRow = {
   event_id: string;
   user_id: string;
+  created_at?: string | null;
   profiles?: {
+    display_name: string | null;
     username: string | null;
     avatar_url: string | null;
   } | null;
@@ -29,6 +32,16 @@ const coverStyle = {
   background:
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
+const surfaceIngestedSources =
+  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
+const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
+
+function canSurfaceSource(source: string | null | undefined): boolean {
+  const s = (source ?? "").trim().toLowerCase();
+  if (!s) return true;
+  if (!hiddenSources.has(s)) return true;
+  return surfaceIngestedSources;
+}
 
 function formatDateRange(startValue?: string | null, endValue?: string | null) {
   if (!startValue) return "Date TBD";
@@ -57,6 +70,36 @@ function uniqKeepOrder(arr: string[]) {
   return out;
 }
 
+function displayName(
+  profile?: { display_name: string | null; username: string | null } | null
+): string {
+  const d = profile?.display_name?.trim();
+  if (d) return d;
+  const u = profile?.username?.trim();
+  if (u) return u;
+  return "Friend";
+}
+
+function relativeRsvp(ts?: string | null): string {
+  if (!ts) return "";
+  const t = new Date(ts).getTime();
+  if (Number.isNaN(t)) return "";
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 0) return "";
+  if (mins < 10) return "just RSVPed";
+  if (mins < 60) return `RSVPed ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `RSVPed ${hrs}h ago`;
+  return "";
+}
+
+function friendClusterText(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0]} is going`;
+  if (names.length === 2) return `${names[0]}, ${names[1]} are going`;
+  return `${names[0]}, ${names[1]} + ${names.length - 2} friends`;
+}
+
 function AvatarStack({
   urls,
   total,
@@ -66,7 +109,7 @@ function AvatarStack({
   total: number;
   label?: string;
 }) {
-  const show = urls.slice(0, 3);
+  const show = urls.slice(0, 5);
   const extra = Math.max(0, total - show.length);
 
   if (total <= 0) return null;
@@ -111,9 +154,12 @@ export function Home() {
 
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   const [friendAvatarsByEvent, setFriendAvatarsByEvent] = useState<Record<string, string[]>>({});
+  const [friendNamesByEvent, setFriendNamesByEvent] = useState<Record<string, string[]>>({});
+  const [recentFriendCueByEvent, setRecentFriendCueByEvent] = useState<Record<string, string>>({});
   const [friendCounts, setFriendCounts] = useState<Record<string, number>>({});
   const [othersCounts, setOthersCounts] = useState<Record<string, number>>({});
   const [othersAvatarsByEvent, setOthersAvatarsByEvent] = useState<Record<string, string[]>>({});
+  const [viewerAvatarByEvent, setViewerAvatarByEvent] = useState<Record<string, string>>({});
 
   const [othersAvatarPoolByEvent, setOthersAvatarPoolByEvent] = useState<Record<string, string[]>>({
   });
@@ -138,7 +184,7 @@ export function Home() {
 
     const { data: eventData, error: eErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url")
+      .select("id,title,location,event_date,event_end_date,image_url,event_source")
       .order("event_date", { ascending: true });
 
     if (eErr) {
@@ -150,8 +196,8 @@ export function Home() {
     }
 
     const nowTs = Date.now();
-    const rows = ((eventData ?? []) as EventRow[]).filter((e) =>
-      isEventUpcomingOrOngoing(e, nowTs)
+    const rows = ((eventData ?? []) as EventRow[]).filter(
+      (e) => canSurfaceSource(e.event_source) && isEventUpcomingOrOngoing(e, nowTs)
     );
     setEvents(rows);
 
@@ -159,9 +205,12 @@ export function Home() {
       setFriendIds(new Set());
       setMyGoing(new Set());
       setFriendAvatarsByEvent({});
+      setFriendNamesByEvent({});
+      setRecentFriendCueByEvent({});
       setFriendCounts({});
       setOthersCounts({});
       setOthersAvatarsByEvent({});
+      setViewerAvatarByEvent({});
       setOthersAvatarPoolByEvent({});
       setLoading(false);
       return;
@@ -174,15 +223,18 @@ export function Home() {
 
     const { data: attData, error: aErr } = await supabase
       .from("attendees")
-      .select("event_id,user_id, profiles(username,avatar_url)");
+      .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)");
 
     if (aErr) {
       console.error(aErr);
       setMyGoing(new Set());
       setFriendAvatarsByEvent({});
+      setFriendNamesByEvent({});
+      setRecentFriendCueByEvent({});
       setFriendCounts({});
       setOthersCounts({});
       setOthersAvatarsByEvent({});
+      setViewerAvatarByEvent({});
       setOthersAvatarPoolByEvent({});
       setLoading(false);
       return;
@@ -198,11 +250,16 @@ export function Home() {
 
     const friendCountsMap: Record<string, number> = {};
     const friendAvatarsMap: Record<string, string[]> = {};
+    const friendNamesMap: Record<string, string[]> = {};
+    const recentFriendMap: Record<string, string> = {};
     const othersCountsMap: Record<string, number> = {};
     const othersAvatarsMap: Record<string, string[]> = {};
     const othersPoolMap: Record<string, string[]> = {};
+    const viewerAvatarMap: Record<string, string> = {};
 
     const friendTmp: Record<string, string[]> = {};
+    const friendNameTmp: Record<string, string[]> = {};
+    const friendRecentTmp: Record<string, { name: string; createdAt: string }[]> = {};
     const othersTmp: Record<string, string[]> = {};
 
     for (const a of attendees) {
@@ -212,32 +269,49 @@ export function Home() {
       const isViewer = a.user_id === uid;
       const isFriend = fset.has(a.user_id);
       const av = a.profiles?.avatar_url ?? "";
+      const name = displayName(a.profiles);
 
       if (isFriend) {
         friendCountsMap[eid] = (friendCountsMap[eid] ?? 0) + 1;
         if (av) (friendTmp[eid] ||= []).push(av);
+        (friendNameTmp[eid] ||= []).push(name);
+        if (a.created_at) {
+          (friendRecentTmp[eid] ||= []).push({ name, createdAt: a.created_at });
+        }
         continue;
       }
 
       if (!isViewer) {
         othersCountsMap[eid] = (othersCountsMap[eid] ?? 0) + 1;
         if (av) (othersTmp[eid] ||= []).push(av);
+      } else if (av) {
+        viewerAvatarMap[eid] = av;
       }
     }
 
     for (const eid of Object.keys(friendCountsMap)) {
-      friendAvatarsMap[eid] = uniqKeepOrder(friendTmp[eid] ?? []).slice(0, 3);
+      friendAvatarsMap[eid] = uniqKeepOrder(friendTmp[eid] ?? []).slice(0, 5);
+      friendNamesMap[eid] = uniqKeepOrder(friendNameTmp[eid] ?? []).slice(0, 8);
+      const recent = (friendRecentTmp[eid] ?? [])
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (recent) {
+        const rel = relativeRsvp(recent.createdAt);
+        if (rel) recentFriendMap[eid] = `${recent.name} ${rel}`;
+      }
     }
 
     for (const eid of Object.keys(othersCountsMap)) {
       const pool = uniqKeepOrder(othersTmp[eid] ?? []);
       othersPoolMap[eid] = pool;
-      if (mySet.has(eid)) othersAvatarsMap[eid] = pool.slice(0, 3);
+      if (mySet.has(eid)) othersAvatarsMap[eid] = pool.slice(0, 5);
     }
 
     setFriendCounts(friendCountsMap);
     setFriendAvatarsByEvent(friendAvatarsMap);
+    setFriendNamesByEvent(friendNamesMap);
+    setRecentFriendCueByEvent(recentFriendMap);
     setOthersCounts(othersCountsMap);
+    setViewerAvatarByEvent(viewerAvatarMap);
     setOthersAvatarPoolByEvent(othersPoolMap);
     setOthersAvatarsByEvent(othersAvatarsMap);
 
@@ -245,7 +319,14 @@ export function Home() {
   };
 
   const feedEvents = useMemo(() => {
-    return events.filter((e) => (friendCounts[e.id] ?? 0) > 0);
+    return [...events].sort((a, b) => {
+      const aFriends = friendCounts[a.id] ?? 0;
+      const bFriends = friendCounts[b.id] ?? 0;
+      if (aFriends !== bFriends) return bFriends - aFriends;
+      const aTs = new Date(a.event_date ?? 0).getTime();
+      const bTs = new Date(b.event_date ?? 0).getTime();
+      return aTs - bTs;
+    });
   }, [events, friendCounts]);
 
   const applyLocalRsvpChange = (eventId: string, nextGoing: boolean) => {
@@ -265,7 +346,7 @@ export function Home() {
     setOthersAvatarsByEvent((prev) => {
       const pool = othersAvatarPoolByEvent[eventId] ?? [];
       const next = { ...prev };
-      if (nextGoing) next[eventId] = pool.slice(0, 3);
+      if (nextGoing) next[eventId] = pool.slice(0, 5);
       else delete next[eventId];
       return next;
     });
@@ -300,14 +381,14 @@ export function Home() {
     applyLocalRsvpChange(eventId, nextGoing);
 
     try {
-      if (nextGoing) {
+        if (nextGoing) {
         const { error } = await supabase.from("attendees").insert({
           event_id: eventId,
           user_id: uid,
           rsvp_source: "home",
         });
         if (error) throw error;
-        toast.success("RSVP added");
+          toast.success("You're going 🎉");
         track("rsvp_updated", { source: "home", action: "add", eventId });
       } else {
         const { error } = await supabase
@@ -316,7 +397,7 @@ export function Home() {
           .eq("event_id", eventId)
           .eq("user_id", uid);
         if (error) throw error;
-        toast.message("RSVP removed");
+          toast.message("RSVP removed");
         track("rsvp_updated", { source: "home", action: "remove", eventId });
       }
     } catch (e: any) {
@@ -346,7 +427,7 @@ export function Home() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Feed</h1>
-              <p className="text-zinc-400 mt-1">See where your friends are going.</p>
+              <p className="text-zinc-400 mt-1">Discover events and see who is going.</p>
             </div>
           </div>
         </div>
@@ -363,9 +444,17 @@ export function Home() {
 
           const fCount = friendCounts[event.id] ?? 0;
           const oCount = othersCounts[event.id] ?? 0;
+          const totalGoing = fCount + oCount + (going ? 1 : 0);
 
           const friendUrls = friendAvatarsByEvent[event.id] ?? [];
+          const friendNames = friendNamesByEvent[event.id] ?? [];
+          const friendCue = recentFriendCueByEvent[event.id] ?? "";
           const othersUrls = othersAvatarsByEvent[event.id] ?? [];
+          const viewerAvatar = viewerAvatarByEvent[event.id] ?? "";
+          const socialUrls = going
+            ? [viewerAvatar, ...friendUrls, ...othersUrls].filter(Boolean)
+            : [...friendUrls, ...othersUrls].filter(Boolean);
+          const socialLabel = friendClusterText(friendNames);
 
           return (
             <Link
@@ -410,20 +499,6 @@ export function Home() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-[18px] font-semibold leading-tight truncate">{event.title}</div>
-
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-400">
-                          <div className="inline-flex items-center gap-1.5 max-w-full">
-                            <Calendar className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                            <span className="truncate">
-                              {formatDateRange(event.event_date, event.event_end_date)}
-                            </span>
-                          </div>
-
-                          <div className="inline-flex items-center gap-1.5 max-w-full">
-                            <MapPin className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                            <span className="truncate">{event.location ?? "TBD"}</span>
-                          </div>
-                        </div>
                       </div>
 
                       <button
@@ -434,45 +509,53 @@ export function Home() {
                           e.stopPropagation();
                           void toggleRsvp(event.id);
                         }}
-                        className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition active:scale-[0.99] disabled:opacity-60 ${
+                        className={`flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition active:scale-[0.99] disabled:opacity-60 ${
                           going
                             ? "bg-green-500/15 border-green-500/30 text-green-200"
                             : "bg-gradient-to-r from-pink-600 to-purple-600 border-white/10 text-white"
                         }`}
                       >
                         <Ticket className="w-3.5 h-3.5" />
-                        {going ? "Going" : "RSVP"}
+                        {going ? "You're going 🎉" : "RSVP"}
                       </button>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="mt-3 space-y-2">
+                      {socialUrls.length > 0 ? (
+                        <AvatarStack
+                          urls={socialUrls}
+                          total={Math.max(totalGoing, socialUrls.length)}
+                        />
+                      ) : null}
+                      {socialLabel ? (
+                        <div className="text-sm font-medium text-zinc-100 truncate">{socialLabel}</div>
+                      ) : null}
+                      {friendCue ? (
+                        <div className="text-xs text-zinc-400 truncate">{friendCue}</div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        {fCount > 0 ? (
-                          <AvatarStack
-                            urls={friendUrls}
-                            total={fCount}
-                            label={`${fCount} friend${fCount === 1 ? "" : "s"} going`}
-                          />
-                        ) : (
-                          <div className="text-xs text-zinc-500">No friends going yet</div>
-                        )}
-
-                        <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
+                        <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
                           <div className="inline-flex items-center gap-1.5">
-                            <Users className="w-4 h-4 text-zinc-600" />
-                            <span>{oCount} others</span>
+                            <Users className="w-4 h-4 text-zinc-500" />
+                            <span>{totalGoing > 0 ? `🔥 ${totalGoing} going` : "Be first to go"}</span>
                           </div>
+                          {!going && totalGoing > 0 ? <span>RSVP to see everyone</span> : null}
+                        </div>
 
-                          {going && oCount > 0 ? (
-                            <>
-                              <span className="text-zinc-700">.</span>
-                              <AvatarStack
-                                urls={othersUrls}
-                                total={oCount}
-                                label="Others visible (unlocked)"
-                              />
-                            </>
-                          ) : null}
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-500">
+                          <div className="inline-flex items-center gap-1.5 max-w-full">
+                            <Calendar className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
+                            <span className="truncate">
+                              {formatDateRange(event.event_date, event.event_end_date)}
+                            </span>
+                          </div>
+                          <div className="inline-flex items-center gap-1.5 max-w-full">
+                            <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
+                            <span className="truncate">{event.location ?? "TBD"}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -489,7 +572,7 @@ export function Home() {
 
         {feedEvents.length === 0 ? (
           <div className="text-center text-zinc-500 mt-12">
-            <div>No friend activity yet.</div>
+            <div>No upcoming events yet.</div>
             <Link
               to="/explore"
               className="inline-flex mt-3 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-sm text-zinc-200 hover:bg-white/15"

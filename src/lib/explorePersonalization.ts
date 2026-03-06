@@ -33,6 +33,16 @@ const DEFAULT_TASTE: TasteProfile = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const surfaceIngestedSources =
+  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
+const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
+
+function canSurfaceSource(source: string | null | undefined): boolean {
+  const s = (source ?? "").trim().toLowerCase();
+  if (!s) return true;
+  if (!hiddenSources.has(s)) return true;
+  return surfaceIngestedSources;
+}
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -172,6 +182,7 @@ async function fetchInternalEvents(): Promise<InternalEventRow[]> {
 
   const nowTs = Date.now();
   return rows.filter((r) => {
+    if (!canSurfaceSource(r.event_source)) return false;
     const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
     const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
     if (Number.isNaN(startTs)) return true;
@@ -271,6 +282,7 @@ async function fetchTicketmasterNearbyFallback(
 }
 
 async function fetchTicketmasterEvents(cityHint: string, taste: TasteProfile): Promise<InternalEventRow[]> {
+  if (!surfaceIngestedSources) return [];
   const apiKey = (import.meta.env.VITE_TICKETMASTER_API_KEY as string | undefined)?.trim();
   if (!apiKey || !cityHint.trim()) return [];
 
@@ -340,6 +352,7 @@ export async function loadTrendingExplore(cityHint: string): Promise<Recommendat
 
   const nowTs = Date.now();
   const upcoming = ((internalRows ?? []) as InternalEventRow[]).filter((r) => {
+    if (!canSurfaceSource(r.event_source)) return false;
     const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
     const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
     if (Number.isNaN(startTs)) return false;

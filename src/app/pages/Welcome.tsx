@@ -11,7 +11,8 @@ function useQuery() {
 }
 
 type ProfileGate = {
-  display_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
   onboarding_complete: boolean;
 };
 
@@ -46,7 +47,7 @@ export function Welcome() {
 
       const { data: prof, error } = await supabase
         .from("profiles")
-        .select("display_name,onboarding_complete")
+        .select("username,avatar_url,onboarding_complete")
         .eq("id", user.id)
         .single();
 
@@ -59,7 +60,8 @@ export function Welcome() {
         return;
       }
 
-      const incomplete = !prof?.display_name || prof?.onboarding_complete !== true;
+      const incomplete =
+        !prof?.username || !prof?.avatar_url || prof?.onboarding_complete !== true;
 
       if (!cancelled) {
         setAuthed(true);

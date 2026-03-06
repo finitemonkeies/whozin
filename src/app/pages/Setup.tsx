@@ -10,7 +10,6 @@ type Profile = {
   id: string;
   email: string | null;
   username: string | null;
-  display_name: string | null;
   onboarding_complete: boolean;
   avatar_url: string | null;
 };
@@ -24,6 +23,11 @@ function sanitizeUsername(input: string) {
   return input.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
 }
 
+function buildDefaultAvatarUrl(seed: string) {
+  const safeSeed = seed.trim() || "whozin";
+  return `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(safeSeed)}`;
+}
+
 export default function Setup() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,8 +37,8 @@ export default function Setup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState("");
   const [error, setError] = useState<string | null>(null);
   const isDev = import.meta.env.DEV;
 
@@ -76,7 +80,7 @@ export default function Setup() {
 
       let { data, error: profErr } = await supabase
         .from("profiles")
-        .select("id,email,username,display_name,onboarding_complete,avatar_url")
+        .select("id,email,username,onboarding_complete,avatar_url")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -87,17 +91,17 @@ export default function Setup() {
             id: user.id,
             email: user.email ?? null,
             username: null,
-            display_name: null,
+            avatar_url: null,
             onboarding_complete: false,
           })
-          .select("id,email,username,display_name,onboarding_complete,avatar_url")
+          .select("id,email,username,onboarding_complete,avatar_url")
           .single();
 
         if (createErr) {
           showDevSupabaseError("createProfile", createErr);
           const refetch = await supabase
             .from("profiles")
-            .select("id,email,username,display_name,onboarding_complete,avatar_url")
+            .select("id,email,username,onboarding_complete,avatar_url")
             .eq("id", user.id)
             .maybeSingle();
 
@@ -125,12 +129,13 @@ export default function Setup() {
 
       const prof = data as Profile;
       setProfile(prof);
-      setDisplayName((prof.display_name || "").trim());
       setUsername((prof.username || "").trim());
+      const baseSeed = (prof.username || user.id || "whozin").trim();
+      setAvatarPreview(prof.avatar_url || buildDefaultAvatarUrl(baseSeed));
       setLoading(false);
       track("setup_viewed", { has_profile: true, complete: !!prof.onboarding_complete });
 
-      if (prof.display_name && prof.onboarding_complete) {
+      if (prof.username && prof.avatar_url && prof.onboarding_complete) {
         try {
           const claimed = await claimPendingReferral("share_link");
           if (claimed?.eventId) {
@@ -155,13 +160,7 @@ export default function Setup() {
     setError(null);
     track("setup_submit_attempted");
 
-    const value = displayName.trim();
     const normalizedUsername = sanitizeUsername(username);
-
-    if (value.length < 2) {
-      setError("Display name must be at least 2 characters.");
-      return;
-    }
     if (!normalizedUsername) {
       setError("Username is required.");
       return;
@@ -207,14 +206,14 @@ export default function Setup() {
         {
           id: user.id,
           email: user.email ?? profile?.email ?? null,
-          display_name: value,
           username: normalizedUsername,
+          avatar_url: profile?.avatar_url || avatarPreview || buildDefaultAvatarUrl(normalizedUsername),
           onboarding_complete: true,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" }
       )
-      .select("id,display_name,onboarding_complete,username")
+      .select("id,avatar_url,onboarding_complete,username")
       .single();
 
     if (upErr) {
@@ -224,7 +223,8 @@ export default function Setup() {
       return;
     }
 
-    const isComplete = !!updated?.display_name && updated?.onboarding_complete === true;
+    const isComplete =
+      !!updated?.username && !!updated?.avatar_url && updated?.onboarding_complete === true;
     setSaving(false);
 
     if (!isComplete) {
@@ -259,7 +259,7 @@ export default function Setup() {
           <div className="text-sm text-white/60">Whozin</div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Complete your profile</h1>
           <p className="mt-2 text-sm text-white/70">
-            You're signed in. Add the name your friends know you by.
+            Pick a username and avatar. You can start discovering events right away.
           </p>
         </div>
 
@@ -268,18 +268,31 @@ export default function Setup() {
             <div className="text-sm text-white/70">Loading your profile...</div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
-              <div>
-                <label className="mb-2 block text-xs font-medium text-white/70">Display name</label>
-                <input
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="e.g. Alex Chen"
-                  autoComplete="name"
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/20"
+              <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-black/30 px-3 py-3">
+                <img
+                  src={avatarPreview || buildDefaultAvatarUrl(username || "whozin")}
+                  alt="Avatar preview"
+                  className="h-12 w-12 rounded-full border border-white/10 bg-zinc-900"
                 />
-                <div className="mt-2 text-xs text-white/50">
-                  Display name is what friends see in the app.
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium text-white/70">Avatar</div>
+                  <div className="mt-1 text-xs text-white/50">
+                    Auto-generated for alpha. You can change it in Profile.
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAvatarPreview(
+                      buildDefaultAvatarUrl(
+                        `${sanitizeUsername(username) || "whozin"}-${Date.now().toString(36)}`
+                      )
+                    )
+                  }
+                  className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs font-semibold hover:bg-white/10"
+                >
+                  Shuffle
+                </button>
               </div>
 
               <div>
@@ -292,9 +305,6 @@ export default function Setup() {
                   className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/20"
                 />
                 <div className="mt-2 text-xs text-white/50">
-                  Username is your unique @handle for invites and friend search.
-                </div>
-                <div className="mt-1 text-xs text-white/50">
                   Use 3-20 characters: letters, numbers, and underscores only.
                 </div>
               </div>
@@ -310,12 +320,8 @@ export default function Setup() {
                 disabled={saving}
                 className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold tracking-wide disabled:opacity-60"
               >
-                {saving ? "Saving..." : "Finish setup"}
+                {saving ? "Saving..." : "Continue to events"}
               </button>
-
-              <div className="text-center text-xs text-white/40">
-                No public profile. Your visibility is in your control.
-              </div>
             </form>
           )}
         </div>
