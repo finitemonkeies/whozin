@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase, getSupabaseProjectRef } from "@/lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { buildSiteUrl } from "@/lib/site";
-import { track } from "@/lib/analytics";
+import { track, trackError } from "@/lib/analytics";
 import { toast } from "sonner";
 
 function useQuery() {
@@ -74,6 +74,13 @@ export default function Login() {
 
       if (error) {
         const msg = error.message || "OAuth failed";
+        const lower = msg.toLowerCase();
+        const providerDisabled = lower.includes("provider is not enabled");
+        track("auth_oauth_failed", {
+          provider,
+          reason: providerDisabled ? "provider_disabled" : "oauth_error",
+          message: msg,
+        });
         if (msg.toLowerCase().includes("provider is not enabled")) {
           toast.error("Provider not enabled in Supabase", {
             description:
@@ -87,8 +94,19 @@ export default function Login() {
       }
 
       track("oauth_started", { provider, redirect });
-      if (data?.url) window.location.assign(data.url);
+      if (data?.url) {
+        window.location.assign(data.url);
+      } else {
+        track("auth_oauth_failed", {
+          provider,
+          reason: "missing_redirect_url",
+        });
+        toast.error("Login failed", {
+          description: "OAuth redirect URL missing. Please try again.",
+        });
+      }
     } catch (e: any) {
+      trackError("auth_oauth_exception", e, { provider });
       toast.error("Login failed", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
@@ -119,6 +137,10 @@ export default function Login() {
           msg.toLowerCase().includes("rate limit") ||
           msg.toLowerCase().includes("too many") ||
           msg.toLowerCase().includes("over_email_send_rate_limit");
+        track("auth_magic_link_failed", {
+          reason: isRateLimit ? "rate_limited" : "request_failed",
+          message: msg,
+        });
 
         if (isRateLimit) {
           startCooldown(25);
@@ -139,6 +161,7 @@ export default function Login() {
       startCooldown(25);
       setLoading(null);
     } catch (e: any) {
+      trackError("auth_magic_link_exception", e);
       toast.error("Magic link failed", { description: e?.message || "Unknown error" });
       setLoading(null);
     }

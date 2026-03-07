@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 
 export function track(event: string, props: AnalyticsProps = {}) {
@@ -29,4 +31,62 @@ export function track(event: string, props: AnalyticsProps = {}) {
     // Lightweight local visibility during seed testing.
     console.info("[analytics]", payload);
   }
+}
+
+function normalizeErrorLike(err: unknown): { message: string; stack?: string } {
+  if (err instanceof Error) {
+    return {
+      message: err.message || "Unknown error",
+      stack: err.stack ? err.stack.slice(0, 1000) : undefined,
+    };
+  }
+  if (typeof err === "string") return { message: err };
+  try {
+    return { message: JSON.stringify(err).slice(0, 1000) };
+  } catch {
+    return { message: "Unknown error" };
+  }
+}
+
+export function trackError(kind: string, err: unknown, extra: AnalyticsProps = {}) {
+  const normalized = normalizeErrorLike(err);
+  const context = Object.fromEntries(
+    Object.entries(extra).filter(([, value]) =>
+      ["string", "number", "boolean"].includes(typeof value) || value == null
+    )
+  );
+  track("client_error", {
+    kind,
+    message: normalized.message,
+    stack: normalized.stack,
+    ...extra,
+  });
+  void supabase
+    .rpc("log_client_error", {
+      p_kind: kind,
+      p_message: normalized.message,
+      p_stack: normalized.stack ?? null,
+      p_context: context,
+    })
+    .then(() => null)
+    .catch(() => null);
+}
+
+export function initGlobalErrorTracking() {
+  if (typeof window === "undefined") return;
+  const w = window as Window & { __whozinErrorTrackingInit?: boolean };
+  if (w.__whozinErrorTrackingInit) return;
+  w.__whozinErrorTrackingInit = true;
+
+  window.addEventListener("error", (event) => {
+    trackError("window_error", event.error ?? event.message, {
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    trackError("unhandled_rejection", event.reason);
+  });
 }

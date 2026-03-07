@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { track } from "@/lib/analytics";
 import { isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
+import { featureFlags } from "@/lib/featureFlags";
 
 type EventRow = {
   id: string;
@@ -328,6 +329,7 @@ export function Home() {
       return aTs - bTs;
     });
   }, [events, friendCounts]);
+  const hasAtLeastOneFriend = friendIds.size > 0;
 
   const applyLocalRsvpChange = (eventId: string, nextGoing: boolean) => {
     setMyGoing((prev) => {
@@ -353,6 +355,10 @@ export function Home() {
   };
 
   const toggleRsvp = async (eventId: string) => {
+    if (featureFlags.killSwitchRsvpWrites) {
+      toast.error("RSVP is temporarily unavailable");
+      return;
+    }
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -390,6 +396,7 @@ export function Home() {
         if (error) throw error;
           toast.success("You're going 🎉");
         track("rsvp_updated", { source: "home", action: "add", eventId });
+        track("rsvp_success", { source: "home", action: "add", eventId });
       } else {
         const { error } = await supabase
           .from("attendees")
@@ -399,6 +406,7 @@ export function Home() {
         if (error) throw error;
           toast.message("RSVP removed");
         track("rsvp_updated", { source: "home", action: "remove", eventId });
+        track("rsvp_success", { source: "home", action: "remove", eventId });
       }
     } catch (e: any) {
       console.error(e);
@@ -434,6 +442,21 @@ export function Home() {
       </div>
 
       <div className="px-5 pt-5 space-y-4">
+        {viewerId && !hasAtLeastOneFriend && (
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4">
+            <div className="text-sm font-semibold text-zinc-100">Whozin is better with friends</div>
+            <div className="mt-1 text-xs text-zinc-400">
+              Add a few friends to unlock stronger social momentum.
+            </div>
+            <Link
+              to="/friends"
+              className="mt-3 inline-flex items-center rounded-xl bg-white/10 border border-white/10 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/15"
+            >
+              Find friends
+            </Link>
+          </div>
+        )}
+
         {feedEvents.map((event) => {
           const hasImage = !!event.image_url && event.image_url.trim().length > 0;
           const thumbOk = !badThumbs.has(event.id);
@@ -460,6 +483,7 @@ export function Home() {
             <Link
               key={event.id}
               to={`/event/${event.id}?src=home`}
+              onClick={() => track("event_view", { source: "home_feed", eventId: event.id })}
               className="group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
             >
               <div className="p-5">
@@ -503,7 +527,7 @@ export function Home() {
 
                       <button
                         type="button"
-                        disabled={working}
+                        disabled={working || featureFlags.killSwitchRsvpWrites}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

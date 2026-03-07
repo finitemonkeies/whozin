@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { supabase } from "@/lib/supabase";
-import { track } from "@/lib/analytics";
+import { track, trackError } from "@/lib/analytics";
 import { syncSpotifyTasteFromSession } from "@/lib/spotify";
 import { toast } from "sonner";
 
@@ -18,41 +18,55 @@ export default function AuthCallback() {
     let isMounted = true;
 
     const run = async () => {
-      const errorDescription =
-        params.get("error_description") ||
-        params.get("error") ||
-        params.get("message");
+      try {
+        const errorDescription =
+          params.get("error_description") ||
+          params.get("error") ||
+          params.get("message");
 
-      if (errorDescription) {
-        toast.error("Login failed", { description: errorDescription });
-        navigate("/login");
-        return;
-      }
-
-      const start = Date.now();
-      const timeoutMs = 8000;
-
-      while (Date.now() - start < timeoutMs) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.user && isMounted) {
-          // Capture Spotify taste immediately after OAuth callback while provider token is fresh.
-          await syncSpotifyTasteFromSession().catch(() => null);
-
-          const redirect = sanitizeRedirectTarget(
-            localStorage.getItem("whozin_post_auth_redirect")
-          );
-          localStorage.removeItem("whozin_post_auth_redirect");
-          track("auth_callback_success", { redirect });
-          navigate(redirect);
+        if (errorDescription) {
+          track("auth_callback_failed", {
+            stage: "provider_redirect",
+            reason: errorDescription,
+          });
+          toast.error("Login failed", { description: errorDescription });
+          navigate("/login");
           return;
         }
-        await new Promise((r) => setTimeout(r, 200));
-      }
 
-      toast.error("Login timed out", {
-        description: "Session not established. Try again.",
-      });
-      navigate("/login");
+        const start = Date.now();
+        const timeoutMs = 8000;
+
+        while (Date.now() - start < timeoutMs) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.user && isMounted) {
+            // Capture Spotify taste immediately after OAuth callback while provider token is fresh.
+            await syncSpotifyTasteFromSession().catch(() => null);
+
+            const redirect = sanitizeRedirectTarget(
+              localStorage.getItem("whozin_post_auth_redirect")
+            );
+            localStorage.removeItem("whozin_post_auth_redirect");
+            track("auth_callback_success", { redirect });
+            navigate(redirect);
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
+
+        track("auth_callback_failed", {
+          stage: "session_timeout",
+          timeoutMs,
+        });
+        toast.error("Login timed out", {
+          description: "Session not established. Try again.",
+        });
+        navigate("/login");
+      } catch (err) {
+        trackError("auth_callback_exception", err);
+        toast.error("Login failed", { description: "Unexpected callback error. Try again." });
+        navigate("/login");
+      }
     };
 
     run();

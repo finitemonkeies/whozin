@@ -8,6 +8,7 @@ import {
   registerReferralOpen,
   storePendingReferral,
 } from "@/lib/referrals";
+import { featureFlags } from "@/lib/featureFlags";
 
 function isUuid(value: string | null | undefined): value is string {
   if (!value) return false;
@@ -26,6 +27,11 @@ export default function AddByInvite() {
   }, []);
 
   const run = async () => {
+    if (featureFlags.killSwitchInvites || featureFlags.killSwitchFriendAdds) {
+      toast.error("Invite linking is temporarily unavailable");
+      navigate("/friends");
+      return;
+    }
     const raw = handle ?? "";
     const username = raw.startsWith("@") ? raw.slice(1) : raw;
     const params = new URLSearchParams(location.search);
@@ -94,6 +100,7 @@ export default function AddByInvite() {
     } else {
       toast.success("Connection request sent");
       track("friend_add_submitted", { source: "invite" });
+      track("friend_add", { source: "invite", mode: "submitted" });
     }
 
     if (isUuid(eventId)) {

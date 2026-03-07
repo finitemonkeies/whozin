@@ -3,7 +3,6 @@ import { Music, CheckCircle, Loader2, Sparkles, AudioWaveform } from "lucide-rea
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
-import { loadPersonalizedExplore, loadTrendingExplore } from "@/lib/explorePersonalization";
 import { supabase } from "@/lib/supabase";
 import { logProductEvent } from "@/lib/productEvents";
 import {
@@ -151,6 +150,9 @@ export function Explore() {
     setLoadingEvents(true);
     setLoadingTrending(true);
     try {
+      const { loadPersonalizedExplore, loadTrendingExplore } = await import(
+        "@/lib/explorePersonalization"
+      );
       const [ranked, trending] = await Promise.all([
         loadPersonalizedExplore(city),
         loadTrendingExplore(city),

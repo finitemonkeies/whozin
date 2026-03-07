@@ -1,0 +1,14 @@
+section,widget,window,primary_metrics,primary_use
+Growth,7-day daily trend,Last full 7 days,"new_users; active_users; rsvps; friend_adds; events_happening; activated_new_users; activation_rate_pct; d1_retained_users; d1_eligible_users; d1_retention_pct",Track onboarding and retention quality
+RSVP,RSVP source mix,Last full 7 days,"rsvp_source; rsvp_count; pct_of_rsvps",Detect traffic quality and source tagging regressions
+Supply,Event source quality,Last full 7 days,"event_source; event_count; rsvp_count; rsvps_per_live_event",Measure source quality of surfaced events
+Core,RSVPs per active user weekly,Last 6 full weeks,"rsvps; active_users; rsvps_per_active_user",Primary alpha efficiency KPI
+Explore,Explore to detail CTR,Last full 7 days,"impressions; clicks; ctr_pct; impression_users; click_users; user_ctr_pct",Measure event card relevance and scanability
+Conversion,Detail to RSVP CVR,Last full 7 days,"detail_views_user_event; converted_user_event; detail_to_rsvp_cvr_pct",Measure detail page conversion quality
+Social,Friend add to RSVP 72h,Last full 7 days,"friend_adds; friend_adds_with_rsvp_72h; friend_add_to_rsvp_72h_pct",Measure social loop effectiveness
+Referral,Referral baseline,Last 7 days,"rsvps; invite_sent; invite_opened; invite_signup_completed; invite_rsvp_completed; pct_rsvps_with_invite_click; signup_from_invite_pct; rsvp_from_invite_72h_pct",Measure invite flywheel output
+Referral,Referral funnel by day,Last 14 days,"invite_sent; invite_opened; invite_signup_completed; invite_rsvp_completed",Check daily invite funnel stability
+Referral,Referral conversion by source,Last 14 days,"source; invite_sent; invite_opened; invite_signup_completed; invite_rsvp_completed; signup_from_invite_pct; rsvp_from_invite_72h_pct",Find highest-performing invite source
+Referral,Top inviters,Last 30 days,"inviter_user_id; inviter_username; invites_created; invites_opened; invites_claimed",Identify growth amplifiers
+Referral,Open quality split,Last 30 days,"invites_created; opened_anonymous; opened_authenticated; claimed_invites; claimed_per_anon_open_pct",Evaluate invite traffic quality
+Observability,Error and funnel health,Last 24 hours,"event totals by event_name; errors_24h by surface and kind; recent errors",Detect operational risk before user impact

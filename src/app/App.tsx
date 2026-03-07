@@ -1,46 +1,75 @@
+import { Suspense, lazy, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-
 import { RequireAuth } from "./components/RequireAuth";
 import { BottomNav } from "./components/BottomNav";
 
-import { Home } from "./pages/Home";
-import { EventDetails } from "./pages/EventDetails";
-import { Profile } from "./pages/Profile";
-import { EditProfile } from "./pages/EditProfile";
-import { Tickets } from "./pages/Tickets";
+const Home = lazy(() => import("./pages/Home").then((m) => ({ default: m.Home })));
+const EventDetails = lazy(() =>
+  import("./pages/EventDetails").then((m) => ({ default: m.EventDetails }))
+);
+const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
+const EditProfile = lazy(() =>
+  import("./pages/EditProfile").then((m) => ({ default: m.EditProfile }))
+);
+const Tickets = lazy(() => import("./pages/Tickets").then((m) => ({ default: m.Tickets })));
+const Login = lazy(() => import("./pages/Login"));
+const Welcome = lazy(() => import("./pages/Welcome").then((m) => ({ default: m.Welcome })));
+const SignUp = lazy(() => import("./pages/SignUp").then((m) => ({ default: m.SignUp })));
+const Explore = lazy(() => import("./pages/Explore").then((m) => ({ default: m.Explore })));
+const Onboarding = lazy(() =>
+  import("./pages/Onboarding").then((m) => ({ default: m.Onboarding }))
+);
+const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
+const TicketDetail = lazy(() =>
+  import("./pages/TicketDetail").then((m) => ({ default: m.TicketDetail }))
+);
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
+const AddByInvite = lazy(() => import("./pages/AddByInvite"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const Friends = lazy(() => import("./pages/Friends"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AdminHealth = lazy(() => import("./pages/AdminHealth"));
+const Setup = lazy(() => import("./pages/Setup"));
+const DesktopLanding = lazy(() =>
+  import("./desktop/Landing").then((m) => ({ default: m.DesktopLanding }))
+);
+const DesktopAuth = lazy(() => import("./desktop/Auth").then((m) => ({ default: m.DesktopAuth })));
+const DesktopSync = lazy(() => import("./desktop/Sync").then((m) => ({ default: m.DesktopSync })));
+const DesktopScanning = lazy(() =>
+  import("./desktop/Scanning").then((m) => ({ default: m.DesktopScanning }))
+);
+const DesktopMatch = lazy(() => import("./desktop/Match").then((m) => ({ default: m.DesktopMatch })));
+const DesktopEventDetail = lazy(() =>
+  import("./desktop/EventDetail").then((m) => ({ default: m.DesktopEventDetail }))
+);
+const DesktopNoMatch = lazy(() =>
+  import("./desktop/NoMatch").then((m) => ({ default: m.DesktopNoMatch }))
+);
+const DesktopTickets = lazy(() =>
+  import("./desktop/Tickets").then((m) => ({ default: m.DesktopTickets }))
+);
+const DesktopSettings = lazy(() =>
+  import("./desktop/Settings").then((m) => ({ default: m.DesktopSettings }))
+);
 
-import Login from "./pages/Login";
-import { Welcome } from "./pages/Welcome";
-import { SignUp } from "./pages/SignUp";
-import { Explore } from "./pages/Explore";
-import { Onboarding } from "./pages/Onboarding";
-import { Activity } from "./pages/Activity";
-import { TicketDetail } from "./pages/TicketDetail";
-import { Settings } from "./pages/Settings";
-import AddByInvite from "./pages/AddByInvite";
-import AuthCallback from "./pages/AuthCallback";
+function RouteFallback() {
+  return (
+    <div className="min-h-[100svh] bg-black text-white flex items-center justify-center">
+      <div className="text-sm text-white/70">Loading...</div>
+    </div>
+  );
+}
 
-import Friends from "./pages/Friends";
-import Admin from "./pages/Admin";
+function withSuspense(node: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{node}</Suspense>;
+}
 
-import Setup from "./pages/Setup";
+function protectedRoute(node: ReactNode) {
+  return withSuspense(<RequireAuth>{node}</RequireAuth>);
+}
 
-import { DesktopLanding } from "./desktop/Landing";
-import { DesktopAuth } from "./desktop/Auth";
-import { DesktopSync } from "./desktop/Sync";
-import { DesktopScanning } from "./desktop/Scanning";
-import { DesktopMatch } from "./desktop/Match";
-import { DesktopEventDetail } from "./desktop/EventDetail";
-import { DesktopNoMatch } from "./desktop/NoMatch";
-import { DesktopTickets } from "./desktop/Tickets";
-import { DesktopSettings } from "./desktop/Settings";
-
-/**
- * Hide BottomNav on public/desktop/auth callback routes
- * so OAuth, login, and desktop flows stay clean.
- */
 function AppShell() {
   const location = useLocation();
   const path = location.pathname;
@@ -51,7 +80,7 @@ function AppShell() {
     path === "/signup" ||
     path === "/welcome" ||
     path === "/setup" ||
-    path === "/intro" || // NEW: intro is a focused explainer
+    path === "/intro" ||
     path.startsWith("/auth") ||
     path.startsWith("/add");
 
@@ -65,144 +94,39 @@ function AppShell() {
       ].join(" ")}
     >
       <Routes>
-        {/* -------------------- */}
-        {/* Public Routes        */}
-        {/* -------------------- */}
-        <Route path="/intro" element={<Onboarding />} />
-        <Route path="/welcome" element={<Welcome />} />
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/intro" element={withSuspense(<Onboarding />)} />
+        <Route path="/welcome" element={withSuspense(<Welcome />)} />
+        <Route path="/signup" element={withSuspense(<SignUp />)} />
+        <Route path="/login" element={withSuspense(<Login />)} />
+        <Route path="/auth/callback" element={withSuspense(<AuthCallback />)} />
+        <Route path="/add/:handle" element={withSuspense(<AddByInvite />)} />
 
-        {/* OAuth callback MUST be public */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/setup" element={protectedRoute(<Setup />)} />
+        <Route path="/" element={protectedRoute(<Home />)} />
+        <Route path="/onboarding" element={protectedRoute(<Onboarding />)} />
+        <Route path="/activity" element={protectedRoute(<Activity />)} />
+        <Route path="/event/:id" element={protectedRoute(<EventDetails />)} />
+        <Route path="/friends" element={protectedRoute(<Friends />)} />
+        <Route path="/admin" element={protectedRoute(<Admin />)} />
+        <Route path="/admin/health" element={protectedRoute(<AdminHealth />)} />
+        <Route path="/profile" element={protectedRoute(<Profile />)} />
+        <Route path="/profile/edit" element={protectedRoute(<EditProfile />)} />
+        <Route path="/settings" element={protectedRoute(<Settings />)} />
+        <Route path="/tickets" element={protectedRoute(<Tickets />)} />
+        <Route path="/tickets/:id" element={protectedRoute(<TicketDetail />)} />
+        <Route path="/explore" element={protectedRoute(<Explore />)} />
 
-        {/* Invite route MUST be public (it will redirect to /login if needed) */}
-        <Route path="/add/:handle" element={<AddByInvite />} />
-
-        {/* -------------------- */}
-        {/* Protected Mobile     */}
-        {/* -------------------- */}
-        <Route
-          path="/setup"
-          element={
-            <RequireAuth>
-              <Setup />
-            </RequireAuth>
-          }
-        />
-
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <Home />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/onboarding"
-          element={
-            <RequireAuth>
-              <Onboarding />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/activity"
-          element={
-            <RequireAuth>
-              <Activity />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/event/:id"
-          element={
-            <RequireAuth>
-              <EventDetails />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/friends"
-          element={
-            <RequireAuth>
-              <Friends />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <RequireAuth>
-              <Admin />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <RequireAuth>
-              <Profile />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/profile/edit"
-          element={
-            <RequireAuth>
-              <EditProfile />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <RequireAuth>
-              <Settings />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <RequireAuth>
-              <Tickets />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/tickets/:id"
-          element={
-            <RequireAuth>
-              <TicketDetail />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/explore"
-          element={
-            <RequireAuth>
-              <Explore />
-            </RequireAuth>
-          }
-        />
-
-        {/* -------------------- */}
-        {/* Desktop Web Routes   */}
-        {/* -------------------- */}
         <Route path="/web" element={<Navigate to="/web/landing" replace />} />
-        <Route path="/web/landing" element={<DesktopLanding />} />
-        <Route path="/web/auth" element={<DesktopAuth />} />
-        <Route path="/web/sync" element={<DesktopSync />} />
-        <Route path="/web/scanning" element={<DesktopScanning />} />
-        <Route path="/web/match" element={<DesktopMatch />} />
-        <Route path="/web/event/:id" element={<DesktopEventDetail />} />
-        <Route path="/web/no-match" element={<DesktopNoMatch />} />
-        <Route path="/web/tickets" element={<DesktopTickets />} />
-        <Route path="/web/settings" element={<DesktopSettings />} />
+        <Route path="/web/landing" element={withSuspense(<DesktopLanding />)} />
+        <Route path="/web/auth" element={withSuspense(<DesktopAuth />)} />
+        <Route path="/web/sync" element={withSuspense(<DesktopSync />)} />
+        <Route path="/web/scanning" element={withSuspense(<DesktopScanning />)} />
+        <Route path="/web/match" element={withSuspense(<DesktopMatch />)} />
+        <Route path="/web/event/:id" element={withSuspense(<DesktopEventDetail />)} />
+        <Route path="/web/no-match" element={withSuspense(<DesktopNoMatch />)} />
+        <Route path="/web/tickets" element={withSuspense(<DesktopTickets />)} />
+        <Route path="/web/settings" element={withSuspense(<DesktopSettings />)} />
 
-        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/intro" replace />} />
       </Routes>
 

@@ -14,6 +14,7 @@ import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { getRsvpSourceFromSearch } from "@/lib/rsvpSource";
 import { logProductEvent } from "@/lib/productEvents";
 import { createReferralInviteLink } from "@/lib/referrals";
+import { featureFlags } from "@/lib/featureFlags";
 
 type EventRow = {
   id: string;
@@ -144,6 +145,7 @@ export function EventDetails() {
     const key = `${id}:${rsvpSource}`;
     if (lastTrackedViewKeyRef.current === key) return;
     lastTrackedViewKeyRef.current = key;
+    track("event_view", { eventId: id, source: rsvpSource });
 
     void logProductEvent({
       eventName: "event_detail_view",
@@ -325,6 +327,10 @@ export function EventDetails() {
   }, [id]);
 
   const handleToggleGoing = async () => {
+    if (featureFlags.killSwitchRsvpWrites) {
+      toast.error("RSVP is temporarily unavailable");
+      return;
+    }
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -389,6 +395,7 @@ export function EventDetails() {
 
         toast.success("You're going 🎉");
         track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
+        track("rsvp_success", { source: rsvpSource, action: "add", eventId: id });
 
         if (rsvpSource === "share_link") {
           void logProductEvent({
@@ -413,6 +420,7 @@ export function EventDetails() {
 
         toast.message("RSVP removed");
         track("rsvp_updated", { source: rsvpSource, action: "remove", eventId: id });
+        track("rsvp_success", { source: rsvpSource, action: "remove", eventId: id });
       }
     } catch (e: any) {
       console.error(e);
@@ -467,6 +475,10 @@ export function EventDetails() {
   };
 
   const handleCopyInvite = async () => {
+    if (featureFlags.killSwitchInvites) {
+      toast.error("Invites are temporarily unavailable");
+      return;
+    }
     const url = await createInviteLink();
     if (!url) return;
     await navigator.clipboard.writeText(url);
@@ -477,6 +489,7 @@ export function EventDetails() {
       source: "rsvp_share",
       metadata: { channel: "copy" },
     });
+    track("invite_copy", { source: "rsvp_share", eventId: id, channel: "copy" });
     await logProductEvent({
       eventName: "invite_sent",
       eventId: id,
@@ -490,8 +503,13 @@ export function EventDetails() {
   };
 
   const handleShareInvite = async () => {
+    if (featureFlags.killSwitchInvites) {
+      toast.error("Invites are temporarily unavailable");
+      return;
+    }
     const url = await createInviteLink();
     if (!url) return;
+    let channel: "native_share" | "copy_fallback" | "share_canceled" = "share_canceled";
 
     if (navigator.share) {
       try {
@@ -500,20 +518,29 @@ export function EventDetails() {
           text: `I'm going to ${event.title} on Whozin. Join me here:`,
           url,
         });
+        channel = "native_share";
       } catch {
         // Ignore canceled share sheets.
+        channel = "share_canceled";
       }
     } else {
       await navigator.clipboard.writeText(url);
       toast.success("Invite link copied");
+      channel = "copy_fallback";
+      track("invite_copy", { source: "rsvp_share", eventId: id, channel: "copy_fallback" });
+    }
+
+    if (channel === "share_canceled") {
+      return;
     }
 
     await logProductEvent({
       eventName: "invite_sent",
       eventId: id,
       source: "rsvp_share",
-      metadata: { channel: navigator.share ? "native_share" : "copy_fallback" },
+      metadata: { channel },
     });
+    track("invite_share", { source: "rsvp_share", eventId: id, channel });
     if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
     setShowInvitePrompt(false);
   };
@@ -696,7 +723,7 @@ export function EventDetails() {
               <button
                 type="button"
                 onClick={() => void handleCopyInvite()}
-                disabled={creatingInviteLink}
+                disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                 className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
               >
                 {creatingInviteLink ? "Preparing..." : "Copy link"}
@@ -704,7 +731,7 @@ export function EventDetails() {
               <button
                 type="button"
                 onClick={() => void handleShareInvite()}
-                disabled={creatingInviteLink}
+                disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                 className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
               >
                 Share
@@ -724,7 +751,7 @@ export function EventDetails() {
       <div className="fixed bottom-24 left-0 right-0 z-40 px-5">
         <button
           onClick={handleToggleGoing}
-          disabled={working}
+          disabled={working || featureFlags.killSwitchRsvpWrites}
           className={`w-full py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 ${
             isGoing
               ? "bg-green-500/20 border border-green-500/50 text-green-300"

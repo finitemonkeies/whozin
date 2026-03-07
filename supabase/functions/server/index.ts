@@ -29,17 +29,84 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const signupAdminToken = Deno.env.get("SIGNUP_ADMIN_TOKEN") || "";
 
+function serviceClient() {
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function getClientIp(c: any): string {
+  const forwarded = c.req.header("x-forwarded-for") || "";
+  const firstForwarded = forwarded.split(",").map((s: string) => s.trim()).find(Boolean);
+  return (
+    firstForwarded ||
+    c.req.header("cf-connecting-ip") ||
+    c.req.header("x-real-ip") ||
+    "unknown"
+  );
+}
+
+function normalizeRateIdentity(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9@._:-]/g, "").slice(0, 120);
+}
+
+async function enforceRateLimit(opts: {
+  scope: string;
+  identity: string;
+  windowMs: number;
+  maxHits: number;
+}) {
+  const now = Date.now();
+  const key = `rl:${opts.scope}:${normalizeRateIdentity(opts.identity)}`;
+  const current = (await kv.get(key)) || { count: 0, resetAt: now + opts.windowMs };
+  const resetAt = typeof current.resetAt === "number" ? current.resetAt : now + opts.windowMs;
+  const withinWindow = resetAt > now;
+  const next = withinWindow
+    ? { count: Number(current.count || 0) + 1, resetAt }
+    : { count: 1, resetAt: now + opts.windowMs };
+  await kv.set(key, next);
+  if (next.count > opts.maxHits) {
+    const retryAfterSec = Math.max(1, Math.ceil((next.resetAt - now) / 1000));
+    throw new Error(`RATE_LIMIT:${retryAfterSec}`);
+  }
+}
+
+async function logEdgeError(kind: string, message: string, context: Record<string, unknown> = {}) {
+  try {
+    if (!supabaseUrl || !supabaseServiceKey) return;
+    await serviceClient().from("app_error_logs").insert({
+      user_id: null,
+      surface: "edge",
+      kind,
+      message: message.slice(0, 2000),
+      stack: null,
+      context,
+    });
+  } catch {
+    // Error logging should never break edge responses.
+  }
+}
+
 // Helper: Get User ID from Token
 async function getUserId(c: any) {
   const authHeader = c.req.header('Authorization');
   if (!authHeader) return null;
   const [scheme, token] = authHeader.split(' ');
   if (scheme?.toLowerCase() !== "bearer" || !token) return null;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabase = serviceClient();
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return null;
   return user.id;
 }
+
+app.onError(async (err, c) => {
+  await logEdgeError("server_unhandled", err?.message || "Unhandled edge error", {
+    method: c.req.method,
+    path: c.req.path,
+    ip: getClientIp(c),
+  });
+  return c.json({ error: "Internal server error" }, 500);
+});
 
 // Health Check
 app.get("/make-server-3b9fa398/health", (c) => {
@@ -57,12 +124,37 @@ app.post("/make-server-3b9fa398/signup", async (c) => {
 
   const body = await c.req.json();
   const { email, password, name } = body;
+  const ip = getClientIp(c);
+  const emailIdentity = typeof email === "string" ? email : "";
+  try {
+    await enforceRateLimit({
+      scope: "signup_ip",
+      identity: ip,
+      windowMs: 10 * 60 * 1000,
+      maxHits: 20,
+    });
+    if (emailIdentity) {
+      await enforceRateLimit({
+        scope: "signup_email",
+        identity: emailIdentity,
+        windowMs: 10 * 60 * 1000,
+        maxHits: 5,
+      });
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.startsWith("RATE_LIMIT:")) {
+      const retryAfterSec = Number(msg.split(":")[1] || "30");
+      return c.json({ error: "Rate limit exceeded", retry_after_seconds: retryAfterSec }, 429);
+    }
+    throw e;
+  }
 
   if (!email || !password || !name) {
     return c.json({ error: "Missing email, password, or name" }, 400);
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabase = serviceClient();
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -141,6 +233,28 @@ app.get("/make-server-3b9fa398/event/:id/attendees", async (c) => {
 app.post("/make-server-3b9fa398/rsvp", async (c) => {
     const userId = await getUserId(c);
     if (!userId) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    try {
+      await enforceRateLimit({
+        scope: "rsvp_ip",
+        identity: ip,
+        windowMs: 30 * 1000,
+        maxHits: 25,
+      });
+      await enforceRateLimit({
+        scope: "rsvp_user",
+        identity: userId,
+        windowMs: 30 * 1000,
+        maxHits: 12,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.startsWith("RATE_LIMIT:")) {
+        const retryAfterSec = Number(msg.split(":")[1] || "15");
+        return c.json({ error: "Rate limit exceeded", retry_after_seconds: retryAfterSec }, 429);
+      }
+      throw e;
+    }
     
     const { eventId } = await c.req.json();
     if (!eventId) return c.json({ error: "Missing eventId" }, 400);

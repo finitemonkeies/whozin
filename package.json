@@ -9,7 +9,9 @@
     "test": "node --test",
     "test:redirect": "node --test tests/redirect.sanitize.test.mjs",
     "security:smoke": "node scripts/smoke-security-checks.mjs",
-    "security:token": "node -e \"import('node:crypto').then((c)=>console.log(c.randomBytes(32).toString('hex')))\""
+    "security:token": "node -e \"import('node:crypto').then((c)=>console.log(c.randomBytes(32).toString('hex')))\"",
+    "ops:data-quality": "node scripts/data-quality-check.mjs",
+    "ops:kpi-export": "node scripts/export-kpi-snapshot.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
 import { toast } from "sonner";
+import { featureFlags } from "@/lib/featureFlags";
 
 type Props = {
   onSuccess?: () => void;
@@ -21,6 +22,10 @@ export default function AddFriend({ onSuccess }: Props) {
   const [working, setWorking] = useState(false);
 
   const handleAdd = async () => {
+    if (featureFlags.killSwitchFriendAdds) {
+      toast.error("Friend requests are temporarily unavailable");
+      return;
+    }
     const trimmed = username.trim();
     if (!trimmed) return;
 
@@ -37,6 +42,7 @@ export default function AddFriend({ onSuccess }: Props) {
     } else {
       toast.success("Connection request sent");
       track("friend_add_submitted", { source: "manual" });
+      track("friend_add", { source: "manual", mode: "submitted" });
       setUsername("");
       onSuccess?.();
     }
@@ -59,7 +65,7 @@ export default function AddFriend({ onSuccess }: Props) {
 
         <button
           onClick={handleAdd}
-          disabled={working}
+          disabled={working || featureFlags.killSwitchFriendAdds}
           className="px-6 py-3 rounded-xl font-semibold bg-pink-600 disabled:opacity-50"
         >
           {working ? "Adding..." : "Add"}

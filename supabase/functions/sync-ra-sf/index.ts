@@ -36,6 +36,31 @@ function jsonResponse(status: number, body: Record<string, unknown>) {
   });
 }
 
+async function logEdgeError(
+  supabaseUrl: string | undefined,
+  serviceRoleKey: string | undefined,
+  kind: string,
+  message: string,
+  context: Record<string, unknown> = {}
+) {
+  try {
+    if (!supabaseUrl || !serviceRoleKey) return;
+    const service = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    await service.from("app_error_logs").insert({
+      user_id: null,
+      surface: "edge",
+      kind,
+      message: message.slice(0, 2000),
+      stack: null,
+      context,
+    });
+  } catch {
+    // Error logging should never break response flow.
+  }
+}
+
 function asString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -183,6 +208,8 @@ function buildApifyInput() {
 }
 
 Deno.serve(async (req) => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
   }
@@ -191,15 +218,15 @@ Deno.serve(async (req) => {
     return jsonResponse(405, { error: "Method not allowed" });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const apifyToken = Deno.env.get("APIFY_TOKEN");
   const actorId = Deno.env.get("APIFY_RA_ACTOR_ID") ?? "chalkandcheese~ra-events-scraper";
 
   if (!supabaseUrl || !serviceRoleKey) {
+    await logEdgeError(supabaseUrl, serviceRoleKey, "sync_ra_env_missing", "Missing Supabase env");
     return jsonResponse(500, { error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" });
   }
   if (!apifyToken) {
+    await logEdgeError(supabaseUrl, serviceRoleKey, "sync_ra_env_missing", "Missing APIFY_TOKEN");
     return jsonResponse(500, { error: "Missing APIFY_TOKEN" });
   }
 
@@ -241,6 +268,9 @@ Deno.serve(async (req) => {
 
     if (!apifyRes.ok) {
       const body = await apifyRes.text();
+      await logEdgeError(supabaseUrl, serviceRoleKey, "sync_ra_apify_failed", "Apify request failed", {
+        status: apifyRes.status,
+      });
       return jsonResponse(502, {
         error: "Apify request failed",
         status: apifyRes.status,
@@ -255,6 +285,12 @@ Deno.serve(async (req) => {
     items = parsed as RaRawItem[];
   } catch (err) {
     clearTimeout(timeout);
+    await logEdgeError(
+      supabaseUrl,
+      serviceRoleKey,
+      "sync_ra_apify_fetch_error",
+      err instanceof Error ? err.message : String(err)
+    );
     return jsonResponse(502, {
       error: "Apify fetch error",
       message: err instanceof Error ? err.message : String(err),
@@ -302,6 +338,7 @@ Deno.serve(async (req) => {
     .in("source_event_id", keys);
 
   if (existingErr) {
+    await logEdgeError(supabaseUrl, serviceRoleKey, "sync_ra_existing_query_failed", existingErr.message);
     return jsonResponse(500, { error: existingErr.message });
   }
 
@@ -333,6 +370,9 @@ Deno.serve(async (req) => {
       .upsert(chunk, { onConflict: "event_source,source_event_id" });
 
     if (upsertErr) {
+      await logEdgeError(supabaseUrl, serviceRoleKey, "sync_ra_upsert_failed", upsertErr.message, {
+        chunk_start: i,
+      });
       return jsonResponse(500, { error: upsertErr.message, chunk_start: i });
     }
     upserted += chunk.length;

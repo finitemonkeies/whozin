@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { createReferralInviteLink } from "@/lib/referrals";
 import { logProductEvent } from "@/lib/productEvents";
+import { track } from "@/lib/analytics";
 
 type ProfileRow = {
   id: string;
@@ -281,12 +282,21 @@ export function Profile() {
           {/* Actions */}
           <div className="mt-6 w-full max-w-md grid grid-cols-2 gap-3">
             <Link
+              to="/friends"
+              className="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-center font-semibold"
+            >
+              Find friends
+            </Link>
+
+            <Link
               to="/profile/edit"
               className="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-center font-semibold"
             >
               Edit profile
             </Link>
+          </div>
 
+          <div className="mt-3 w-full max-w-md">
             <button
               onClick={async () => {
                 const username = profile?.username;
@@ -304,17 +314,19 @@ export function Profile() {
                     source: "profile_share",
                     metadata: { channel: "copy" },
                   });
+                  track("invite_copy", { source: "profile_share", channel: "copy" });
                   await logProductEvent({
                     eventName: "invite_sent",
                     source: "profile_share",
                     metadata: { channel: "copy" },
                   });
+                  track("invite_share", { source: "profile_share", channel: "copy" });
                   toast.success("Invite link copied");
                 } catch (err: any) {
                   toast.error(err?.message ?? "Could not create invite link");
                 }
               }}
-              className="px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
+              className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
             >
               Copy invite
             </button>
@@ -355,6 +367,7 @@ export function Profile() {
                   <Link
                     key={e.id}
                     to={`/event/${e.id}?src=profile`}
+                    onClick={() => track("event_view", { source: "profile_upcoming", eventId: e.id })}
                     className="block rounded-2xl bg-zinc-900/60 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
                   >
                     <div className="flex gap-4 p-4">

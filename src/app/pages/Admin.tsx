@@ -1,7 +1,9 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { formatEventDateTimeRange, isEventPast } from "@/lib/eventDates";
+import { isAllowedAdminEmail } from "@/lib/adminAccess";
 
 type EventRow = {
   id: string;
@@ -170,8 +172,8 @@ export default function Admin() {
         return;
       }
 
-      const email = session?.user?.email?.toLowerCase() ?? "";
-      const ok = allowedEmails.has(email);
+      const email = session?.user?.email ?? "";
+      const ok = isAllowedAdminEmail(email);
 
       setIsAllowed(ok);
       setLoading(false);
@@ -182,7 +184,7 @@ export default function Admin() {
     };
 
     init();
-  }, [allowedEmails]);
+  }, []);
 
   const selectEventForEdit = (e: EventRow) => {
     setForm({
@@ -352,7 +354,7 @@ export default function Admin() {
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white px-6 py-8">
-        <div className="text-zinc-400">Loadingâ€¦</div>
+        <div className="text-zinc-400">Loading…</div>
       </div>
     );
   }
@@ -361,7 +363,7 @@ export default function Admin() {
     return (
       <div className="min-h-screen bg-black text-white px-6 py-8">
         <h1 className="text-2xl font-bold mb-2">Admin</h1>
-        <p className="text-zinc-400">You donâ€™t have access to this page.</p>
+        <p className="text-zinc-400">You don’t have access to this page.</p>
       </div>
     );
   }
@@ -374,6 +376,12 @@ export default function Admin() {
           <p className="text-zinc-400">Create, edit, and seed events.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            to="/admin/health"
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
+          >
+            Health
+          </Link>
           <button
             onClick={syncRaSf}
             disabled={syncingRa}
@@ -404,7 +412,7 @@ export default function Admin() {
         <h2 className="text-lg font-semibold mb-3">Upcoming Events ({upcomingEvents.length})</h2>
 
         {loadingEvents ? (
-          <div className="text-zinc-400">Loading eventsâ€¦</div>
+          <div className="text-zinc-400">Loading events…</div>
         ) : upcomingEvents.length === 0 ? (
           <div className="text-zinc-500">No upcoming events.</div>
         ) : (
@@ -549,7 +557,7 @@ export default function Admin() {
               value={form.description}
               onChange={(e) => handleChange("description", e.target.value)}
               className="w-full min-h-[120px] bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none"
-              placeholder="Doors at 8. Support: â€¦"
+              placeholder="Doors at 8. Support: …"
             />
           </div>
 
@@ -558,7 +566,7 @@ export default function Admin() {
             disabled={working}
             className="w-full px-6 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-50"
           >
-            {working ? "Savingâ€¦" : form.id ? "Update Event" : "Create Event"}
+            {working ? "Saving…" : form.id ? "Update Event" : "Create Event"}
           </button>
 
           {form.id && (
@@ -575,3 +583,6 @@ export default function Admin() {
     </div>
   );
 }
+
+
+

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
 import AddFriend from "../components/AddFriend";
+import { featureFlags } from "@/lib/featureFlags";
 
 type FriendRow = {
   friend_id: string;
@@ -19,6 +20,7 @@ type SuggestedProfile = {
   display_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  mutualCount?: number;
 };
 
 export default function Friends() {
@@ -90,12 +92,40 @@ export default function Friends() {
     const pendingIds = new Set(pendingRows.map((f) => f.friend_id));
     const connectedIds = new Set([...acceptedIds, ...pendingIds]);
 
+    const acceptedList = [...acceptedIds];
+    let mutualCounts = new Map<string, number>();
+
+    if (acceptedList.length > 0) {
+      const { data: networkRows, error: networkErr } = await supabase
+        .from("friendships")
+        .select("user_id,friend_id,status")
+        .in("user_id", acceptedList)
+        .eq("status", "accepted");
+
+      if (networkErr) {
+        console.error("Failed to load mutual network:", networkErr);
+      } else {
+        mutualCounts = (networkRows ?? []).reduce((acc, row) => {
+          const candidateId = row.friend_id as string | null;
+          if (
+            !candidateId ||
+            candidateId === session.user.id ||
+            connectedIds.has(candidateId)
+          ) {
+            return acc;
+          }
+          acc.set(candidateId, (acc.get(candidateId) ?? 0) + 1);
+          return acc;
+        }, new Map<string, number>());
+      }
+    }
+
     const { data: profiles, error: pErr } = await supabase
       .from("profiles")
       .select("id,display_name,username,avatar_url")
       .neq("id", session.user.id)
       .not("username", "is", null)
-      .limit(40);
+      .limit(80);
 
     if (pErr) {
       console.error("Failed to load suggested profiles:", pErr);
@@ -103,9 +133,22 @@ export default function Friends() {
       setSuggested([]);
     } else {
       const rows = (profiles ?? []) as SuggestedProfile[];
-      setSuggested(
-        rows.filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id)).slice(0, 20)
-      );
+      const prioritized = rows
+        .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id))
+        .map((r) => ({
+          ...r,
+          mutualCount: mutualCounts.get(r.id) ?? 0,
+        }))
+        .sort((a, b) => {
+          if ((b.mutualCount ?? 0) !== (a.mutualCount ?? 0)) {
+            return (b.mutualCount ?? 0) - (a.mutualCount ?? 0);
+          }
+          const aName = (a.display_name || a.username || "").toLowerCase();
+          const bName = (b.display_name || b.username || "").toLowerCase();
+          return aName.localeCompare(bName);
+        })
+        .slice(0, 20);
+      setSuggested(prioritized);
     }
 
     setLoading(false);
@@ -113,6 +156,10 @@ export default function Friends() {
   };
 
   const addSuggestedFriend = async (row: SuggestedProfile) => {
+    if (featureFlags.killSwitchFriendAdds) {
+      toast.error("Friend requests are temporarily unavailable");
+      return;
+    }
     if (!row.id || !row.username) return;
     if (addingIds[row.id] || addedIds[row.id]) return;
 
@@ -142,12 +189,15 @@ export default function Friends() {
     if (row.username && loaded?.acceptedIds.has(row.id)) {
       toast.success(`Added @${row.username}`);
       track("friend_added", { source: "suggested", mode: "accepted" });
+      track("friend_add", { source: "suggested", mode: "accepted" });
     } else if (row.username && loaded?.pendingIds.has(row.id)) {
       toast.success(`Request sent to @${row.username}`);
       track("friend_added", { source: "suggested", mode: "pending" });
+      track("friend_add", { source: "suggested", mode: "pending" });
     } else if (row.username) {
       toast.success(`Connection updated for @${row.username}`);
       track("friend_added", { source: "suggested", mode: "unknown" });
+      track("friend_add", { source: "suggested", mode: "unknown" });
     }
   };
 
@@ -204,13 +254,17 @@ export default function Friends() {
                       <div className="min-w-0">
                         <div className="font-semibold truncate">{displayName}</div>
                         {p.username ? <div className="text-xs text-zinc-500 truncate">@{p.username}</div> : null}
-                        <div className="text-xs text-zinc-500">Suggested</div>
+                        <div className="text-xs text-zinc-500">
+                          {(p.mutualCount ?? 0) > 0
+                            ? `${p.mutualCount} mutual ${(p.mutualCount ?? 0) === 1 ? "friend" : "friends"}`
+                            : "Suggested"}
+                        </div>
                       </div>
                     </div>
 
                     <button
                       onClick={() => addSuggestedFriend(p)}
-                      disabled={adding || added || !viewerId}
+                      disabled={adding || added || !viewerId || featureFlags.killSwitchFriendAdds}
                       className="px-4 py-2 rounded-xl text-sm font-semibold bg-pink-600 disabled:opacity-50"
                     >
                       {adding ? "Adding..." : added ? "Added" : "Add"}

@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { buildSiteUrl } from "@/lib/site";
 import { logProductEvent } from "@/lib/productEvents";
+import { featureFlags } from "@/lib/featureFlags";
 
 type InviteSource = "rsvp_share" | "profile_share" | "event_detail_share" | "share_link";
 
@@ -124,6 +125,9 @@ export async function createReferralInviteLink(args: {
   eventId?: string | null;
   source: InviteSource;
 }): Promise<{ token: string; url: string }> {
+  if (featureFlags.killSwitchInvites) {
+    throw new Error("Invites are temporarily unavailable.");
+  }
   const { userId, username } = await getCurrentUserAndHandle();
   await enforceInviteRateLimit(userId);
 

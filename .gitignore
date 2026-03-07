@@ -14,3 +14,4 @@ dist/
 Thumbs.db
 .vscode/
 node_modules
+supabase/.temp/

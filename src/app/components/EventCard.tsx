@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { MapPin, Users, Ticket } from "lucide-react";
 import type { Event } from "../../data/mock";
 import { logProductEvent } from "@/lib/productEvents";
+import { track } from "@/lib/analytics";
 
 function safeTitle(title?: string | null) {
   const t = (title ?? "").trim();
@@ -48,15 +49,23 @@ export function EventCard({ event }: { event: Event }) {
     "group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200";
 
   const handleDetailClick = () =>
-    void logProductEvent({
-      eventName: "explore_event_click",
-      eventId: canOpenDetails ? event.id : null,
-      source: "explore",
-      metadata: {
-        source,
-        matched_artist: matchedArtist,
-      },
-    });
+    void Promise.all([
+      logProductEvent({
+        eventName: "explore_event_click",
+        eventId: canOpenDetails ? event.id : null,
+        source: "explore",
+        metadata: {
+          source,
+          matched_artist: matchedArtist,
+        },
+      }),
+      Promise.resolve(
+        track("event_view", {
+          source: "explore_card",
+          eventId: canOpenDetails ? event.id : null,
+        })
+      ),
+    ]);
 
   const handleBuyClick = () =>
     void logProductEvent({

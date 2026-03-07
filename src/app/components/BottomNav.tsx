@@ -1,4 +1,4 @@
-import { Home, User, Search } from "lucide-react";
+import { Home, User, Search, Users } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import clsx from "clsx";
@@ -9,6 +9,7 @@ export function BottomNav() {
   const navItems = [
     { icon: Home, label: "Feed", path: "/" },
     { icon: Search, label: "Explore", path: "/explore" },
+    { icon: Users, label: "Friends", path: "/friends" },
     { icon: User, label: "Profile", path: "/profile" },
   ];
 

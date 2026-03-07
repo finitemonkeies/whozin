@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { track, trackError } from "@/lib/analytics";
 
 type AuthState = {
   loading: boolean;
@@ -21,17 +22,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.getSession();
       if (!mounted) return;
 
-      if (error) console.error("[auth.getSession]", error);
+      if (error) {
+        console.error("[auth.getSession]", error);
+        trackError("auth_session_bootstrap_error", error);
+      }
 
       setSession(data.session ?? null);
+      if (data.session?.user) {
+        track("auth_session_bootstrap_success", {
+          provider: data.session.user.app_metadata?.provider ?? "unknown",
+        });
+      }
       setLoading(false);
     };
 
     init();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       // This fires during OAuth callback + future refreshes.
       setSession(newSession ?? null);
+      if (event === "SIGNED_IN" && newSession?.user) {
+        track("login_success", {
+          provider: newSession.user.app_metadata?.provider ?? "unknown",
+        });
+      }
       setLoading(false);
     });
 
