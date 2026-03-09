@@ -142,6 +142,16 @@ export default function AdminHealth() {
         throw new Error("Missing Supabase environment for export");
       }
 
+      const exportUrl = `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/kpi-export`;
+      const requestExport = async (accessToken: string): Promise<Response> =>
+        fetchWithTimeout(exportUrl, 60000, {
+          method: "GET",
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
       const {
         data: { session },
         error: sessionErr,
@@ -150,19 +160,17 @@ export default function AdminHealth() {
         throw new Error(sessionErr?.message ?? "No active session for export");
       }
 
-      const exportUrl = `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/kpi-export`;
-      const res = await fetchWithTimeout(exportUrl, 60000, {
-        method: "GET",
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      let res = await requestExport(session.access_token);
+      if (res.status === 401) {
+        const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+        if (refreshErr || !refreshed.session?.access_token) {
+          throw new Error(refreshErr?.message ?? "Export auth expired. Please sign in again.");
+        }
+        res = await requestExport(refreshed.session.access_token);
+      }
       if (!res.ok) {
-        const maybeJson = await res
-          .json()
-          .catch(() => ({ error: `Export failed with status ${res.status}` }));
-        throw new Error(maybeJson?.error ?? `Export failed with status ${res.status}`);
+        const errorText = await res.text().catch(() => "");
+        throw new Error(errorText || `Export failed with status ${res.status}`);
       }
 
       const blob = await res.blob();

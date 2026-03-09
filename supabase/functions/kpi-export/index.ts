@@ -22,6 +22,19 @@ function rowsToCsv(rows: Array<Record<string, unknown>>): string {
   return lines.join("\n");
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split(".")[1];
+    if (!base64) return null;
+    const normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded = atob(padded);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 function localDay(date: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -117,16 +130,19 @@ Deno.serve(async (req) => {
   const service = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userErr } = await service.auth.getUser(token);
-  if (userErr || !userData.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
-  }
-
   const allowedEmails = new Set(["hello@whozin.app", "jvincenthallahan@gmail.com"]);
-  const email = (userData.user.email ?? "").toLowerCase().trim();
+  const jwtPayload = decodeJwtPayload(token);
+  let email = String(jwtPayload?.email ?? "").toLowerCase().trim();
+  if (!email) {
+    const { data: userData, error: userErr } = await service.auth.getUser(token);
+    if (userErr || !userData.user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+    email = (userData.user.email ?? "").toLowerCase().trim();
+  }
   if (!allowedEmails.has(email)) {
     return new Response(JSON.stringify({ error: "Forbidden" }), {
       status: 403,
@@ -258,4 +274,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
