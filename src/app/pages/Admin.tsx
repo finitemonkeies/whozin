@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { formatEventDateTimeRange, isEventPast } from "@/lib/eventDates";
 import { isAllowedAdminEmail } from "@/lib/adminAccess";
 import { createReferralInviteLink } from "@/lib/referrals";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 type EventRow = {
   id: string;
@@ -77,6 +78,8 @@ export default function Admin() {
   const [growthStats, setGrowthStats] = useState<GrowthStats | null>(null);
   const [growthBySource, setGrowthBySource] = useState<SourceStat[]>([]);
   const [topInviters, setTopInviters] = useState<TopInviter[]>([]);
+  const [showUpcomingEvents, setShowUpcomingEvents] = useState(false);
+  const [showPastEvents, setShowPastEvents] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     id: null,
@@ -627,62 +630,89 @@ export default function Admin() {
 
       {/* Event lists */}
       <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-3">Upcoming Events ({upcomingEvents.length})</h2>
+        <button
+          type="button"
+          onClick={() => setShowUpcomingEvents((v) => !v)}
+          className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 mb-3"
+        >
+          <span className="text-lg font-semibold">Upcoming Events ({upcomingEvents.length})</span>
+          {showUpcomingEvents ? (
+            <ChevronDown className="w-4 h-4 text-zinc-400" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-zinc-400" />
+          )}
+        </button>
 
-        {loadingEvents ? (
-          <div className="text-zinc-400">Loading events…</div>
-        ) : upcomingEvents.length === 0 ? (
-          <div className="text-zinc-500">No upcoming events.</div>
-        ) : (
-          <div className="space-y-2">
-            {upcomingEvents.map((e) => (
-              <button
-                key={e.id}
-                onClick={() => selectEventForEdit(e)}
-                className={`w-full text-left p-4 rounded-2xl border transition-colors ${
-                  form.id === e.id
-                    ? "bg-zinc-900 border-pink-500/40"
-                    : "bg-zinc-900/40 border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="font-semibold">{e.title}</div>
-                <div className="text-xs text-zinc-400 mt-1">
-                  {formatEventDateTimeRange(e)}
-                  {" - "}
-                  {e.location ?? "Location TBD"}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+        {showUpcomingEvents ? (
+          loadingEvents ? (
+            <div className="text-zinc-400">Loading events...</div>
+          ) : upcomingEvents.length === 0 ? (
+            <div className="text-zinc-500">No upcoming events.</div>
+          ) : (
+            <div className="space-y-2">
+              {upcomingEvents.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => selectEventForEdit(e)}
+                  className={`w-full text-left p-4 rounded-2xl border transition-colors ${
+                    form.id === e.id
+                      ? "bg-zinc-900 border-pink-500/40"
+                      : "bg-zinc-900/40 border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="font-semibold">{e.title}</div>
+                  <div className="text-xs text-zinc-400 mt-1">
+                    {formatEventDateTimeRange(e)}
+                    {" - "}
+                    {e.location ?? "Location TBD"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        ) : null}
 
-        <h2 className="text-lg font-semibold mt-8 mb-3">Past Events ({pastEvents.length})</h2>
-        {loadingEvents ? (
-          <div className="text-zinc-400">Loading events...</div>
-        ) : pastEvents.length === 0 ? (
-          <div className="text-zinc-500">No past events.</div>
-        ) : (
-          <div className="space-y-2">
-            {pastEvents.map((e) => (
-              <button
-                key={e.id}
-                onClick={() => selectEventForEdit(e)}
-                className={`w-full text-left p-4 rounded-2xl border transition-colors ${
-                  form.id === e.id
-                    ? "bg-zinc-900 border-pink-500/40"
-                    : "bg-zinc-900/30 border-white/10 hover:border-white/20"
-                }`}
-              >
-                <div className="font-semibold">{e.title}</div>
-                <div className="text-xs text-zinc-400 mt-1">
-                  {formatEventDateTimeRange(e)}
-                  {" - "}
-                  {e.location ?? "Location TBD"}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => setShowPastEvents((v) => !v)}
+          className="w-full flex items-center justify-between text-left px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 mt-8 mb-3"
+        >
+          <span className="text-lg font-semibold">Past Events ({pastEvents.length})</span>
+          {showPastEvents ? (
+            <ChevronDown className="w-4 h-4 text-zinc-400" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-zinc-400" />
+          )}
+        </button>
+
+        {showPastEvents ? (
+          loadingEvents ? (
+            <div className="text-zinc-400">Loading events...</div>
+          ) : pastEvents.length === 0 ? (
+            <div className="text-zinc-500">No past events.</div>
+          ) : (
+            <div className="space-y-2">
+              {pastEvents.map((e) => (
+                <button
+                  key={e.id}
+                  onClick={() => selectEventForEdit(e)}
+                  className={`w-full text-left p-4 rounded-2xl border transition-colors ${
+                    form.id === e.id
+                      ? "bg-zinc-900 border-pink-500/40"
+                      : "bg-zinc-900/30 border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="font-semibold">{e.title}</div>
+                  <div className="text-xs text-zinc-400 mt-1">
+                    {formatEventDateTimeRange(e)}
+                    {" - "}
+                    {e.location ?? "Location TBD"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        ) : null}
       </div>
 
       {/* Create/Edit form */}
