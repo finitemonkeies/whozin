@@ -107,6 +107,80 @@ function canSurfaceSource(source: string | null | undefined): boolean {
   return surfaceIngestedSources;
 }
 
+async function downloadShareCardPng(args: {
+  title: string;
+  dateLabel: string;
+  locationLabel: string;
+  inviteUrl: string;
+}) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not render share card");
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, "#0a0a0a");
+  gradient.addColorStop(1, "#1f1328");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const padX = 84;
+  const wrapText = (text: string, maxWidth: number): string[] => {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (ctx.measureText(next).width <= maxWidth) {
+        line = next;
+      } else {
+        if (line) lines.push(line);
+        line = word;
+      }
+      if (lines.length >= 3) break;
+    }
+    if (line && lines.length < 3) lines.push(line);
+    return lines;
+  };
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(padX, 240, canvas.width - padX * 2, 620);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 84px system-ui, -apple-system, Segoe UI, sans-serif";
+  for (const [idx, line] of wrapText(args.title, canvas.width - padX * 2 - 80).entries()) {
+    ctx.fillText(line, padX + 40, 360 + idx * 96);
+  }
+
+  ctx.font = "600 42px system-ui, -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fillText(args.dateLabel, padX + 40, 620);
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fillText(args.locationLabel || "Location TBA", padX + 40, 690);
+
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(padX, 1520, canvas.width - padX * 2, 170);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 44px system-ui, -apple-system, Segoe UI, sans-serif";
+  ctx.fillText("I am going on Whozin", padX + 40, 1605);
+  ctx.font = "500 30px system-ui, -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillText(args.inviteUrl.replace(/^https?:\/\//, ""), padX + 40, 1652);
+
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Could not export share card"))), "image/png")
+  );
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `whozin-share-${Date.now()}.png`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function EventDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -127,6 +201,7 @@ export function EventDetails() {
   const [showInvitePrompt, setShowInvitePrompt] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
   const [creatingInviteLink, setCreatingInviteLink] = useState(false);
+  const [downloadingShareCard, setDownloadingShareCard] = useState(false);
   const lastTrackedViewKeyRef = useRef<string>("");
 
   const eventImage = useMemo(() => event?.image_url ?? "", [event?.image_url]);
@@ -545,6 +620,42 @@ export function EventDetails() {
     setShowInvitePrompt(false);
   };
 
+  const handleDownloadShareCard = async () => {
+    if (featureFlags.killSwitchInvites) {
+      toast.error("Invites are temporarily unavailable");
+      return;
+    }
+    if (!id || !isUuid(id)) return;
+
+    const url = await createInviteLink();
+    if (!url) return;
+
+    setDownloadingShareCard(true);
+    try {
+      await downloadShareCardPng({
+        title: event.title,
+        dateLabel: formatEventDateTimeRange(event),
+        locationLabel: event.location ?? "Location TBA",
+        inviteUrl: url,
+      });
+
+      await logProductEvent({
+        eventName: "invite_sent",
+        eventId: id,
+        source: "rsvp_share",
+        metadata: { channel: "download_card" },
+      });
+      track("invite_share", { source: "rsvp_share", eventId: id, channel: "download_card" });
+      toast.success("Share card downloaded");
+      if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
+      setShowInvitePrompt(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not download share card");
+    } finally {
+      setDownloadingShareCard(false);
+    }
+  };
+
   const handleSkipInvite = () => {
     if (invitePromptKey) localStorage.setItem(invitePromptKey, String(Date.now()));
     setShowInvitePrompt(false);
@@ -719,12 +830,12 @@ export function EventDetails() {
             <div className="text-xs text-zinc-400 mt-1">
               I'm going to {event.title} on Whozin. Let your crew know.
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => void handleCopyInvite()}
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
-                className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
               >
                 {creatingInviteLink ? "Preparing..." : "Copy link"}
               </button>
@@ -732,18 +843,26 @@ export function EventDetails() {
                 type="button"
                 onClick={() => void handleShareInvite()}
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
-                className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
               >
                 Share
               </button>
               <button
                 type="button"
-                onClick={handleSkipInvite}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/5 border border-white/10 hover:bg-white/10"
+                onClick={() => void handleDownloadShareCard()}
+                disabled={creatingInviteLink || downloadingShareCard || featureFlags.killSwitchInvites}
+                className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
               >
-                Skip
+                {downloadingShareCard ? "Rendering..." : "Download card"}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={handleSkipInvite}
+              className="mt-2 text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              Not now
+            </button>
           </div>
         ) : null}
       </div>

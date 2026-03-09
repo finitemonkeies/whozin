@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { formatEventDateTimeRange, isEventPast } from "@/lib/eventDates";
 import { isAllowedAdminEmail } from "@/lib/adminAccess";
+import { createReferralInviteLink } from "@/lib/referrals";
 
 type EventRow = {
   id: string;
@@ -23,6 +24,27 @@ type FormState = {
   event_end_date: string; // datetime-local value
   image_url: string;
   description: string;
+};
+
+type GrowthStats = {
+  invitesCreated7d: number;
+  inviteOpened7d: number;
+  inviteSignup7d: number;
+  inviteRsvp7d: number;
+  inviteOpenRate: number;
+  signupRate: number;
+  rsvpRate: number;
+};
+
+type SourceStat = {
+  source: string;
+  invites: number;
+};
+
+type TopInviter = {
+  userId: string;
+  handle: string;
+  invites: number;
 };
 
 function toDatetimeLocal(value: string | null) {
@@ -51,6 +73,10 @@ export default function Admin() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [syncingRa, setSyncingRa] = useState(false);
   const [raSyncSummary, setRaSyncSummary] = useState<Record<string, unknown> | null>(null);
+  const [loadingGrowth, setLoadingGrowth] = useState(false);
+  const [growthStats, setGrowthStats] = useState<GrowthStats | null>(null);
+  const [growthBySource, setGrowthBySource] = useState<SourceStat[]>([]);
+  const [topInviters, setTopInviters] = useState<TopInviter[]>([]);
 
   const [form, setForm] = useState<FormState>({
     id: null,
@@ -75,6 +101,8 @@ export default function Admin() {
     const nowTs = Date.now();
     return events.filter((e) => isEventPast(e, nowTs));
   }, [events]);
+
+  const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 
   const resetForm = () => {
     setForm({
@@ -155,6 +183,119 @@ export default function Admin() {
     setLoadingEvents(false);
   };
 
+  const loadGrowthMetrics = async () => {
+    setLoadingGrowth(true);
+    try {
+      const startIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [{ data: referrals, error: referralsErr }, { data: productEvents, error: productEventsErr }] =
+        await Promise.all([
+          supabase
+            .from("referrals")
+            .select("inviter_user_id,source,created_at")
+            .gte("created_at", startIso),
+          supabase
+            .from("product_events")
+            .select("event_name,source,created_at")
+            .gte("created_at", startIso),
+        ]);
+
+      if (referralsErr) throw referralsErr;
+      if (productEventsErr) throw productEventsErr;
+
+      const referralRows = (referrals ?? []) as Array<{
+        inviter_user_id: string;
+        source: string | null;
+      }>;
+      const eventRows = (productEvents ?? []) as Array<{
+        event_name: string;
+        source: string | null;
+      }>;
+
+      const invitesCreated7d = referralRows.length;
+      const inviteOpened7d = eventRows.filter((row) => row.event_name === "invite_link_opened").length;
+      const inviteSignup7d = eventRows.filter((row) => row.event_name === "invite_signup_completed").length;
+      const inviteRsvp7d = eventRows.filter((row) => row.event_name === "invite_rsvp_completed").length;
+
+      const inviteOpenRate = invitesCreated7d > 0 ? inviteOpened7d / invitesCreated7d : 0;
+      const signupRate = inviteOpened7d > 0 ? inviteSignup7d / inviteOpened7d : 0;
+      const rsvpRate = inviteSignup7d > 0 ? inviteRsvp7d / inviteSignup7d : 0;
+      setGrowthStats({
+        invitesCreated7d,
+        inviteOpened7d,
+        inviteSignup7d,
+        inviteRsvp7d,
+        inviteOpenRate,
+        signupRate,
+        rsvpRate,
+      });
+
+      const bySourceMap = new Map<string, number>();
+      for (const row of referralRows) {
+        const source = (row.source ?? "unknown").trim() || "unknown";
+        bySourceMap.set(source, (bySourceMap.get(source) ?? 0) + 1);
+      }
+      setGrowthBySource(
+        [...bySourceMap.entries()]
+          .map(([source, invites]) => ({ source, invites }))
+          .sort((a, b) => b.invites - a.invites)
+          .slice(0, 8)
+      );
+
+      const byInviterMap = new Map<string, number>();
+      for (const row of referralRows) {
+        if (!row.inviter_user_id) continue;
+        byInviterMap.set(row.inviter_user_id, (byInviterMap.get(row.inviter_user_id) ?? 0) + 1);
+      }
+      const top = [...byInviterMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8);
+      const ids = top.map(([userId]) => userId);
+
+      const { data: profiles, error: profilesErr } = ids.length
+        ? await supabase.from("profiles").select("id,username,display_name").in("id", ids)
+        : { data: [], error: null };
+      if (profilesErr) throw profilesErr;
+
+      const nameById = new Map<string, string>();
+      for (const row of (profiles ?? []) as Array<{ id: string; username: string | null; display_name: string | null }>) {
+        const handle = row.username?.trim() || row.display_name?.trim() || row.id.slice(0, 8);
+        nameById.set(row.id, handle);
+      }
+      setTopInviters(
+        top.map(([userId, invites]) => ({
+          userId,
+          invites,
+          handle: nameById.get(userId) ?? userId.slice(0, 8),
+        }))
+      );
+    } catch (err: any) {
+      console.error("Failed loading growth metrics:", err);
+      toast.error(err?.message ?? "Failed to load growth metrics");
+      setGrowthStats(null);
+      setGrowthBySource([]);
+      setTopInviters([]);
+    } finally {
+      setLoadingGrowth(false);
+    }
+  };
+
+  const copyTrackedInviteLink = async () => {
+    if (!form.id) {
+      toast.error("Select an event first");
+      return;
+    }
+    try {
+      const { url } = await createReferralInviteLink({
+        eventId: form.id,
+        source: "event_detail_share",
+      });
+      await navigator.clipboard.writeText(url);
+      toast.success("Tracked invite link copied");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not create invite link");
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -179,7 +320,7 @@ export default function Admin() {
       setLoading(false);
 
       if (ok) {
-        await loadEvents();
+        await Promise.all([loadEvents(), loadGrowthMetrics()]);
       }
     };
 
@@ -390,6 +531,13 @@ export default function Admin() {
             {syncingRa ? "Syncing RA..." : "Sync RA (SF/Oakland)"}
           </button>
           <button
+            onClick={() => void loadGrowthMetrics()}
+            disabled={loadingGrowth}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+          >
+            {loadingGrowth ? "Refreshing..." : "Refresh Growth"}
+          </button>
+          <button
             onClick={resetForm}
             className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
           >
@@ -406,6 +554,76 @@ export default function Admin() {
           </pre>
         </div>
       )}
+
+      <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="text-sm font-semibold mb-3">Growth Funnel (Last 7 Days)</div>
+        {growthStats ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invites created</div>
+                <div className="text-xl font-semibold">{growthStats.invitesCreated7d}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invites opened</div>
+                <div className="text-xl font-semibold">
+                  {growthStats.inviteOpened7d} <span className="text-xs text-zinc-400">({pct(growthStats.inviteOpenRate)})</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invite signups</div>
+                <div className="text-xl font-semibold">
+                  {growthStats.inviteSignup7d} <span className="text-xs text-zinc-400">({pct(growthStats.signupRate)})</span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invite RSVPs</div>
+                <div className="text-xl font-semibold">
+                  {growthStats.inviteRsvp7d} <span className="text-xs text-zinc-400">({pct(growthStats.rsvpRate)})</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400 mb-2">Invite Source Mix</div>
+                {growthBySource.length === 0 ? (
+                  <div className="text-xs text-zinc-500">No source data yet.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {growthBySource.map((row) => (
+                      <div key={row.source} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">{row.source}</span>
+                        <span className="text-zinc-100 font-medium">{row.invites}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400 mb-2">Top Inviters</div>
+                {topInviters.length === 0 ? (
+                  <div className="text-xs text-zinc-500">No inviters yet.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {topInviters.map((row) => (
+                      <div key={row.userId} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">@{row.handle}</span>
+                        <span className="text-zinc-100 font-medium">{row.invites}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingGrowth ? "Loading growth metrics..." : "No growth data yet."}
+          </div>
+        )}
+      </div>
 
       {/* Event lists */}
       <div className="mb-8">
@@ -560,6 +778,16 @@ export default function Admin() {
               placeholder="Doors at 8. Support: …"
             />
           </div>
+
+          {form.id ? (
+            <button
+              type="button"
+              onClick={() => void copyTrackedInviteLink()}
+              className="w-full px-6 py-3 rounded-2xl font-semibold bg-white/10 border border-white/10 hover:bg-white/15"
+            >
+              Copy tracked invite link for this event
+            </button>
+          ) : null}
 
           <button
             onClick={upsertEvent}
