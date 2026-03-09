@@ -37,6 +37,17 @@ export default function AdminHealth() {
   const [results, setResults] = useState<CheckResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportDebug, setExportDebug] = useState<string>("");
+
+  const deriveProjectRef = (url?: string): string => {
+    if (!url) return "unknown";
+    try {
+      const host = new URL(url).hostname;
+      return host.split(".")[0] || "unknown";
+    } catch {
+      return "unknown";
+    }
+  };
 
   const envSummary = useMemo(
     () => ({
@@ -159,6 +170,9 @@ export default function AdminHealth() {
       if (sessionErr || !session?.access_token) {
         throw new Error(sessionErr?.message ?? "No active session for export");
       }
+      setExportDebug(
+        `email=${session.user?.email ?? "unknown"} | project_ref=${deriveProjectRef(supabaseUrl)} | token=present`
+      );
 
       let res = await requestExport(session.access_token);
       if (res.status === 401) {
@@ -166,10 +180,20 @@ export default function AdminHealth() {
         if (refreshErr || !refreshed.session?.access_token) {
           throw new Error(refreshErr?.message ?? "Export auth expired. Please sign in again.");
         }
+        setExportDebug(
+          `email=${refreshed.session.user?.email ?? "unknown"} | project_ref=${deriveProjectRef(
+            supabaseUrl
+          )} | token=refreshed`
+        );
         res = await requestExport(refreshed.session.access_token);
       }
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
+        setExportDebug(
+          `email=${session.user?.email ?? "unknown"} | project_ref=${deriveProjectRef(
+            supabaseUrl
+          )} | status=${res.status} | body=${errorText || "empty"}`
+        );
         throw new Error(errorText || `Export failed with status ${res.status}`);
       }
 
@@ -187,7 +211,13 @@ export default function AdminHealth() {
       anchor.remove();
       URL.revokeObjectURL(href);
       toast.success("KPI CSV exported");
+      setExportDebug(
+        `email=${session.user?.email ?? "unknown"} | project_ref=${deriveProjectRef(
+          supabaseUrl
+        )} | status=200`
+      );
     } catch (e: any) {
+      setExportDebug((prev) => `${prev}${prev ? " | " : ""}error=${e?.message ?? "unknown"}`);
       toast.error(e?.message ?? "KPI export failed");
     } finally {
       setExporting(false);
@@ -271,6 +301,13 @@ export default function AdminHealth() {
         <div className="text-sm font-semibold mb-3">Runtime Flags</div>
         <pre className="text-xs text-zinc-400 whitespace-pre-wrap break-words">
           {JSON.stringify(envSummary, null, 2)}
+        </pre>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 mt-4">
+        <div className="text-sm font-semibold mb-3">Export Debug</div>
+        <pre className="text-xs text-zinc-400 whitespace-pre-wrap break-words">
+          {exportDebug || "No export attempt yet"}
         </pre>
       </div>
     </div>
