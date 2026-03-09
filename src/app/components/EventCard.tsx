@@ -134,14 +134,14 @@ export function EventCard({
               type="button"
               onClick={quickRsvp.onToggle}
               disabled={quickRsvp.working}
-              className={`flex-shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold border disabled:opacity-60 ${
+              className={`flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition active:scale-[0.99] disabled:opacity-60 ${
                 quickRsvp.going
-                  ? "bg-green-500/20 border-green-500/40 text-green-300"
-                  : "bg-white/5 border-white/10 text-white/90 hover:bg-white/10"
+                  ? "bg-green-500/15 border-green-500/30 text-green-200"
+                  : "bg-gradient-to-r from-pink-600 to-purple-600 border-white/10 text-white"
               }`}
             >
               <Ticket className="w-3.5 h-3.5" />
-              {quickRsvp.working ? "Saving..." : quickRsvp.going ? "Going" : "RSVP"}
+              {quickRsvp.working ? "Saving..." : quickRsvp.going ? "You're going 🎉" : "RSVP"}
             </button>
           ) : event.price ? (
             <div className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/5 border border-white/10 text-white/90">
