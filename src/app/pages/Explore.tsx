@@ -5,6 +5,9 @@ import { EventCard } from "../components/EventCard";
 import { Event } from "../../data/mock";
 import { supabase } from "@/lib/supabase";
 import { logProductEvent } from "@/lib/productEvents";
+import { track } from "@/lib/analytics";
+import { featureFlags } from "@/lib/featureFlags";
+import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import {
   getSpotifyConnectionStatus,
   startSpotifyOAuthRedirect,
@@ -18,6 +21,12 @@ const exploreCoverStyle = {
 
 type StoredSpotifyTaste = {
   genres?: string[];
+};
+
+type RsvpState = {
+  going: boolean;
+  working: boolean;
+  count: number;
 };
 
 function toTitleCase(value: string): string {
@@ -84,6 +93,12 @@ async function inferCityFromIp(): Promise<string> {
   }
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 export function Explore() {
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -91,6 +106,7 @@ export function Explore() {
   const [loadingTrending, setLoadingTrending] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [trendingEvents, setTrendingEvents] = useState<Event[]>([]);
+  const [rsvpByEventId, setRsvpByEventId] = useState<Record<string, RsvpState>>({});
 
   const [cityInput, setCityInput] = useState(localStorage.getItem("whozin_explore_city") || "");
   const [autoCityHint, setAutoCityHint] = useState(
@@ -159,6 +175,7 @@ export function Explore() {
       ]);
       setEvents(ranked);
       setTrendingEvents(trending);
+      void hydrateExploreRsvpState([...ranked, ...trending]);
 
       void logProductEvent({
         eventName: "explore_feed_loaded",
@@ -184,6 +201,143 @@ export function Explore() {
     } finally {
       setLoadingEvents(false);
       setLoadingTrending(false);
+    }
+  };
+
+  const hydrateExploreRsvpState = async (items: Event[]) => {
+    const internalEventIds = Array.from(
+      new Set(items.map((e) => e.id).filter((id) => isUuid(id)))
+    );
+    if (internalEventIds.length === 0) {
+      setRsvpByEventId({});
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const viewerId = session?.user?.id ?? null;
+
+    const { data: rows, error } = await supabase
+      .from("attendees")
+      .select("event_id,user_id")
+      .in("event_id", internalEventIds);
+    if (error) {
+      console.error("Failed loading explore RSVP state:", error);
+      return;
+    }
+
+    const next: Record<string, RsvpState> = {};
+    for (const id of internalEventIds) {
+      next[id] = { going: false, working: false, count: 0 };
+    }
+
+    for (const row of (rows ?? []) as Array<{ event_id: string; user_id: string }>) {
+      const state = next[row.event_id];
+      if (!state) continue;
+      state.count += 1;
+      if (viewerId && row.user_id === viewerId) state.going = true;
+    }
+
+    for (const item of items) {
+      if (!isUuid(item.id)) continue;
+      const state = next[item.id];
+      if (!state) continue;
+      if (state.count <= 0 && typeof item.attendees === "number") {
+        state.count = item.attendees;
+      }
+    }
+
+    setRsvpByEventId(next);
+  };
+
+  const handleQuickRsvp = async (event: Event) => {
+    if (featureFlags.killSwitchRsvpWrites) {
+      toast.error("RSVP is temporarily unavailable");
+      return;
+    }
+    if (!isUuid(event.id)) {
+      toast.error("Open event details to RSVP");
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+      toast.error("Sign in to RSVP");
+      return;
+    }
+
+    const uid = session.user.id;
+    const rl = getRateLimitStatus(`rsvp_explore:${uid}:${event.id}`, 2000);
+    if (!rl.allowed) {
+      const seconds = formatRetrySeconds(rl.retryAfterMs);
+      toast.error(`Please wait ${seconds}s before trying again.`);
+      track("rsvp_rate_limited", { source: "explore", eventId: event.id, seconds });
+      return;
+    }
+
+    const prev = rsvpByEventId[event.id] ?? {
+      going: false,
+      working: false,
+      count: typeof event.attendees === "number" ? event.attendees : 0,
+    };
+    const nextGoing = !prev.going;
+    const nextCount = Math.max(0, prev.count + (nextGoing ? 1 : -1));
+    setRsvpByEventId((map) => ({
+      ...map,
+      [event.id]: { going: nextGoing, working: true, count: nextCount },
+    }));
+
+    void logProductEvent({
+      eventName: "explore_rsvp_click",
+      eventId: event.id,
+      source: "explore",
+      metadata: { action: nextGoing ? "add" : "remove" },
+    });
+
+    try {
+      if (nextGoing) {
+        const { error } = await supabase.from("attendees").insert({
+          event_id: event.id,
+          user_id: uid,
+          rsvp_source: "explore",
+        });
+        if (error) throw error;
+        track("rsvp_success", { source: "explore", action: "add", eventId: event.id });
+      } else {
+        const { error } = await supabase
+          .from("attendees")
+          .delete()
+          .eq("event_id", event.id)
+          .eq("user_id", uid);
+        if (error) throw error;
+        track("rsvp_success", { source: "explore", action: "remove", eventId: event.id });
+      }
+
+      setRsvpByEventId((map) => ({
+        ...map,
+        [event.id]: {
+          ...(map[event.id] ?? { going: nextGoing, count: nextCount }),
+          going: nextGoing,
+          count: nextCount,
+          working: false,
+        },
+      }));
+      toast.success(nextGoing ? "You're going!" : "RSVP removed");
+    } catch (e: any) {
+      setRsvpByEventId((map) => ({
+        ...map,
+        [event.id]: { ...prev, working: false },
+      }));
+      track("rsvp_failed", {
+        source: "explore",
+        action: nextGoing ? "add" : "remove",
+        eventId: event.id,
+        message: e?.message ?? "unknown_error",
+      });
+      toast.error(e?.message ?? "Failed to update RSVP");
     }
   };
 
@@ -329,7 +483,20 @@ export function Explore() {
             ) : trendingEvents.length > 0 ? (
               <div className="grid gap-6">
                 {trendingEvents.map((event) => (
-                  <EventCard key={`trending-${event.id}`} event={event} />
+                  <EventCard
+                    key={`trending-${event.id}`}
+                    event={event}
+                    quickRsvp={
+                      isUuid(event.id)
+                        ? {
+                            going: rsvpByEventId[event.id]?.going ?? false,
+                            working: rsvpByEventId[event.id]?.working ?? false,
+                            count: rsvpByEventId[event.id]?.count ?? event.attendees,
+                            onToggle: () => void handleQuickRsvp(event),
+                          }
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             ) : (
@@ -407,7 +574,22 @@ export function Explore() {
             ) : (
               <div className="grid gap-6">
                 {events.length > 0 ? (
-                  events.map((event) => <EventCard key={event.id} event={event} />)
+                  events.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      quickRsvp={
+                        isUuid(event.id)
+                          ? {
+                              going: rsvpByEventId[event.id]?.going ?? false,
+                              working: rsvpByEventId[event.id]?.working ?? false,
+                              count: rsvpByEventId[event.id]?.count ?? event.attendees,
+                              onToggle: () => void handleQuickRsvp(event),
+                            }
+                          : undefined
+                      }
+                    />
+                  ))
                 ) : (
                   <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
                     No artist-matched concerts found yet. Try a nearby city for fallback events.

@@ -5,6 +5,13 @@ import type { Event } from "../../data/mock";
 import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 
+type QuickRsvpState = {
+  going: boolean;
+  working: boolean;
+  count?: number;
+  onToggle: () => void;
+};
+
 function safeTitle(title?: string | null) {
   const t = (title ?? "").trim();
   return t.length > 0 ? t : "Event";
@@ -16,7 +23,13 @@ function isUuid(value: string): boolean {
   );
 }
 
-export function EventCard({ event }: { event: Event }) {
+export function EventCard({
+  event,
+  quickRsvp,
+}: {
+  event: Event;
+  quickRsvp?: QuickRsvpState;
+}) {
   const title = useMemo(() => safeTitle(event.title), [event.title]);
   const didTrackImpression = useRef(false);
   const canOpenDetails = isUuid(event.id);
@@ -132,10 +145,10 @@ export function EventCard({ event }: { event: Event }) {
             </div>
           ) : null}
 
-          {typeof event.attendees === "number" ? (
+          {typeof (quickRsvp?.count ?? event.attendees) === "number" ? (
             <div className="inline-flex items-center gap-1.5">
               <Users className="w-4 h-4 text-zinc-500" />
-              <span>{event.attendees.toLocaleString()} going</span>
+              <span>{(quickRsvp?.count ?? event.attendees).toLocaleString()} going</span>
             </div>
           ) : null}
         </div>
@@ -160,6 +173,24 @@ export function EventCard({ event }: { event: Event }) {
         ) : null}
 
         <div className="mt-4 flex items-center gap-2">
+          {quickRsvp ? (
+            <button
+              type="button"
+              onClick={quickRsvp.onToggle}
+              disabled={quickRsvp.working}
+              className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border disabled:opacity-60 ${
+                quickRsvp.going
+                  ? "bg-green-500/20 border-green-500/40 text-green-300"
+                  : "bg-white/10 border-white/10 hover:bg-white/15 text-white"
+              }`}
+            >
+              {quickRsvp.working
+                ? "Saving..."
+                : quickRsvp.going
+                ? "You're Going"
+                : "I'm Going"}
+            </button>
+          ) : null}
           {canOpenDetails ? (
             <Link
               to={`/event/${event.id}?src=explore`}
