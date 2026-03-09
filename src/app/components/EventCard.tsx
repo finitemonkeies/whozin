@@ -129,7 +129,21 @@ export function EventCard({
             <div className="mt-1 text-sm text-zinc-400 truncate">{event.date}</div>
           </div>
 
-          {event.price ? (
+          {quickRsvp ? (
+            <button
+              type="button"
+              onClick={quickRsvp.onToggle}
+              disabled={quickRsvp.working}
+              className={`flex-shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold border disabled:opacity-60 ${
+                quickRsvp.going
+                  ? "bg-green-500/20 border-green-500/40 text-green-300"
+                  : "bg-white/5 border-white/10 text-white/90 hover:bg-white/10"
+              }`}
+            >
+              <Ticket className="w-3.5 h-3.5" />
+              {quickRsvp.working ? "Saving..." : quickRsvp.going ? "Going" : "RSVP"}
+            </button>
+          ) : event.price ? (
             <div className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/5 border border-white/10 text-white/90">
               <Ticket className="w-3.5 h-3.5" />
               {event.price}
@@ -173,24 +187,6 @@ export function EventCard({
         ) : null}
 
         <div className="mt-4 flex items-center gap-2">
-          {quickRsvp ? (
-            <button
-              type="button"
-              onClick={quickRsvp.onToggle}
-              disabled={quickRsvp.working}
-              className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border disabled:opacity-60 ${
-                quickRsvp.going
-                  ? "bg-green-500/20 border-green-500/40 text-green-300"
-                  : "bg-white/10 border-white/10 hover:bg-white/15 text-white"
-              }`}
-            >
-              {quickRsvp.working
-                ? "Saving..."
-                : quickRsvp.going
-                ? "You're Going"
-                : "I'm Going"}
-            </button>
-          ) : null}
           {canOpenDetails ? (
             <Link
               to={`/event/${event.id}?src=explore`}
