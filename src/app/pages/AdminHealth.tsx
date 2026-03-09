@@ -111,19 +111,37 @@ export default function AdminHealth() {
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-    const healthUrl = supabaseUrl
-      ? `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/make-server-3b9fa398/health`
-      : "";
-    if (healthUrl) {
+    const healthUrls = supabaseUrl
+      ? [
+          `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/make-server-3b9fa398/health`,
+          `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/make-server-3b9fa398/make-server-3b9fa398/health`,
+        ]
+      : [];
+    if (healthUrls.length) {
       try {
         const headers: Record<string, string> = {};
         if (anonKey) headers.apikey = anonKey;
         if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
-        const res = await fetchWithTimeout(healthUrl, 10000, { headers });
+
+        let lastStatus: number | null = null;
+        let reached = false;
+        for (const url of healthUrls) {
+          const res = await fetchWithTimeout(url, 10000, { headers });
+          lastStatus = res.status;
+          if (res.status !== 404) {
+            reached = true;
+            break;
+          }
+        }
+
+        const ok = reached && (lastStatus === 200 || lastStatus === 401);
         checks.push({
           label: "Edge health endpoint",
-          ok: res.ok,
-          detail: `status=${res.status}`,
+          ok,
+          detail:
+            lastStatus === 401
+              ? "status=401 (reachable; auth enforced)"
+              : `status=${lastStatus ?? "unknown"}`,
         });
       } catch (e: any) {
         checks.push({
