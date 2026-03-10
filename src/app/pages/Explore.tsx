@@ -100,6 +100,7 @@ function isUuid(value: string): boolean {
 }
 
 export function Explore() {
+  const spotifyRecommendationsEnabled = featureFlags.spotifyRecommendationsEnabled;
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -116,6 +117,7 @@ export function Explore() {
   const [tasteGenres, setTasteGenres] = useState<string[]>(loadTasteGenresFromStorage());
 
   const effectiveCity = activeCity.trim() || autoCityHint.trim();
+  const canRenderRecommendations = spotifyRecommendationsEnabled ? connected : true;
 
   useEffect(() => {
     const resolveAutoCity = async () => {
@@ -343,6 +345,13 @@ export function Explore() {
 
   useEffect(() => {
     const run = async () => {
+      if (!spotifyRecommendationsEnabled) {
+        setConnected(false);
+        setTasteGenres([]);
+        await refreshRecommendations(effectiveCity);
+        return;
+      }
+
       const status = await getSpotifyConnectionStatus().catch(() => ({
         linked: false,
         hasToken: false,
@@ -371,7 +380,7 @@ export function Explore() {
     };
 
     void run();
-  }, [effectiveCity]);
+  }, [effectiveCity, spotifyRecommendationsEnabled]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -393,12 +402,13 @@ export function Explore() {
             <Sparkles className="w-6 h-6 text-purple-400" />
             Explore
           </h1>
-          <p className="text-zinc-400 mt-1">Discover events based on your vibe.</p>
+          <p className="text-zinc-400 mt-1">Discover events with real social momentum.</p>
         </div>
       </div>
 
       <div className="px-5 pt-4 space-y-6">
-        {!connected ? (
+        {spotifyRecommendationsEnabled ? (
+          !connected ? (
           <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6 text-center space-y-4 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-tr from-green-500/10 to-transparent pointer-events-none" />
 
@@ -438,7 +448,7 @@ export function Explore() {
               We only use listening signals to recommend events - you control visibility.
             </div>
           </div>
-        ) : (
+          ) : (
           <div className="flex items-center justify-between bg-zinc-900/30 border border-white/10 rounded-2xl p-4">
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10">
@@ -455,9 +465,10 @@ export function Explore() {
             </div>
             <CheckCircle className="w-5 h-5 text-[#1DB954]" />
           </div>
-        )}
+          )
+        ) : null}
 
-        {connected && (
+        {canRenderRecommendations && (
           <div className="space-y-4">
             <div className="flex items-end justify-between">
               <div>
@@ -511,11 +522,15 @@ export function Explore() {
                   Recommended for You
                   {loadingEvents && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
                 </h3>
-                <div className="text-xs text-zinc-600 mt-0.5">Nearby concerts from your top and suggested artists</div>
+                <div className="text-xs text-zinc-600 mt-0.5">
+                  {spotifyRecommendationsEnabled
+                    ? "Nearby concerts from your top and suggested artists"
+                    : "Nearby events tuned to city + social momentum"}
+                </div>
               </div>
             </div>
 
-            {tasteGenres.length > 0 ? (
+            {spotifyRecommendationsEnabled && tasteGenres.length > 0 ? (
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-[0.16em] text-zinc-500">Your Taste</div>
                 <div className="flex flex-wrap gap-2">
@@ -592,7 +607,7 @@ export function Explore() {
                   ))
                 ) : (
                   <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
-                    No artist-matched concerts found yet. Try a nearby city for fallback events.
+                    No events found for this city yet. Try another nearby city.
                   </div>
                 )}
               </div>
@@ -600,7 +615,7 @@ export function Explore() {
           </div>
         )}
 
-        {!connected && (
+        {spotifyRecommendationsEnabled && !connected && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Browse by Vibe</h3>
 

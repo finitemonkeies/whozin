@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { supabase } from "@/lib/supabase";
 import { track, trackError } from "@/lib/analytics";
+import { featureFlags } from "@/lib/featureFlags";
 import { syncSpotifyTasteFromSession } from "@/lib/spotify";
 import { toast } from "sonner";
 
@@ -40,8 +41,10 @@ export default function AuthCallback() {
         while (Date.now() - start < timeoutMs) {
           const { data } = await supabase.auth.getSession();
           if (data.session?.user && isMounted) {
-            // Capture Spotify taste immediately after OAuth callback while provider token is fresh.
-            await syncSpotifyTasteFromSession().catch(() => null);
+            if (featureFlags.spotifyRecommendationsEnabled) {
+              // Capture Spotify taste after OAuth callback while provider token is fresh.
+              await syncSpotifyTasteFromSession().catch(() => null);
+            }
 
             const redirect = sanitizeRedirectTarget(
               localStorage.getItem("whozin_post_auth_redirect")
