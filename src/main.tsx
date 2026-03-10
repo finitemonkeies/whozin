@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
+import posthog from "posthog-js";
 import App from "@/app/App";
 import { AuthProvider } from "@/app/providers/AuthProvider";
 import { initGlobalErrorTracking } from "@/lib/analytics";
@@ -18,6 +19,18 @@ if (sentryDsn) {
     dsn: sentryDsn,
     sendDefaultPii: true,
   });
+}
+
+const posthogKey = (import.meta.env.VITE_POSTHOG_KEY as string | undefined)?.trim();
+const posthogHost =
+  (import.meta.env.VITE_POSTHOG_HOST as string | undefined)?.trim() || "https://us.i.posthog.com";
+
+if (posthogKey) {
+  posthog.init(posthogKey, {
+    api_host: posthogHost,
+    capture_pageview: true,
+  });
+  (window as any).posthog = posthog;
 }
 
 initGlobalErrorTracking();

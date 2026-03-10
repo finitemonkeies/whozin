@@ -3,15 +3,24 @@
   Usage:
     WHOZIN_SERVER_URL=https://<your-function-host> npm run security:smoke
 
+  Fallback (auto-derives functions base):
+    SUPABASE_URL=https://<project-ref>.supabase.co npm run security:smoke
+    VITE_SUPABASE_URL=https://<project-ref>.supabase.co npm run security:smoke
+
   Optional:
     WHOZIN_EVENT_ID=<event-id> (defaults to "smoke-test-event")
 */
 
-const base = (process.env.WHOZIN_SERVER_URL || "").replace(/\/+$/, "");
+const derivedFromSupabase =
+  (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+const base = (
+  process.env.WHOZIN_SERVER_URL ||
+  (derivedFromSupabase ? `${derivedFromSupabase}/functions/v1` : "")
+).replace(/\/+$/, "");
 const eventId = process.env.WHOZIN_EVENT_ID || "smoke-test-event";
 
 if (!base) {
-  console.error("Missing WHOZIN_SERVER_URL env var.");
+  console.error("Missing WHOZIN_SERVER_URL or SUPABASE_URL/VITE_SUPABASE_URL env var.");
   process.exit(1);
 }
 
