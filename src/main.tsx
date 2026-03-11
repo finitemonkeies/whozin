@@ -38,6 +38,7 @@ if (posthogKey) {
     autocapture: true,
     advanced_disable_feature_flags: true,
     disable_external_dependency_loading: true,
+    request_batching: false,
     loaded: (instance) => {
       (window as any).posthog = instance;
 
