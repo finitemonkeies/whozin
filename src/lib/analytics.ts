@@ -1,6 +1,12 @@
 import { supabase } from "@/lib/supabase";
 
 type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
+type AnalyticsUser = {
+  id: string;
+  email?: string | null;
+  username?: string | null;
+  provider?: string | null;
+};
 
 export function track(event: string, props: AnalyticsProps = {}) {
   const payload = { event, ...props };
@@ -30,6 +36,34 @@ export function track(event: string, props: AnalyticsProps = {}) {
   if (import.meta.env.DEV) {
     // Lightweight local visibility during seed testing.
     console.info("[analytics]", payload);
+  }
+}
+
+export function identifyAnalyticsUser(user: AnalyticsUser) {
+  try {
+    const w = window as any;
+    if (!w.posthog?.identify) return;
+
+    const props = Object.fromEntries(
+      Object.entries({
+        email: user.email ?? undefined,
+        username: user.username ?? undefined,
+        provider: user.provider ?? undefined,
+      }).filter(([, value]) => typeof value === "string" && value.length > 0)
+    );
+
+    w.posthog.identify(user.id, props);
+  } catch {
+    // Never block product flow on analytics failure.
+  }
+}
+
+export function resetAnalyticsUser() {
+  try {
+    const w = window as any;
+    w.posthog?.reset?.();
+  } catch {
+    // Never block product flow on analytics failure.
   }
 }
 
