@@ -8,7 +8,7 @@ import { createReferralInviteLink } from "@/lib/referrals";
 import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 import { isEventVisible } from "@/lib/eventVisibility";
-import { shareInviteLink } from "@/lib/inviteSharing";
+import { copyInviteLink, shareInviteLink } from "@/lib/inviteSharing";
 import { featureFlags } from "@/lib/featureFlags";
 import { NotificationsPanel } from "@/app/components/NotificationsPanel";
 
@@ -329,22 +329,9 @@ export function Profile() {
                   return;
                 }
                 try {
-                  const { url } = await createReferralInviteLink({
+                  await copyInviteLink({
                     source: "profile_share",
                   });
-                  await navigator.clipboard.writeText(url);
-                  await logProductEvent({
-                    eventName: "invite_link_copied",
-                    source: "profile_share",
-                    metadata: { channel: "copy" },
-                  });
-                  track("invite_copy", { source: "profile_share", channel: "copy" });
-                  await logProductEvent({
-                    eventName: "invite_sent",
-                    source: "profile_share",
-                    metadata: { channel: "copy" },
-                  });
-                  track("invite_share", { source: "profile_share", channel: "copy" });
                   toast.success("Link copied");
                 } catch (err: any) {
                   toast.error(err?.message ?? "Could not make that link");
@@ -352,7 +339,7 @@ export function Profile() {
               }}
               className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
             >
-              Copy link for one friend
+              Copy link for a friend
             </button>
           </div>
 

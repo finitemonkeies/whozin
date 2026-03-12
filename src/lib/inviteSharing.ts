@@ -8,6 +8,35 @@ type InviteShareArgs = {
   source: "rsvp_share" | "profile_share" | "event_detail_share" | "share_link";
 };
 
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the legacy copy path for iOS/webview cases.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error("Could not copy that link in this browser.");
+  }
+}
+
 function buildShareText(eventTitle?: string | null) {
   const title = (eventTitle ?? "").trim();
   if (!title) {
@@ -29,7 +58,7 @@ export async function copyInviteLink({
   source,
 }: InviteShareArgs): Promise<string> {
   const created = await createReferralInviteLink({ eventId, source });
-  await navigator.clipboard.writeText(created.url);
+  await copyText(created.url);
 
   await logProductEvent({
     eventName: "invite_link_copied",
@@ -71,7 +100,7 @@ export async function shareInviteLink({
       channel = "share_canceled";
     }
   } else {
-    await navigator.clipboard.writeText(created.url);
+    await copyText(created.url);
     channel = "copy_fallback";
     await logProductEvent({
       eventName: "invite_link_copied",

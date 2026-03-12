@@ -24,6 +24,7 @@ function relativeTime(value: string) {
 function notificationIcon(type: string) {
   switch (type) {
     case "friend_joined_event":
+    case "friend_joined_event_burst":
       return Users;
     case "event_momentum":
       return Sparkles;
@@ -97,7 +98,7 @@ export function NotificationsPanel({
   const openNotification = async (notification: AppNotification) => {
     try {
       if (!notification.read_at) {
-        await markNotificationRead(notification.id);
+        await markNotificationRead(notification.id, notification.group_key);
         setNotifications((prev) =>
           prev.map((item) =>
             item.id === notification.id ? { ...item, read_at: new Date().toISOString() } : item
