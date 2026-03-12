@@ -57,6 +57,7 @@ export default function AddByInvite() {
   const [attendeeCount, setAttendeeCount] = useState(0);
   const [sessionReady, setSessionReady] = useState(false);
   const registeredOpenRef = useRef(false);
+  const autoForwardedRef = useRef(false);
 
   const raw = handle ?? "";
   const username = raw.startsWith("@") ? raw.slice(1) : raw;
@@ -148,6 +149,55 @@ export default function AddByInvite() {
 
   const inviterLabel = useMemo(() => displayName(inviteProfile, username), [inviteProfile, username]);
 
+  const completeInviteForSignedInUser = async () => {
+    if (working) return;
+
+    setWorking(true);
+
+    try {
+      if (refToken) {
+        await claimPendingReferral(source);
+      }
+
+      const { error } = await supabase.rpc("add_friend_by_username", {
+        friend_username: username,
+      });
+
+      if (error) {
+        const lowered = (error.message ?? "").toLowerCase();
+        if (lowered.includes("duplicate")) {
+          // Already connected is fine; keep going.
+        } else if (lowered.includes("cannot add yourself")) {
+          // Self-invite is also fine; keep going.
+        } else {
+          throw error;
+        }
+      } else {
+        track("friend_add_submitted", { source: "invite" });
+        track("friend_add", { source: "invite", mode: "submitted" });
+      }
+
+      if (isUuid(eventId)) {
+        navigate(`/event/${eventId}?src=share_link`, { replace: true });
+        return;
+      }
+
+      navigate("/friends", { replace: true });
+    } catch (error: any) {
+      console.error("Invite add error:", error);
+      toast.error(error?.message ?? "Could not open that invite");
+      track("friend_add_failed", { source: "invite" });
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (loading || !sessionReady || !isUuid(eventId) || autoForwardedRef.current) return;
+    autoForwardedRef.current = true;
+    void completeInviteForSignedInUser();
+  }, [eventId, loading, sessionReady]);
+
   const handlePrimaryAction = async () => {
     if (featureFlags.killSwitchInvites || featureFlags.killSwitchFriendAdds) {
       toast.error("Invite links are down right now");
@@ -171,45 +221,7 @@ export default function AddByInvite() {
       return;
     }
 
-    setWorking(true);
-
-    try {
-      if (refToken) {
-        await claimPendingReferral(source);
-      }
-
-      const { error } = await supabase.rpc("add_friend_by_username", {
-        friend_username: username,
-      });
-
-      if (error) {
-        const lowered = (error.message ?? "").toLowerCase();
-        if (lowered.includes("duplicate")) {
-          toast.success("You're already connected.");
-        } else if (lowered.includes("cannot add yourself")) {
-          toast.error("That's you.");
-        } else {
-          throw error;
-        }
-      } else {
-        toast.success(`You're in with ${inviterLabel}.`);
-        track("friend_add_submitted", { source: "invite" });
-        track("friend_add", { source: "invite", mode: "submitted" });
-      }
-
-      if (isUuid(eventId)) {
-        navigate(`/event/${eventId}?src=share_link&onboarding=1`);
-        return;
-      }
-
-      navigate("/friends?onboarding=1");
-    } catch (error: any) {
-      console.error("Invite add error:", error);
-      toast.error(error?.message ?? "Could not open that invite");
-      track("friend_add_failed", { source: "invite" });
-    } finally {
-      setWorking(false);
-    }
+    await completeInviteForSignedInUser();
   };
 
   if (loading) {
