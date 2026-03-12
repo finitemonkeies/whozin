@@ -135,6 +135,7 @@ function AppShell() {
         <Route path="/onboarding" element={protectedRoute(<Onboarding />)} />
         <Route path="/activity" element={protectedRoute(<Activity />)} />
         <Route path="/event/:id" element={protectedRoute(<EventDetails />)} />
+        <Route path="/open/event/:id" element={protectedRoute(<EventDetails />)} />
         <Route path="/friends" element={protectedRoute(<Friends />)} />
         <Route path="/admin" element={protectedRoute(<Admin />)} />
         <Route path="/admin/health" element={protectedRoute(<AdminHealth />)} />

@@ -67,16 +67,51 @@ function splitTitleLines(value: string, maxLines: number, maxCharsPerLine: numbe
 }
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
+  const mode = getSingle(req.query.mode).trim().toLowerCase();
   const title = trimTo(getSingle(req.query.title) || "The move is forming", 72);
   const date = trimTo(getSingle(req.query.date) || "Date TBA", 36);
   const location = trimTo(getSingle(req.query.location) || "Location TBA", 40);
-  const titleLines = splitTitleLines(title, 3, 24);
+  const inviter = trimTo(getSingle(req.query.inviter) || "Your friend", 28);
+  const titleLines = splitTitleLines(title, mode === "invite" ? 2 : 3, mode === "invite" ? 22 : 24);
   const titleSvg = titleLines
     .map(
       (line, index) =>
-        `<text x="100" y="${220 + index * 74}" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800">${escapeXml(line)}</text>`
+        `<text x="100" y="${mode === "invite" ? 262 + index * 72 : 220 + index * 74}" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="${mode === "invite" ? "60" : "64"}" font-weight="800">${escapeXml(line)}</text>`
     )
     .join("\n  ");
+  const inviteTop = mode === "invite"
+    ? `
+  <g transform="translate(100 98)">
+    <rect width="276" height="50" rx="25" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="22" y="31" fill="#FDE7F3" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">${escapeXml(inviter)} wants you there</text>
+  </g>
+  <text x="100" y="182" fill="rgba(244,244,245,0.78)" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="600">Open the link and see who is already in.</text>`
+    : "";
+  const inviteBottom = mode === "invite"
+    ? `
+  <g transform="translate(100 462)">
+    <rect width="520" height="84" rx="22" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.14)"/>
+    <text x="24" y="34" fill="rgba(249,168,212,0.95)" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">WHY TAP</text>
+    <text x="24" y="63" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">RSVP fast. Bring your people. Decide faster.</text>
+  </g>`
+    : "";
+  const inviteBadge = mode === "invite"
+    ? `
+  <g transform="translate(930 96)">
+    <rect width="160" height="160" rx="40" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="80" y="76" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800">WZ</text>
+    <text x="80" y="108" text-anchor="middle" fill="rgba(244,244,245,0.74)" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2">JOIN THE</text>
+    <text x="80" y="132" text-anchor="middle" fill="rgba(244,244,245,0.95)" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" letter-spacing="2">MOVE</text>
+  </g>`
+    : `
+  <g transform="translate(905 112)">
+    <rect width="180" height="180" rx="36" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.1)"/>
+    <text x="90" y="88" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800">WZ</text>
+    <text x="90" y="122" text-anchor="middle" fill="rgba(244,244,245,0.65)" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="2">THE MOVE</text>
+  </g>`;
+  const footer = mode === "invite"
+    ? `<text x="100" y="586" fill="rgba(244,244,245,0.78)" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600">Private by default. Optimized for the friend who might actually say yes.</text>`
+    : `<text x="100" y="560" fill="rgba(244,244,245,0.7)" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600">See who is going before you go.</text>`;
 
   const svg = `
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -107,24 +142,22 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     <path d="M1064 0V630" stroke="white" stroke-width="1"/>
   </g>
   <rect x="58" y="58" width="1084" height="514" rx="34" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"/>
-  <text x="100" y="122" fill="#F9A8D4" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" letter-spacing="5">WHOZIN EVENT</text>
+  <text x="100" y="122" fill="#F9A8D4" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" letter-spacing="5">${mode === "invite" ? "WHOZIN INVITE" : "WHOZIN EVENT"}</text>
+  ${inviteTop}
   ${titleSvg}
-  <g transform="translate(98 448)">
+  <g transform="translate(98 ${mode === "invite" ? "354" : "448"})">
     <rect width="270" height="78" rx="20" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.1)"/>
     <text x="24" y="30" fill="rgba(244,244,245,0.55)" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2.4">DATE</text>
     <text x="24" y="58" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">${escapeXml(date)}</text>
   </g>
-  <g transform="translate(390 448)">
+  <g transform="translate(390 ${mode === "invite" ? "354" : "448"})">
     <rect width="420" height="78" rx="20" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.1)"/>
     <text x="24" y="30" fill="rgba(244,244,245,0.55)" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2.4">LOCATION</text>
     <text x="24" y="58" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">${escapeXml(location)}</text>
   </g>
-  <g transform="translate(905 112)">
-    <rect width="180" height="180" rx="36" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.1)"/>
-    <text x="90" y="88" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800">WZ</text>
-    <text x="90" y="122" text-anchor="middle" fill="rgba(244,244,245,0.65)" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="2">THE MOVE</text>
-  </g>
-  <text x="100" y="560" fill="rgba(244,244,245,0.7)" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600">See who is going before you go.</text>
+  ${inviteBottom}
+  ${inviteBadge}
+  ${footer}
 </svg>`.trim();
 
   res.status(200);

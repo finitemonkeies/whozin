@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/event/(.*)",
+      "destination": "/api/event?id=$1"
+    },
+    {
       "source": "/share/(.*)",
       "destination": "/api/share?handle=$1"
     },
