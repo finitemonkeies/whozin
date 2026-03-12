@@ -11,7 +11,10 @@ export interface Event {
   id: string;
   title: string;
   date: string;
+  eventDateIso?: string;
+  eventEndDateIso?: string;
   location: string;
+  city?: string;
   image: string;
   attendees: number;
   price: string;

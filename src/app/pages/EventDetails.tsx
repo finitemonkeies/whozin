@@ -2,8 +2,10 @@ import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   Calendar,
+  ExternalLink,
   MapPin,
   Ticket,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +17,9 @@ import { getRsvpSourceFromSearch } from "@/lib/rsvpSource";
 import { logProductEvent } from "@/lib/productEvents";
 import { createReferralInviteLink } from "@/lib/referrals";
 import { featureFlags } from "@/lib/featureFlags";
+import { rankMoveCandidates } from "@/lib/theMove";
+import { TheMoveBadge } from "@/app/components/TheMoveBadge";
+import { isEventVisible, sourceLabel } from "@/lib/eventVisibility";
 
 type EventRow = {
   id: string;
@@ -25,6 +30,11 @@ type EventRow = {
   image_url: string | null;
   description?: string | null;
   event_source?: string | null;
+  venue_name?: string | null;
+  city?: string | null;
+  ticket_url?: string | null;
+  external_url?: string | null;
+  moderation_status?: string | null;
 };
 
 type AttendeeRow = {
@@ -45,10 +55,6 @@ function isUuid(value: string) {
 
 const RSVP_BUMP_KEY = "whozin_rsvp_bump";
 const INVITE_PROMPT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
-const surfaceIngestedSources =
-  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
-const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
-
 function bumpRsvp() {
   localStorage.setItem(RSVP_BUMP_KEY, String(Date.now()));
 }
@@ -88,7 +94,13 @@ function AvatarStack({ urls, total }: { urls: string[]; total: number }) {
           key={`${u}-${idx}`}
           className="h-9 w-9 overflow-hidden rounded-full border border-black bg-zinc-800"
         >
-          <img src={u} alt="" className="h-full w-full object-cover" loading="lazy" />
+          <img
+            src={u}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
         </div>
       ))}
       {extra > 0 ? (
@@ -100,11 +112,15 @@ function AvatarStack({ urls, total }: { urls: string[]; total: number }) {
   );
 }
 
-function canSurfaceSource(source: string | null | undefined): boolean {
-  const s = (source ?? "").trim().toLowerCase();
-  if (!s) return true;
-  if (!hiddenSources.has(s)) return true;
-  return surfaceIngestedSources;
+function importedEventAccent(source?: string | null) {
+  const normalized = (source ?? "").trim().toLowerCase();
+  if (normalized === "19hz") {
+    return "linear-gradient(135deg, rgba(236,72,153,0.88), rgba(124,58,237,0.84) 52%, rgba(9,9,11,0.98))";
+  }
+  if (normalized === "ra") {
+    return "linear-gradient(135deg, rgba(59,130,246,0.9), rgba(124,58,237,0.82) 52%, rgba(9,9,11,0.98))";
+  }
+  return "linear-gradient(135deg, rgba(34,197,94,0.85), rgba(59,130,246,0.8) 52%, rgba(9,9,11,0.98))";
 }
 
 async function downloadShareCardPng(args: {
@@ -202,11 +218,27 @@ export function EventDetails() {
   const [inviteLink, setInviteLink] = useState("");
   const [creatingInviteLink, setCreatingInviteLink] = useState(false);
   const [downloadingShareCard, setDownloadingShareCard] = useState(false);
+  const [heroImageOk, setHeroImageOk] = useState(true);
+  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
   const lastTrackedViewKeyRef = useRef<string>("");
 
   const eventImage = useMemo(() => event?.image_url ?? "", [event?.image_url]);
+  const isImportedEvent = useMemo(
+    () => !!event?.event_source && event.event_source !== "internal",
+    [event?.event_source]
+  );
+  const sourceName = useMemo(() => sourceLabel(event?.event_source), [event?.event_source]);
+  const sourceAccent = useMemo(() => importedEventAccent(event?.event_source), [event?.event_source]);
+  const officialUrl = useMemo(
+    () => event?.ticket_url ?? event?.external_url ?? "",
+    [event?.external_url, event?.ticket_url]
+  );
   const rsvpSource = useMemo(
     () => getRsvpSourceFromSearch(location.search),
+    [location.search]
+  );
+  const onboardingMode = useMemo(
+    () => new URLSearchParams(location.search).get("onboarding") === "1",
     [location.search]
   );
 
@@ -214,6 +246,11 @@ export function EventDetails() {
     () => (viewerId && id ? `whozin_invite_prompt:${viewerId}:${id}` : ""),
     [viewerId, id]
   );
+
+  useEffect(() => {
+    setHeroImageOk(true);
+    setHeroImageLoaded(false);
+  }, [event?.id, event?.image_url]);
 
   useEffect(() => {
     if (!id || !isUuid(id) || !event) return;
@@ -275,6 +312,49 @@ export function EventDetails() {
         .slice(0, 5),
     [friendsGoing, isGoing, othersGoing]
   );
+  const moveSignal = useMemo(() => {
+    if (!event) return null;
+    return (
+      rankMoveCandidates(
+        [
+          {
+            id: event.id,
+            title: event.title,
+            startAt: event.event_date,
+            totalRsvps: totalGoing,
+            friendRsvps: friendsGoing.length,
+            recentRsvps: attendees.filter((a) => {
+              const createdAt = new Date(a.created_at ?? 0).getTime();
+              return !Number.isNaN(createdAt) && Date.now() - createdAt <= 6 * 60 * 60 * 1000;
+            }).length,
+            quality: event.image_url ? 1 : 0.92,
+          },
+        ],
+        "event"
+      ).topSignal ?? null
+    );
+  }, [attendees, event, friendsGoing.length, totalGoing]);
+
+  useEffect(() => {
+    if (!moveSignal || !id || !isUuid(id)) return;
+    track("the_move_impression", {
+      source: rsvpSource,
+      placement: "event_header",
+      eventId: id,
+      label: moveSignal.label,
+      score: moveSignal.score,
+    });
+    void logProductEvent({
+      eventName: "the_move_impression",
+      eventId: id,
+      source: rsvpSource,
+      metadata: {
+        placement: "event_header",
+        label: moveSignal.label,
+        score: moveSignal.score,
+      },
+    });
+  }, [id, moveSignal, rsvpSource]);
 
   const loadFriendMap = async (userId: string, attendeeUserIds: string[]) => {
     setLoadingFriendMap(true);
@@ -358,7 +438,7 @@ export function EventDetails() {
 
       const { data: eventData, error: eventErr } = await supabase
         .from("events")
-        .select("id,title,location,event_date,event_end_date,image_url,description,event_source")
+        .select("id,title,location,event_date,event_end_date,image_url,description,event_source,venue_name,city,ticket_url,external_url,moderation_status")
         .eq("id", id)
         .single();
 
@@ -372,7 +452,7 @@ export function EventDetails() {
         return;
       }
 
-      if (!canSurfaceSource((eventData as EventRow | null)?.event_source)) {
+      if (!isEventVisible(eventData as EventRow | null)) {
         toast.error("Event unavailable");
         setEvent(null);
         setLoadingEvent(false);
@@ -412,7 +492,7 @@ export function EventDetails() {
 
     if (!session) {
       toast.error("Sign in to RSVP");
-      navigate("/login");
+      navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`);
       return;
     }
 
@@ -664,10 +744,43 @@ export function EventDetails() {
   return (
     <div className="bg-black min-h-screen pb-40 text-white">
       <div className="relative h-72">
-        {eventImage ? (
-          <img src={eventImage} alt={event.title} className="w-full h-full object-cover" />
+        {eventImage && heroImageOk ? (
+          <>
+            {!heroImageLoaded ? (
+              <div className="absolute inset-0 animate-pulse bg-zinc-900/80" />
+            ) : null}
+            <img
+              src={eventImage}
+              alt={event.title}
+              className={`w-full h-full object-cover transition duration-300 ${
+                heroImageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+              onLoad={() => setHeroImageLoaded(true)}
+              onError={() => setHeroImageOk(false)}
+            />
+          </>
         ) : (
-          <div className="w-full h-full bg-zinc-900" />
+          <div className="relative h-full w-full overflow-hidden" style={{ background: sourceAccent }}>
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
+            <div className="absolute -left-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -bottom-20 right-0 h-48 w-48 rounded-full bg-black/35 blur-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
+            <div className="relative flex h-full flex-col justify-between p-5">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/85">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {isImportedEvent ? `${sourceName} import` : "Whozin event"}
+              </div>
+              <div className="max-w-[80%]">
+                <div className="text-3xl font-bold leading-tight text-white line-clamp-3">{event.title}</div>
+                <div className="mt-2 text-sm text-white/75">
+                  {event.venue_name ?? event.location ?? event.city ?? "Bay Area"}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
         <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
@@ -677,16 +790,37 @@ export function EventDetails() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div className="px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-xs font-semibold">
-            {totalGoing} going
+          <div className="flex items-center gap-2">
+            {moveSignal ? <TheMoveBadge signal={moveSignal} compact /> : null}
+            <div className="px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-xs font-semibold">
+              {totalGoing} going
+            </div>
           </div>
         </div>
       </div>
 
       <div className="px-5 -mt-10 relative">
+        {moveSignal ? (
+          <div className="mb-3">
+            <TheMoveBadge signal={moveSignal} showSecondary />
+          </div>
+        ) : null}
         <h1 className="text-3xl font-bold mb-2 leading-none drop-shadow-xl">{event.title}</h1>
 
         <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/45 p-4">
+          {moveSignal ? (
+            <div className="mb-4 rounded-2xl border border-fuchsia-400/15 bg-white/[0.03] p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-300">
+                {moveSignal.secondary}
+              </div>
+              <div className="mt-1 text-sm text-zinc-200">{moveSignal.explainer}</div>
+              <div className="mt-1 text-xs text-zinc-500">
+                {friendsGoing.length > 0
+                  ? "Trending with your circle."
+                  : "This is where the night has the cleanest momentum signal."}
+              </div>
+            </div>
+          ) : null}
           <AvatarStack
             urls={isGoing ? allVisibleAvatars : friendAvatarUrls}
             total={Math.max(
@@ -709,6 +843,144 @@ export function EventDetails() {
             {isGoing ? "You unlocked attendee visibility." : "RSVP to see everyone"}
           </div>
         </div>
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/45 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                {isGoing ? "Bring your people" : "Fastest way to decide"}
+              </div>
+              <div className="mt-1 text-base font-semibold text-white">
+                {isGoing
+                  ? "Send this to one friend and see if it turns into the move."
+                  : "RSVP once and Whozin starts working harder for you."}
+              </div>
+              <div className="mt-1 text-sm text-zinc-400">
+                {isGoing
+                  ? "One clean share right now is usually enough to get the night moving."
+                  : "You will unlock the full attendee view and make your next share much more credible."}
+              </div>
+            </div>
+            {onboardingMode ? (
+              <div className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold text-fuchsia-100">
+                First-session focus
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {isGoing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleShareInvite()}
+                  disabled={creatingInviteLink || featureFlags.killSwitchInvites}
+                  className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Share with one friend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyInvite()}
+                  disabled={creatingInviteLink || featureFlags.killSwitchInvites}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/10 disabled:opacity-60"
+                >
+                  Copy link
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleToggleGoing()}
+                disabled={working || featureFlags.killSwitchRsvpWrites}
+                className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                RSVP and unlock the crowd
+              </button>
+            )}
+
+            {officialUrl ? (
+              <a
+                href={officialUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/10"
+              >
+                Official listing
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            ) : null}
+          </div>
+        </div>
+
+        {isImportedEvent ? (
+          <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/45 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
+                  Source Trust
+                </div>
+                <div className="mt-1 text-base font-semibold text-white">
+                  Imported from {sourceName}
+                </div>
+                <div className="mt-1 text-sm text-zinc-400">
+                  {event.ticket_url
+                    ? "Direct ticket link attached."
+                    : "Listing imported from a live nightlife source and held for review inside Whozin."}
+                </div>
+              </div>
+              <div className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
+                Source checked
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Venue</div>
+                <div className="mt-1 text-sm font-semibold text-white">
+                  {event.venue_name ?? "Venue pending"}
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">City</div>
+                <div className="mt-1 text-sm font-semibold text-white">
+                  {event.city ?? event.location ?? "Bay Area"}
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Ticket status</div>
+                <div className="mt-1 text-sm font-semibold text-white">
+                  {event.ticket_url ? "Live link ready" : "Link pending"}
+                </div>
+              </div>
+            </div>
+
+            {officialUrl ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a
+                  href={officialUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15"
+                >
+                  Official listing
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                {event.ticket_url && event.external_url && event.ticket_url !== event.external_url ? (
+                  <a
+                    href={event.external_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5"
+                  >
+                    Source page
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex gap-4 my-6">
           <div className="flex-1 bg-zinc-900/50 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
@@ -771,7 +1043,9 @@ export function EventDetails() {
             </div>
           ) : (
             <div className="text-center py-6 bg-zinc-900/30 rounded-2xl border border-white/5 border-dashed">
-              <p className="text-sm text-zinc-500">No friends visible for this event yet.</p>
+              <p className="text-sm text-zinc-500">
+                No friends here yet. Send it to one friend and see if they bite.
+              </p>
             </div>
           )}
         </div>
@@ -819,16 +1093,18 @@ export function EventDetails() {
             </div>
           ) : (
             <div className="text-center py-6 bg-zinc-900/30 rounded-2xl border border-white/5 border-dashed">
-              <p className="text-sm text-zinc-500">No other visible attendees yet.</p>
+              <p className="text-sm text-zinc-500">
+                Crowd is still forming. You could be the start of it.
+              </p>
             </div>
           )}
         </div>
 
         {showInvitePrompt ? (
           <div className="mb-8 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
-            <div className="text-sm font-semibold">Invite your friends</div>
+            <div className="text-sm font-semibold">Send this to one friend and see if it becomes the move?</div>
             <div className="text-xs text-zinc-400 mt-1">
-              I'm going to {event.title} on Whozin. Let your crew know.
+              I'm thinking {event.title} might be the move. Send it to the friend most likely to say yes.
             </div>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
@@ -845,7 +1121,7 @@ export function EventDetails() {
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
               >
-                Share
+                Share now
               </button>
               <button
                 type="button"

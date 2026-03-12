@@ -1,0 +1,8 @@
+[functions.kpi-refresh]
+verify_jwt = false
+
+[functions.move-refresh]
+verify_jwt = false
+
+[functions.sync-bay-area-events]
+verify_jwt = false

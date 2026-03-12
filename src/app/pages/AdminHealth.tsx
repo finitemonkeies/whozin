@@ -11,6 +11,33 @@ type CheckResult = {
   detail: string;
 };
 
+type SyncHealthSource = {
+  source: string;
+  total: number;
+  upcoming: number;
+  with_image: number;
+  with_ticket: number;
+  next_event_at: string | null;
+};
+
+type SyncHealthData = {
+  job: {
+    job_id: number;
+    job_name: string;
+    schedule: string;
+    active: boolean;
+  } | null;
+  last_run: {
+    status: string | null;
+    return_message: string | null;
+    start_time: string | null;
+    end_time: string | null;
+  } | null;
+  upcoming_total: number;
+  move_scored_upcoming: number;
+  sources: SyncHealthSource[];
+};
+
 function statusChip(ok: boolean) {
   return ok
     ? "inline-flex items-center rounded-full bg-green-500/20 border border-green-500/40 px-2 py-0.5 text-xs text-green-300"
@@ -38,6 +65,8 @@ export default function AdminHealth() {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportDebug, setExportDebug] = useState<string>("");
+  const [syncHealth, setSyncHealth] = useState<SyncHealthData | null>(null);
+  const [loadingSyncHealth, setLoadingSyncHealth] = useState(false);
 
   const deriveProjectRef = (url?: string): string => {
     if (!url) return "unknown";
@@ -61,6 +90,33 @@ export default function AdminHealth() {
     }),
     []
   );
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "N/A";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "N/A";
+    return parsed.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const loadSyncHealth = async () => {
+    setLoadingSyncHealth(true);
+    try {
+      const { data, error } = await supabase.rpc("get_admin_sync_health");
+      if (error) throw error;
+      setSyncHealth((data ?? null) as SyncHealthData | null);
+    } catch (e: any) {
+      console.error("Failed loading sync health:", e);
+      toast.error(e?.message ?? "Failed to load sync health");
+      setSyncHealth(null);
+    } finally {
+      setLoadingSyncHealth(false);
+    }
+  };
 
   const runChecks = async () => {
     setRefreshing(true);
@@ -245,7 +301,7 @@ export default function AdminHealth() {
       setAllowed(ok);
       setLoading(false);
       if (ok) {
-        await runChecks();
+        await Promise.all([runChecks(), loadSyncHealth()]);
       }
     };
     void init();
@@ -279,6 +335,13 @@ export default function AdminHealth() {
             Back to Admin
           </Link>
           <button
+            onClick={() => void loadSyncHealth()}
+            disabled={loadingSyncHealth}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+          >
+            {loadingSyncHealth ? "Loading sync..." : "Reload sync"}
+          </button>
+          <button
             onClick={() => void exportKpiCsv()}
             disabled={exporting}
             className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-60"
@@ -305,6 +368,96 @@ export default function AdminHealth() {
             <div className="text-xs text-zinc-400 mt-2">{r.detail}</div>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="text-sm font-semibold">Bay Area Sync Health</div>
+            <div className="text-xs text-zinc-500">
+              Scheduler state, latest cron run, and imported-source coverage.
+            </div>
+          </div>
+          {syncHealth?.job ? (
+            <span className={statusChip(!!syncHealth.job.active)}>
+              {syncHealth.job.active ? "SCHEDULED" : "PAUSED"}
+            </span>
+          ) : (
+            <span className={statusChip(false)}>MISSING</span>
+          )}
+        </div>
+
+        {syncHealth ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Cron</div>
+                <div className="text-lg font-semibold">{syncHealth.job?.schedule ?? "Not set"}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Last run</div>
+                <div className="text-lg font-semibold">{formatDateTime(syncHealth.last_run?.start_time)}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Last status</div>
+                <div className="text-lg font-semibold">{syncHealth.last_run?.status ?? "No runs yet"}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Move-scored upcoming</div>
+                <div className="text-lg font-semibold">
+                  {syncHealth.move_scored_upcoming}/{syncHealth.upcoming_total}
+                </div>
+              </div>
+            </div>
+
+            {syncHealth.last_run?.return_message ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3 mb-4">
+                <div className="text-xs text-zinc-400 mb-1">Last run detail</div>
+                <div className="text-sm text-zinc-300 break-words">{syncHealth.last_run.return_message}</div>
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto">
+              <div className="text-xs text-zinc-400 mb-2">Source Coverage</div>
+              {syncHealth.sources.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="text-zinc-500">
+                    <tr>
+                      <th className="text-left pb-2 pr-3">Source</th>
+                      <th className="text-right pb-2 pr-3">Upcoming</th>
+                      <th className="text-right pb-2 pr-3">Total</th>
+                      <th className="text-right pb-2 pr-3">Images</th>
+                      <th className="text-right pb-2 pr-3">Tickets</th>
+                      <th className="text-right pb-2">Next event</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {syncHealth.sources.map((row) => (
+                      <tr key={row.source} className="border-t border-white/5">
+                        <td className="py-2 pr-3 text-zinc-300">{row.source}</td>
+                        <td className="py-2 pr-3 text-right">{row.upcoming}</td>
+                        <td className="py-2 pr-3 text-right">{row.total}</td>
+                        <td className="py-2 pr-3 text-right">
+                          {row.total > 0 ? `${Math.round((row.with_image / row.total) * 100)}%` : "0%"}
+                        </td>
+                        <td className="py-2 pr-3 text-right">
+                          {row.total > 0 ? `${Math.round((row.with_ticket / row.total) * 100)}%` : "0%"}
+                        </td>
+                        <td className="py-2 text-right">{formatDateTime(row.next_event_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-xs text-zinc-500">No source data yet.</div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingSyncHealth ? "Loading sync health..." : "No sync health data available yet."}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4">

@@ -6,6 +6,7 @@ import { formatEventDateTimeRange, isEventPast } from "@/lib/eventDates";
 import { isAllowedAdminEmail } from "@/lib/adminAccess";
 import { createReferralInviteLink } from "@/lib/referrals";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { sourceLabel } from "@/lib/eventVisibility";
 
 type EventRow = {
   id: string;
@@ -15,6 +16,11 @@ type EventRow = {
   event_end_date: string | null;
   image_url: string | null;
   description: string | null;
+  event_source?: string | null;
+  moderation_status?: string | null;
+  moderation_note?: string | null;
+  ticket_url?: string | null;
+  external_url?: string | null;
 };
 
 type FormState = {
@@ -25,6 +31,8 @@ type FormState = {
   event_end_date: string; // datetime-local value
   image_url: string;
   description: string;
+  moderation_status: "approved" | "quarantined";
+  moderation_note: string;
 };
 
 type GrowthStats = {
@@ -48,6 +56,32 @@ type TopInviter = {
   invites: number;
 };
 
+type DailyKpiRow = {
+  metric_date: string;
+  new_users: number;
+  active_users: number;
+  rsvps: number;
+  friend_adds: number;
+  events_happening: number;
+  activated_new_users: number;
+  activation_rate_pct: number;
+  d1_retained_users: number;
+  d1_eligible_users: number;
+  d1_retention_pct: number;
+  event_detail_views: number;
+  invite_sent: number;
+  invite_opened: number;
+  invite_signup_completed: number;
+  invite_rsvp_completed: number;
+};
+
+type DailyRsvpSourceRow = {
+  metric_date: string;
+  source: string;
+  rsvp_count: number;
+  pct_of_day: number;
+};
+
 function toDatetimeLocal(value: string | null) {
   if (!value) return "";
   const d = new Date(value);
@@ -60,6 +94,15 @@ function toDatetimeLocal(value: string | null) {
   const hh = pad(d.getHours());
   const min = pad(d.getMinutes());
   return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function chicagoDay(value: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
 }
 
 export default function Admin() {
@@ -78,6 +121,10 @@ export default function Admin() {
   const [growthStats, setGrowthStats] = useState<GrowthStats | null>(null);
   const [growthBySource, setGrowthBySource] = useState<SourceStat[]>([]);
   const [topInviters, setTopInviters] = useState<TopInviter[]>([]);
+  const [loadingDailyKpis, setLoadingDailyKpis] = useState(false);
+  const [refreshingDailyKpis, setRefreshingDailyKpis] = useState(false);
+  const [dailyKpis, setDailyKpis] = useState<DailyKpiRow[]>([]);
+  const [latestRsvpSources, setLatestRsvpSources] = useState<DailyRsvpSourceRow[]>([]);
   const [showUpcomingEvents, setShowUpcomingEvents] = useState(false);
   const [showPastEvents, setShowPastEvents] = useState(false);
 
@@ -89,6 +136,8 @@ export default function Admin() {
     event_end_date: "",
     image_url: "",
     description: "",
+    moderation_status: "approved",
+    moderation_note: "",
   });
 
   const allowedEmails = useMemo(() => {
@@ -106,6 +155,7 @@ export default function Admin() {
   }, [events]);
 
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const latestDailyKpi = dailyKpis[0] ?? null;
 
   const resetForm = () => {
     setForm({
@@ -116,6 +166,8 @@ export default function Admin() {
       event_end_date: "",
       image_url: "",
       description: "",
+      moderation_status: "approved",
+      moderation_note: "",
     });
   };
 
@@ -172,7 +224,7 @@ export default function Admin() {
 
     const { data, error } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,description")
+      .select("id,title,location,event_date,event_end_date,image_url,description,event_source,moderation_status,moderation_note,ticket_url,external_url")
       .order("event_date", { ascending: true });
 
     if (error) {
@@ -282,6 +334,92 @@ export default function Admin() {
     }
   };
 
+  const loadDailyKpis = async () => {
+    setLoadingDailyKpis(true);
+    try {
+      const [{ data: metrics, error: metricsErr }, { data: sources, error: sourcesErr }] = await Promise.all([
+        supabase
+          .from("daily_kpi_metrics")
+          .select(
+            "metric_date,new_users,active_users,rsvps,friend_adds,events_happening,activated_new_users,activation_rate_pct,d1_retained_users,d1_eligible_users,d1_retention_pct,event_detail_views,invite_sent,invite_opened,invite_signup_completed,invite_rsvp_completed"
+          )
+          .order("metric_date", { ascending: false })
+          .limit(14),
+        supabase
+          .from("daily_kpi_rsvp_sources")
+          .select("metric_date,source,rsvp_count,pct_of_day")
+          .order("metric_date", { ascending: false })
+          .limit(32),
+      ]);
+
+      if (metricsErr) throw metricsErr;
+      if (sourcesErr) throw sourcesErr;
+
+      const metricRows = ((metrics ?? []) as DailyKpiRow[]).sort((a, b) => b.metric_date.localeCompare(a.metric_date));
+      setDailyKpis(metricRows);
+
+      const latestMetricDate = metricRows[0]?.metric_date ?? null;
+      const sourceRows = (sources ?? []) as DailyRsvpSourceRow[];
+      setLatestRsvpSources(
+        latestMetricDate
+          ? sourceRows
+              .filter((row) => row.metric_date === latestMetricDate)
+              .sort((a, b) => b.rsvp_count - a.rsvp_count)
+          : []
+      );
+    } catch (err: any) {
+      console.error("Failed loading daily KPI metrics:", err);
+      toast.error(err?.message ?? "Failed to load daily KPI metrics");
+      setDailyKpis([]);
+      setLatestRsvpSources([]);
+    } finally {
+      setLoadingDailyKpis(false);
+    }
+  };
+
+  const refreshDailyKpis = async () => {
+    setRefreshingDailyKpis(true);
+    try {
+      const startDate = chicagoDay(new Date(Date.now() - 35 * 24 * 60 * 60 * 1000));
+      const endDate = chicagoDay(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const {
+        data: { session },
+        error: sessionErr,
+      } = await supabase.auth.getSession();
+      if (sessionErr || !session?.access_token) {
+        throw new Error(sessionErr?.message ?? "No active session for KPI refresh");
+      }
+
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kpi-refresh`;
+      const res = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          start_date: startDate,
+          end_date: endDate,
+          tz: "America/Chicago",
+        }),
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.message ?? payload?.error ?? `KPI refresh failed (${res.status})`);
+      }
+
+      await loadDailyKpis();
+      toast.success("Daily KPI metrics refreshed");
+    } catch (err: any) {
+      console.error("Failed refreshing daily KPI metrics:", err);
+      toast.error(err?.message ?? "Failed to refresh daily KPI metrics");
+    } finally {
+      setRefreshingDailyKpis(false);
+    }
+  };
+
   const copyTrackedInviteLink = async () => {
     if (!form.id) {
       toast.error("Select an event first");
@@ -323,7 +461,7 @@ export default function Admin() {
       setLoading(false);
 
       if (ok) {
-        await Promise.all([loadEvents(), loadGrowthMetrics()]);
+        await Promise.all([loadEvents(), loadGrowthMetrics(), loadDailyKpis()]);
       }
     };
 
@@ -339,6 +477,8 @@ export default function Admin() {
       event_end_date: toDatetimeLocal(e.event_end_date),
       image_url: e.image_url ?? "",
       description: e.description ?? "",
+      moderation_status: e.moderation_status === "quarantined" ? "quarantined" : "approved",
+      moderation_note: e.moderation_note ?? "",
     });
   };
 
@@ -377,6 +517,8 @@ export default function Admin() {
       event_end_date: eventEndDateIso,
       image_url: form.image_url.trim() || null,
       description: form.description.trim() || null,
+      moderation_status: form.moderation_status,
+      moderation_note: form.moderation_note.trim() || null,
     };
 
     try {
@@ -430,6 +572,41 @@ export default function Admin() {
     } catch (err: any) {
       console.error("Delete failed:", err);
       toast.error(err?.message ?? "Failed to delete event");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const setModerationState = async (
+    eventId: string,
+    status: "approved" | "quarantined",
+    note?: string | null
+  ) => {
+    if (!isAllowed) return;
+    setWorking(true);
+    try {
+      const { error } = await supabase
+        .from("events")
+        .update({
+          moderation_status: status,
+          moderation_note: note?.trim() || null,
+        })
+        .eq("id", eventId);
+      if (error) throw error;
+
+      if (form.id === eventId) {
+        setForm((prev) => ({
+          ...prev,
+          moderation_status: status,
+          moderation_note: note?.trim() || "",
+        }));
+      }
+
+      await loadEvents();
+      toast.success(status === "quarantined" ? "Event quarantined" : "Event restored");
+    } catch (err: any) {
+      console.error("Moderation update failed:", err);
+      toast.error(err?.message ?? "Failed to update moderation state");
     } finally {
       setWorking(false);
     }
@@ -541,6 +718,13 @@ export default function Admin() {
             {loadingGrowth ? "Refreshing..." : "Refresh Growth"}
           </button>
           <button
+            onClick={() => void refreshDailyKpis()}
+            disabled={refreshingDailyKpis}
+            className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-60"
+          >
+            {refreshingDailyKpis ? "Refreshing KPIs..." : "Refresh Daily KPIs"}
+          </button>
+          <button
             onClick={resetForm}
             className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
           >
@@ -628,6 +812,99 @@ export default function Admin() {
         )}
       </div>
 
+      <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-sm font-semibold">Daily KPI Trends</div>
+            <div className="text-xs text-zinc-500">Persisted SQL aggregates from `daily_kpi_metrics`.</div>
+          </div>
+          <button
+            onClick={() => void loadDailyKpis()}
+            disabled={loadingDailyKpis}
+            className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+          >
+            {loadingDailyKpis ? "Loading..." : "Reload"}
+          </button>
+        </div>
+
+        {latestDailyKpi ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Latest day</div>
+                <div className="text-xl font-semibold">{latestDailyKpi.metric_date}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Active users</div>
+                <div className="text-xl font-semibold">{latestDailyKpi.active_users}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">RSVPs</div>
+                <div className="text-xl font-semibold">{latestDailyKpi.rsvps}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Activation rate</div>
+                <div className="text-xl font-semibold">{Number(latestDailyKpi.activation_rate_pct ?? 0).toFixed(1)}%</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto">
+                <div className="text-xs text-zinc-400 mb-2">Last 14 Full Days</div>
+                <table className="w-full text-sm">
+                  <thead className="text-zinc-500">
+                    <tr>
+                      <th className="text-left pb-2 pr-3">Day</th>
+                      <th className="text-right pb-2 pr-3">Active</th>
+                      <th className="text-right pb-2 pr-3">RSVPs</th>
+                      <th className="text-right pb-2 pr-3">Friends</th>
+                      <th className="text-right pb-2">Activation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyKpis.map((row) => (
+                      <tr key={row.metric_date} className="border-t border-white/5">
+                        <td className="py-2 pr-3 text-zinc-300">{row.metric_date}</td>
+                        <td className="py-2 pr-3 text-right">{row.active_users}</td>
+                        <td className="py-2 pr-3 text-right">{row.rsvps}</td>
+                        <td className="py-2 pr-3 text-right">{row.friend_adds}</td>
+                        <td className="py-2 text-right">{Number(row.activation_rate_pct ?? 0).toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400 mb-2">Latest RSVP Source Mix</div>
+                {latestRsvpSources.length === 0 ? (
+                  <div className="text-xs text-zinc-500">No persisted RSVP source data yet.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {latestRsvpSources.map((row) => (
+                      <div key={`${row.metric_date}-${row.source}`} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">
+                          {row.source} <span className="text-zinc-500">({row.metric_date})</span>
+                        </span>
+                        <span className="text-zinc-100 font-medium">
+                          {row.rsvp_count} <span className="text-zinc-500">({Number(row.pct_of_day ?? 0).toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingDailyKpis
+              ? "Loading daily KPI metrics..."
+              : "No persisted daily KPIs yet. Run the SQL migration, then use Refresh Daily KPIs or the ops:kpi-refresh script."}
+          </div>
+        )}
+      </div>
+
       {/* Event lists */}
       <div className="mb-8">
         <button
@@ -660,7 +937,19 @@ export default function Admin() {
                       : "bg-zinc-900/40 border-white/10 hover:border-white/20"
                   }`}
                 >
-                  <div className="font-semibold">{e.title}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold">{e.title}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-zinc-400">
+                        {sourceLabel(e.event_source)}
+                      </span>
+                      {e.moderation_status === "quarantined" ? (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-amber-200">
+                          Quarantined
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                   <div className="text-xs text-zinc-400 mt-1">
                     {formatEventDateTimeRange(e)}
                     {" - "}
@@ -702,7 +991,19 @@ export default function Admin() {
                       : "bg-zinc-900/30 border-white/10 hover:border-white/20"
                   }`}
                 >
-                  <div className="font-semibold">{e.title}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-semibold">{e.title}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-zinc-400">
+                        {sourceLabel(e.event_source)}
+                      </span>
+                      {e.moderation_status === "quarantined" ? (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-amber-200">
+                          Quarantined
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                   <div className="text-xs text-zinc-400 mt-1">
                     {formatEventDateTimeRange(e)}
                     {" - "}
@@ -808,6 +1109,65 @@ export default function Admin() {
               placeholder="Doors at 8. Support: …"
             />
           </div>
+
+          <div>
+            <div className="text-sm text-zinc-400 mb-1">Moderation state</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleChange("moderation_status", "approved")}
+                className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                  form.moderation_status === "approved"
+                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                    : "border-white/10 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                Approved
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChange("moderation_status", "quarantined")}
+                className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                  form.moderation_status === "quarantined"
+                    ? "border-amber-400/40 bg-amber-500/15 text-amber-200"
+                    : "border-white/10 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                }`}
+              >
+                Quarantined
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm text-zinc-400 mb-1">Moderation note</div>
+            <textarea
+              value={form.moderation_note}
+              onChange={(e) => handleChange("moderation_note", e.target.value)}
+              className="w-full min-h-[90px] bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none"
+              placeholder="Why this should stay hidden or be reviewed."
+            />
+          </div>
+
+          {form.id ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void setModerationState(form.id!, "quarantined", form.moderation_note)}
+                disabled={working}
+                className="w-full px-4 py-3 rounded-2xl font-semibold bg-amber-500/15 border border-amber-400/30 text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+              >
+                Quarantine Event
+              </button>
+              <button
+                type="button"
+                onClick={() => void setModerationState(form.id!, "approved", form.moderation_note)}
+                disabled={working}
+                className="w-full px-4 py-3 rounded-2xl font-semibold bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
+              >
+                Restore Event
+              </button>
+            </div>
+          ) : null}
 
           {form.id ? (
             <button

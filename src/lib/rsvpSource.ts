@@ -1,7 +1,9 @@
 const ALLOWED_RSVP_SOURCES = new Set([
   "home",
+  "home_the_move",
   "event_details",
   "explore",
+  "explore_the_move",
   "profile",
   "feed_friend",
   "share_link",

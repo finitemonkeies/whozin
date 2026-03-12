@@ -1,12 +1,16 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Settings, Share2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { createReferralInviteLink } from "@/lib/referrals";
 import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
+import { isEventVisible } from "@/lib/eventVisibility";
+import { shareInviteLink } from "@/lib/inviteSharing";
+import { featureFlags } from "@/lib/featureFlags";
+import { NotificationsPanel } from "@/app/components/NotificationsPanel";
 
 type ProfileRow = {
   id: string;
@@ -22,6 +26,7 @@ type EventRow = {
   event_end_date: string | null;
   image_url: string | null;
   event_source?: string | null;
+  moderation_status?: string | null;
 };
 
 function formatDateTime(value?: string | null) {
@@ -54,17 +59,6 @@ function initials(title?: string | null) {
   return (a + b).toUpperCase();
 }
 
-const surfaceIngestedSources =
-  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
-const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
-
-function canSurfaceSource(source: string | null | undefined): boolean {
-  const s = (source ?? "").trim().toLowerCase();
-  if (!s) return true;
-  if (!hiddenSources.has(s)) return true;
-  return surfaceIngestedSources;
-}
-
 function Stat({
   value,
   label,
@@ -91,6 +85,7 @@ function Stat({
 }
 
 export function Profile() {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -103,6 +98,10 @@ export function Profile() {
   const handle = useMemo(() => (profile?.username ? `@${profile.username}` : "@unknown"), [
     profile?.username,
   ]);
+  const onboardingMode = useMemo(
+    () => new URLSearchParams(location.search).get("onboarding") === "1",
+    [location.search]
+  );
 
   const avatarUrl = useMemo(() => {
     if (!profile?.avatar_url) return "";
@@ -183,7 +182,7 @@ export function Profile() {
 
     const { data: events, error: eventsErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,event_source")
+      .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
       .in("id", eventIds)
       .order("event_date", { ascending: true });
 
@@ -195,7 +194,7 @@ export function Profile() {
       return;
     }
 
-    const rows = ((events ?? []) as EventRow[]).filter((e) => canSurfaceSource(e.event_source));
+    const rows = ((events ?? []) as EventRow[]).filter((e) => isEventVisible(e));
     const nowTs = Date.now();
     setUpcoming(rows.filter((e) => isEventUpcomingOrOngoing(e, nowTs)));
     setPastEvents(
@@ -213,6 +212,31 @@ export function Profile() {
   useEffect(() => {
     void load();
   }, []);
+
+  const handleShareUpcoming = async (eventId: string, eventTitle: string) => {
+    if (featureFlags.killSwitchInvites) {
+      toast.error("Invites are temporarily unavailable");
+      return;
+    }
+
+    track("invite_cta_clicked", {
+      source: "profile_share",
+      placement: "profile_upcoming",
+      eventId,
+    });
+
+    try {
+      const channel = await shareInviteLink({
+        eventId,
+        eventTitle,
+        source: "profile_share",
+      });
+      if (channel === "share_canceled") return;
+      toast.success(channel === "copy_fallback" ? "Invite link copied" : "Invite shared");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not share invite");
+    }
+  };
 
   const coverStyle = {
     background:
@@ -328,12 +352,32 @@ export function Profile() {
               }}
               className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
             >
-              Copy invite
+              Copy invite for one friend
             </button>
           </div>
+
+          {onboardingMode ? (
+            <div className="mt-4 w-full max-w-md rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3 text-left">
+              <div className="text-sm font-semibold text-white">Final step: send one invite</div>
+              <div className="mt-1 text-xs text-zinc-300">
+                One clean share is enough to start the loop. Send it to the one friend most likely to say yes.
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Divider */}
+        <div className="mt-10 h-px bg-white/10" />
+
+        <div className="mt-8">
+          <NotificationsPanel
+            compact
+            title="Updates"
+            subtitle="Your personal inbox for friend movement, momentum, and one-friend nudges."
+            limit={6}
+          />
+        </div>
+
         <div className="mt-10 h-px bg-white/10" />
 
         {/* Upcoming */}
@@ -346,7 +390,7 @@ export function Profile() {
             <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-5 text-zinc-400">
               No upcoming events yet.
               <div className="text-sm text-zinc-500 mt-1">
-                RSVP to an event and it will show up here.
+                RSVP to one good event and it will show up here.
               </div>
 
               <div className="mt-4">
@@ -354,7 +398,7 @@ export function Profile() {
                   to="/"
                   className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-white"
                 >
-                  Browse events
+                  Find your first event
                 </Link>
               </div>
             </div>
@@ -400,8 +444,22 @@ export function Profile() {
                           {e.location ? ` - ${e.location}` : ""}
                         </div>
 
-                        <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 border border-emerald-500/25 text-emerald-200">
-                          Confirmed
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 border border-emerald-500/25 text-emerald-200">
+                            Confirmed
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(eventClick) => {
+                              eventClick.preventDefault();
+                              eventClick.stopPropagation();
+                              void handleShareUpcoming(e.id, e.title);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-200 hover:bg-white/10"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                            Share with one friend
+                          </button>
                         </div>
                       </div>
                     </div>

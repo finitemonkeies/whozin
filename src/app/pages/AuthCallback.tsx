@@ -6,6 +6,7 @@ import { track, trackError } from "@/lib/analytics";
 import { featureFlags } from "@/lib/featureFlags";
 import { syncSpotifyTasteFromSession } from "@/lib/spotify";
 import { toast } from "sonner";
+import { resolveFirstSessionRoute } from "@/lib/firstSessionRoute";
 
 /**
  * Central OAuth landing page.
@@ -50,8 +51,9 @@ export default function AuthCallback() {
               localStorage.getItem("whozin_post_auth_redirect")
             );
             localStorage.removeItem("whozin_post_auth_redirect");
-            track("auth_callback_success", { redirect });
-            navigate(redirect);
+            const nextRoute = await resolveFirstSessionRoute(redirect);
+            track("auth_callback_success", { redirect: nextRoute });
+            navigate(nextRoute);
             return;
           }
           await new Promise((r) => setTimeout(r, 200));

@@ -8,6 +8,8 @@ type ProductEventName =
   | "explore_feed_loaded"
   | "explore_buy_ticket_click"
   | "explore_rsvp_click"
+  | "the_move_impression"
+  | "the_move_click"
   | "invite_sent"
   | "invite_link_copied"
   | "invite_link_opened"

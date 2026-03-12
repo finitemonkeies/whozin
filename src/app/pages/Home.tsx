@@ -1,12 +1,19 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Link, useNavigate } from "react-router-dom";
-import { Calendar, MapPin, Ticket, Users } from "lucide-react";
+import { Calendar, MapPin, Share2, Ticket, Users } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
+import { logProductEvent } from "@/lib/productEvents";
 import { isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { featureFlags } from "@/lib/featureFlags";
+import { rankMoveCandidates } from "@/lib/theMove";
+import { TheMoveBadge } from "@/app/components/TheMoveBadge";
+import { MakeTheMoveHero, TheMoveHero } from "@/app/components/TheMoveHero";
+import { ActivationChecklist } from "@/app/components/ActivationChecklist";
+import { shareInviteLink } from "@/lib/inviteSharing";
+import { isEventVisible } from "@/lib/eventVisibility";
 
 type EventRow = {
   id: string;
@@ -16,6 +23,7 @@ type EventRow = {
   event_end_date: string | null;
   image_url: string | null;
   event_source?: string | null;
+  moderation_status?: string | null;
 };
 
 type AttendeeRow = {
@@ -33,17 +41,6 @@ const coverStyle = {
   background:
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
-const surfaceIngestedSources =
-  (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true";
-const hiddenSources = new Set(["ra", "ticketmaster_artist", "ticketmaster_nearby", "eventbrite"]);
-
-function canSurfaceSource(source: string | null | undefined): boolean {
-  const s = (source ?? "").trim().toLowerCase();
-  if (!s) return true;
-  if (!hiddenSources.has(s)) return true;
-  return surfaceIngestedSources;
-}
-
 function formatDateRange(startValue?: string | null, endValue?: string | null) {
   if (!startValue) return "Date TBD";
   const start = new Date(startValue);
@@ -161,6 +158,7 @@ export function Home() {
   const [othersCounts, setOthersCounts] = useState<Record<string, number>>({});
   const [othersAvatarsByEvent, setOthersAvatarsByEvent] = useState<Record<string, string[]>>({});
   const [viewerAvatarByEvent, setViewerAvatarByEvent] = useState<Record<string, string>>({});
+  const [recentCountsByEvent, setRecentCountsByEvent] = useState<Record<string, number>>({});
 
   const [othersAvatarPoolByEvent, setOthersAvatarPoolByEvent] = useState<Record<string, string[]>>({
   });
@@ -173,6 +171,20 @@ export function Home() {
     void load();
   }, []);
 
+  const resetSocialState = () => {
+    setFriendIds(new Set());
+    setMyGoing(new Set());
+    setFriendAvatarsByEvent({});
+    setFriendNamesByEvent({});
+    setRecentFriendCueByEvent({});
+    setFriendCounts({});
+    setOthersCounts({});
+    setOthersAvatarsByEvent({});
+    setViewerAvatarByEvent({});
+    setOthersAvatarPoolByEvent({});
+    setRecentCountsByEvent({});
+  };
+
   const load = async () => {
     setLoading(true);
 
@@ -183,153 +195,219 @@ export function Home() {
     const uid = session?.user?.id ?? null;
     setViewerId(uid);
 
-    const { data: eventData, error: eErr } = await supabase
-      .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,event_source")
-      .order("event_date", { ascending: true });
-
-    if (eErr) {
-      console.error(eErr);
-      toast.error("Failed to load events");
+    if (!uid) {
       setEvents([]);
+      resetSocialState();
       setLoading(false);
       return;
     }
 
     const nowTs = Date.now();
-    const rows = ((eventData ?? []) as EventRow[]).filter(
-      (e) => canSurfaceSource(e.event_source) && isEventUpcomingOrOngoing(e, nowTs)
-    );
-    setEvents(rows);
-
-    if (!uid) {
-      setFriendIds(new Set());
-      setMyGoing(new Set());
-      setFriendAvatarsByEvent({});
-      setFriendNamesByEvent({});
-      setRecentFriendCueByEvent({});
-      setFriendCounts({});
-      setOthersCounts({});
-      setOthersAvatarsByEvent({});
-      setViewerAvatarByEvent({});
-      setOthersAvatarPoolByEvent({});
-      setLoading(false);
-      return;
-    }
-
     const { data: fids, error: fErr } = await supabase.rpc("get_friend_ids");
     if (fErr) console.error(fErr);
     const fset = new Set<string>((fids ?? []) as string[]);
     setFriendIds(fset);
 
-    const { data: attData, error: aErr } = await supabase
-      .from("attendees")
-      .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)");
+    const socialUserIds = uniqKeepOrder([uid, ...Array.from(fset)]);
+    if (socialUserIds.length > 0) {
+      const { data, error } = await supabase
+        .from("attendees")
+        .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
+        .in("user_id", socialUserIds);
 
-    if (aErr) {
-      console.error(aErr);
-      setMyGoing(new Set());
-      setFriendAvatarsByEvent({});
-      setFriendNamesByEvent({});
-      setRecentFriendCueByEvent({});
-      setFriendCounts({});
-      setOthersCounts({});
-      setOthersAvatarsByEvent({});
-      setViewerAvatarByEvent({});
-      setOthersAvatarPoolByEvent({});
+      if (error) {
+        console.error(error);
+        setEvents([]);
+        resetSocialState();
+        setLoading(false);
+        return;
+      }
+
+      const socialAttendees = (data ?? []) as AttendeeRow[];
+      const socialEventIds = uniqKeepOrder(
+        socialAttendees.map((row) => row.event_id).filter(Boolean)
+      );
+
+      if (socialEventIds.length === 0) {
+        setEvents([]);
+        resetSocialState();
+        setFriendIds(fset);
+        setLoading(false);
+        return;
+      }
+
+      const [{ data: eventData, error: eventErr }, { data: eventAttData, error: eventAttErr }] =
+        await Promise.all([
+          supabase
+            .from("events")
+            .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+            .in("id", socialEventIds)
+            .order("event_date", { ascending: true }),
+          supabase
+            .from("attendees")
+            .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
+            .in("event_id", socialEventIds),
+        ]);
+
+      if (eventErr) {
+        console.error(eventErr);
+        toast.error("Failed to load events");
+        setEvents([]);
+        resetSocialState();
+        setLoading(false);
+        return;
+      }
+
+      if (eventAttErr) {
+        console.error(eventAttErr);
+        setEvents([]);
+        resetSocialState();
+        setLoading(false);
+        return;
+      }
+
+      const rows = ((eventData ?? []) as EventRow[]).filter(
+        (e) => isEventVisible(e) && isEventUpcomingOrOngoing(e, nowTs)
+      );
+      const visibleEventIds = new Set(rows.map((row) => row.id));
+      setEvents(rows);
+
+      const attendees = ((eventAttData ?? []) as AttendeeRow[]).filter((row) =>
+        visibleEventIds.has(row.event_id)
+      );
+
+      const mySet = new Set<string>();
+      for (const a of attendees) {
+        if (a.user_id === uid) mySet.add(a.event_id);
+      }
+      setMyGoing(mySet);
+
+      const friendCountsMap: Record<string, number> = {};
+      const friendAvatarsMap: Record<string, string[]> = {};
+      const friendNamesMap: Record<string, string[]> = {};
+      const recentFriendMap: Record<string, string> = {};
+      const othersCountsMap: Record<string, number> = {};
+      const othersAvatarsMap: Record<string, string[]> = {};
+      const othersPoolMap: Record<string, string[]> = {};
+      const viewerAvatarMap: Record<string, string> = {};
+      const recentCountsMap: Record<string, number> = {};
+
+      const friendTmp: Record<string, string[]> = {};
+      const friendNameTmp: Record<string, string[]> = {};
+      const friendRecentTmp: Record<string, { name: string; createdAt: string }[]> = {};
+      const othersTmp: Record<string, string[]> = {};
+
+      for (const a of attendees) {
+        const eid = a.event_id;
+        if (!eid) continue;
+
+        const isViewer = a.user_id === uid;
+        const isFriend = fset.has(a.user_id);
+        const av = a.profiles?.avatar_url ?? "";
+        const name = displayName(a.profiles);
+
+        if (isFriend) {
+          friendCountsMap[eid] = (friendCountsMap[eid] ?? 0) + 1;
+          if (av) (friendTmp[eid] ||= []).push(av);
+          (friendNameTmp[eid] ||= []).push(name);
+          if (a.created_at) {
+            (friendRecentTmp[eid] ||= []).push({ name, createdAt: a.created_at });
+          }
+          continue;
+        }
+
+        if (!isViewer) {
+          othersCountsMap[eid] = (othersCountsMap[eid] ?? 0) + 1;
+          if (av) (othersTmp[eid] ||= []).push(av);
+        } else if (av) {
+          viewerAvatarMap[eid] = av;
+        }
+
+        if (a.created_at) {
+          const createdAt = new Date(a.created_at).getTime();
+          if (!Number.isNaN(createdAt) && nowTs - createdAt <= 6 * 60 * 60 * 1000) {
+            recentCountsMap[eid] = (recentCountsMap[eid] ?? 0) + 1;
+          }
+        }
+      }
+
+      for (const eid of Object.keys(friendCountsMap)) {
+        friendAvatarsMap[eid] = uniqKeepOrder(friendTmp[eid] ?? []).slice(0, 5);
+        friendNamesMap[eid] = uniqKeepOrder(friendNameTmp[eid] ?? []).slice(0, 8);
+        const recent = (friendRecentTmp[eid] ?? [])
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        if (recent) {
+          const rel = relativeRsvp(recent.createdAt);
+          if (rel) recentFriendMap[eid] = `${recent.name} ${rel}`;
+        }
+      }
+
+      for (const eid of Object.keys(othersCountsMap)) {
+        const pool = uniqKeepOrder(othersTmp[eid] ?? []);
+        othersPoolMap[eid] = pool;
+        if (mySet.has(eid)) othersAvatarsMap[eid] = pool.slice(0, 5);
+      }
+
+      setFriendCounts(friendCountsMap);
+      setFriendAvatarsByEvent(friendAvatarsMap);
+      setFriendNamesByEvent(friendNamesMap);
+      setRecentFriendCueByEvent(recentFriendMap);
+      setOthersCounts(othersCountsMap);
+      setViewerAvatarByEvent(viewerAvatarMap);
+      setOthersAvatarPoolByEvent(othersPoolMap);
+      setOthersAvatarsByEvent(othersAvatarsMap);
+      setRecentCountsByEvent(recentCountsMap);
+
       setLoading(false);
       return;
     }
-
-    const attendees = (attData ?? []) as AttendeeRow[];
-
-    const mySet = new Set<string>();
-    for (const a of attendees) {
-      if (a.user_id === uid) mySet.add(a.event_id);
-    }
-    setMyGoing(mySet);
-
-    const friendCountsMap: Record<string, number> = {};
-    const friendAvatarsMap: Record<string, string[]> = {};
-    const friendNamesMap: Record<string, string[]> = {};
-    const recentFriendMap: Record<string, string> = {};
-    const othersCountsMap: Record<string, number> = {};
-    const othersAvatarsMap: Record<string, string[]> = {};
-    const othersPoolMap: Record<string, string[]> = {};
-    const viewerAvatarMap: Record<string, string> = {};
-
-    const friendTmp: Record<string, string[]> = {};
-    const friendNameTmp: Record<string, string[]> = {};
-    const friendRecentTmp: Record<string, { name: string; createdAt: string }[]> = {};
-    const othersTmp: Record<string, string[]> = {};
-
-    for (const a of attendees) {
-      const eid = a.event_id;
-      if (!eid) continue;
-
-      const isViewer = a.user_id === uid;
-      const isFriend = fset.has(a.user_id);
-      const av = a.profiles?.avatar_url ?? "";
-      const name = displayName(a.profiles);
-
-      if (isFriend) {
-        friendCountsMap[eid] = (friendCountsMap[eid] ?? 0) + 1;
-        if (av) (friendTmp[eid] ||= []).push(av);
-        (friendNameTmp[eid] ||= []).push(name);
-        if (a.created_at) {
-          (friendRecentTmp[eid] ||= []).push({ name, createdAt: a.created_at });
-        }
-        continue;
-      }
-
-      if (!isViewer) {
-        othersCountsMap[eid] = (othersCountsMap[eid] ?? 0) + 1;
-        if (av) (othersTmp[eid] ||= []).push(av);
-      } else if (av) {
-        viewerAvatarMap[eid] = av;
-      }
-    }
-
-    for (const eid of Object.keys(friendCountsMap)) {
-      friendAvatarsMap[eid] = uniqKeepOrder(friendTmp[eid] ?? []).slice(0, 5);
-      friendNamesMap[eid] = uniqKeepOrder(friendNameTmp[eid] ?? []).slice(0, 8);
-      const recent = (friendRecentTmp[eid] ?? [])
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-      if (recent) {
-        const rel = relativeRsvp(recent.createdAt);
-        if (rel) recentFriendMap[eid] = `${recent.name} ${rel}`;
-      }
-    }
-
-    for (const eid of Object.keys(othersCountsMap)) {
-      const pool = uniqKeepOrder(othersTmp[eid] ?? []);
-      othersPoolMap[eid] = pool;
-      if (mySet.has(eid)) othersAvatarsMap[eid] = pool.slice(0, 5);
-    }
-
-    setFriendCounts(friendCountsMap);
-    setFriendAvatarsByEvent(friendAvatarsMap);
-    setFriendNamesByEvent(friendNamesMap);
-    setRecentFriendCueByEvent(recentFriendMap);
-    setOthersCounts(othersCountsMap);
-    setViewerAvatarByEvent(viewerAvatarMap);
-    setOthersAvatarPoolByEvent(othersPoolMap);
-    setOthersAvatarsByEvent(othersAvatarsMap);
-
+    setEvents([]);
+    resetSocialState();
+    setFriendIds(fset);
     setLoading(false);
   };
 
+  const moveRanking = useMemo(
+    () =>
+      rankMoveCandidates(
+        events.map((event) => {
+          const viewerGoing = myGoing.has(event.id) ? 1 : 0;
+          return {
+            id: event.id,
+            title: event.title,
+            startAt: event.event_date,
+            totalRsvps:
+              (friendCounts[event.id] ?? 0) + (othersCounts[event.id] ?? 0) + viewerGoing,
+            friendRsvps: friendCounts[event.id] ?? 0,
+            recentRsvps: recentCountsByEvent[event.id] ?? 0,
+            quality: event.image_url ? 1 : 0.92,
+          };
+        }),
+        "circle"
+      ),
+    [events, friendCounts, myGoing, othersCounts, recentCountsByEvent]
+  );
+
   const feedEvents = useMemo(() => {
     return [...events].sort((a, b) => {
+      const aMove = moveRanking.signalsById[a.id]?.score ?? -999;
+      const bMove = moveRanking.signalsById[b.id]?.score ?? -999;
       const aFriends = friendCounts[a.id] ?? 0;
       const bFriends = friendCounts[b.id] ?? 0;
-      if (aFriends !== bFriends) return bFriends - aFriends;
       const aTs = new Date(a.event_date ?? 0).getTime();
       const bTs = new Date(b.event_date ?? 0).getTime();
-      return aTs - bTs;
+      if (aMove !== bMove) return bMove - aMove;
+      if (aFriends !== bFriends) return bFriends - aFriends;
+      if (aTs !== bTs) return aTs - bTs;
+      return (othersCounts[b.id] ?? 0) - (othersCounts[a.id] ?? 0);
     });
-  }, [events, friendCounts]);
+  }, [events, friendCounts, moveRanking.signalsById, othersCounts]);
   const hasAtLeastOneFriend = friendIds.size > 0;
+  const topMoveSignal = moveRanking.topSignal;
+  const topMoveEvent = useMemo(
+    () => (topMoveSignal ? events.find((event) => event.id === topMoveSignal.eventId) ?? null : null),
+    [events, topMoveSignal]
+  );
 
   const applyLocalRsvpChange = (eventId: string, nextGoing: boolean) => {
     setMyGoing((prev) => {
@@ -423,6 +501,31 @@ export function Home() {
     }
   };
 
+  const handleShareInvite = async (eventId: string, eventTitle: string) => {
+    if (featureFlags.killSwitchInvites) {
+      toast.error("Invites are temporarily unavailable");
+      return;
+    }
+
+    track("invite_cta_clicked", {
+      source: "share_link",
+      placement: "home_feed_card",
+      eventId,
+    });
+
+    try {
+      const channel = await shareInviteLink({
+        eventId,
+        eventTitle,
+        source: "share_link",
+      });
+      if (channel === "share_canceled") return;
+      toast.success(channel === "copy_fallback" ? "Invite link copied" : "Invite shared");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not share invite");
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-black text-white p-6">Loading events...</div>;
   }
@@ -442,11 +545,32 @@ export function Home() {
       </div>
 
       <div className="px-5 pt-5 space-y-4">
+        {viewerId ? <ActivationChecklist /> : null}
+
+        {topMoveSignal && topMoveEvent ? (
+          <TheMoveHero
+            eventId={topMoveEvent.id}
+            title={topMoveEvent.title}
+            context="Your circle tonight"
+            meta={topMoveEvent.location ?? "Location TBD"}
+            signal={topMoveSignal}
+            source="home"
+          />
+        ) : (
+          <MakeTheMoveHero
+            title="Nothing has fully broken through yet"
+            body="Your people have not crowned the night yet. Scan what is close, be early, and make the move yourself."
+            ctaLabel="Open Explore"
+            to="/explore"
+            source="home"
+          />
+        )}
+
         {viewerId && !hasAtLeastOneFriend && (
           <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4">
-            <div className="text-sm font-semibold text-zinc-100">Whozin is better with friends</div>
+            <div className="text-sm font-semibold text-zinc-100">Whozin gets sharper with your people</div>
             <div className="mt-1 text-xs text-zinc-400">
-              Add a few friends to unlock stronger social momentum.
+              Add a few friends to sharpen the feed, surface better momentum, and make nights easier to call.
             </div>
             <Link
               to="/friends"
@@ -483,7 +607,26 @@ export function Home() {
             <Link
               key={event.id}
               to={`/event/${event.id}?src=home`}
-              onClick={() => track("event_view", { source: "home_feed", eventId: event.id })}
+              onClick={() => {
+                track("event_view", { source: "home_feed", eventId: event.id });
+                if (moveRanking.signalsById[event.id]) {
+                  track("the_move_click", {
+                    source: "home",
+                    placement: "home_feed_card",
+                    eventId: event.id,
+                    label: moveRanking.signalsById[event.id].label,
+                  });
+                  void logProductEvent({
+                    eventName: "the_move_click",
+                    eventId: event.id,
+                    source: "home",
+                    metadata: {
+                      placement: "home_feed_card",
+                      label: moveRanking.signalsById[event.id].label,
+                    },
+                  });
+                }
+              }}
               className="group block rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
             >
               <div className="p-5">
@@ -522,6 +665,11 @@ export function Home() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
+                        {moveRanking.signalsById[event.id] ? (
+                          <div className="mb-2">
+                            <TheMoveBadge signal={moveRanking.signalsById[event.id]} compact />
+                          </div>
+                        ) : null}
                         <div className="text-[18px] font-semibold leading-tight truncate">{event.title}</div>
                       </div>
 
@@ -554,6 +702,11 @@ export function Home() {
                       {socialLabel ? (
                         <div className="text-sm font-medium text-zinc-100 truncate">{socialLabel}</div>
                       ) : null}
+                      {moveRanking.signalsById[event.id] ? (
+                        <div className="text-xs text-pink-200/85 truncate">
+                          {moveRanking.signalsById[event.id].explainer}
+                        </div>
+                      ) : null}
                       {friendCue ? (
                         <div className="text-xs text-zinc-400 truncate">{friendCue}</div>
                       ) : null}
@@ -564,7 +717,9 @@ export function Home() {
                         <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
                           <div className="inline-flex items-center gap-1.5">
                             <Users className="w-4 h-4 text-zinc-500" />
-                            <span>{totalGoing > 0 ? `🔥 ${totalGoing} going` : "Be first to go"}</span>
+                            <span>
+                              {totalGoing > 0 ? `🔥 ${totalGoing} going` : "Be the one who starts it"}
+                            </span>
                           </div>
                           {!going && totalGoing > 0 ? <span>RSVP to see everyone</span> : null}
                         </div>
@@ -583,8 +738,22 @@ export function Home() {
                         </div>
                       </div>
 
-                      <div className="text-[11px] text-zinc-600 group-hover:text-zinc-500 transition whitespace-nowrap">
-                        View -&gt;
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleShareInvite(event.id, event.title);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-zinc-200 hover:bg-white/10"
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          Share with one friend
+                        </button>
+                        <div className="text-[11px] text-zinc-600 group-hover:text-zinc-500 transition whitespace-nowrap">
+                          View -&gt;
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -596,12 +765,15 @@ export function Home() {
 
         {feedEvents.length === 0 ? (
           <div className="text-center text-zinc-500 mt-12">
-            <div>No upcoming events yet.</div>
+            <div>Your feed is still waiting on your first move.</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Add one friend or RSVP to one event and this starts feeling alive fast.
+            </div>
             <Link
               to="/explore"
               className="inline-flex mt-3 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-sm text-zinc-200 hover:bg-white/15"
             >
-              Explore new events
+              Find tonight's first signal
             </Link>
           </div>
         ) : null}

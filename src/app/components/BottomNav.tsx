@@ -2,15 +2,42 @@ import { Home, User, Search, Users } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import clsx from "clsx";
+import { useEffect, useState } from "react";
+import { getUnreadNotificationCount } from "@/lib/notifications";
 
 export function BottomNav() {
   const location = useLocation();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const count = await getUnreadNotificationCount();
+        if (!cancelled) setUnreadCount(count);
+      } catch {
+        if (!cancelled) setUnreadCount(0);
+      }
+    };
+
+    const onUpdated = () => {
+      void load();
+    };
+
+    void load();
+    window.addEventListener("whozin:notifications-updated", onUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("whozin:notifications-updated", onUpdated);
+    };
+  }, []);
 
   const navItems = [
     { icon: Home, label: "Feed", path: "/" },
     { icon: Search, label: "Explore", path: "/explore" },
     { icon: Users, label: "Friends", path: "/friends" },
-    { icon: User, label: "Profile", path: "/profile" },
+    { icon: User, label: "Profile", path: "/profile", badge: unreadCount },
   ];
 
   if (location.pathname.startsWith("/web")) return null;
@@ -40,6 +67,11 @@ export function BottomNav() {
                   isActive ? "text-pink-500" : "text-zinc-500"
                 )}
               />
+              {item.badge && item.badge > 0 ? (
+                <span className="absolute right-[26%] top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-pink-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {item.badge > 9 ? "9+" : item.badge}
+                </span>
+              ) : null}
 
               <span className={isActive ? "text-white" : "text-zinc-500"}>
                 {item.label}

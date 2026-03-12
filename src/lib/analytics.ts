@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { queueAnalyticsEvent } from "@/lib/monitoring";
 
 type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 type AnalyticsUser = {
@@ -28,6 +29,8 @@ export function track(event: string, props: AnalyticsProps = {}) {
 
     if (w.posthog?.capture) {
       w.posthog.capture(event, props);
+    } else {
+      queueAnalyticsEvent({ type: "track", event, props });
     }
   } catch {
     // Never block product flow on analytics failure.
@@ -42,8 +45,6 @@ export function track(event: string, props: AnalyticsProps = {}) {
 export function identifyAnalyticsUser(user: AnalyticsUser) {
   try {
     const w = window as any;
-    if (!w.posthog?.identify) return;
-
     const props = Object.fromEntries(
       Object.entries({
         email: user.email ?? undefined,
@@ -52,7 +53,12 @@ export function identifyAnalyticsUser(user: AnalyticsUser) {
       }).filter(([, value]) => typeof value === "string" && value.length > 0)
     );
 
-    w.posthog.identify(user.id, props);
+    if (w.posthog?.identify) {
+      w.posthog.identify(user.id, props);
+      return;
+    }
+
+    queueAnalyticsEvent({ type: "identify", userId: user.id, props });
   } catch {
     // Never block product flow on analytics failure.
   }
@@ -61,7 +67,11 @@ export function identifyAnalyticsUser(user: AnalyticsUser) {
 export function resetAnalyticsUser() {
   try {
     const w = window as any;
-    w.posthog?.reset?.();
+    if (w.posthog?.reset) {
+      w.posthog.reset();
+      return;
+    }
+    queueAnalyticsEvent({ type: "reset" });
   } catch {
     // Never block product flow on analytics failure.
   }

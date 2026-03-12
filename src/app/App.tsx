@@ -55,6 +55,35 @@ const DesktopSettings = lazy(() =>
 );
 
 function RouteFallback() {
+  const location = useLocation();
+  const path = location.pathname;
+
+  if (path === "/" || path === "/explore") {
+    return (
+      <div className="min-h-[100svh] bg-black text-white pb-24">
+        <div className="h-48 bg-[radial-gradient(1200px_520px_at_20%_20%,rgba(168,85,247,0.35),transparent_55%),radial-gradient(900px_520px_at_80%_10%,rgba(236,72,153,0.35),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0))]" />
+        <div className="space-y-4 px-5 pt-5">
+          <div className="h-28 rounded-[28px] border border-white/10 bg-zinc-900/60 animate-pulse" />
+          <div className="h-52 rounded-2xl border border-white/10 bg-zinc-900/50 animate-pulse" />
+          <div className="h-52 rounded-2xl border border-white/10 bg-zinc-900/50 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (path.startsWith("/event/")) {
+    return (
+      <div className="min-h-[100svh] bg-black text-white pb-24">
+        <div className="h-72 bg-zinc-900/60 animate-pulse" />
+        <div className="space-y-4 px-5 pt-5">
+          <div className="h-8 w-2/3 rounded-xl bg-zinc-900/60 animate-pulse" />
+          <div className="h-4 w-1/2 rounded-xl bg-zinc-900/50 animate-pulse" />
+          <div className="h-28 rounded-2xl border border-white/10 bg-zinc-900/50 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[100svh] bg-black text-white flex items-center justify-center">
       <div className="text-sm text-white/70">Loading...</div>

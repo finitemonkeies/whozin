@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
@@ -24,6 +25,8 @@ type SuggestedProfile = {
 };
 
 export default function Friends() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [pending, setPending] = useState<FriendRow[]>([]);
@@ -34,6 +37,11 @@ export default function Friends() {
   const [suggestionsHidden, setSuggestionsHidden] = useState(
     localStorage.getItem("whozin_hide_friend_suggestions") === "true"
   );
+  const onboardingMode = useMemo(
+    () => new URLSearchParams(location.search).get("onboarding") === "1",
+    [location.search]
+  );
+  const [friendUnlockMessage, setFriendUnlockMessage] = useState<string | null>(null);
 
   const loadFriends = async (): Promise<{
     acceptedIds: Set<string>;
@@ -187,17 +195,27 @@ export default function Friends() {
     setSuggested((prev) => prev.filter((p) => p.id !== row.id));
 
     if (row.username && loaded?.acceptedIds.has(row.id)) {
-      toast.success(`Added @${row.username}`);
+      const unlockCopy = "Nice. Your feed just got sharper.";
+      setFriendUnlockMessage(unlockCopy);
+      toast.success(`${unlockCopy} @${row.username} is now in your circle.`);
       track("friend_added", { source: "suggested", mode: "accepted" });
       track("friend_add", { source: "suggested", mode: "accepted" });
     } else if (row.username && loaded?.pendingIds.has(row.id)) {
-      toast.success(`Request sent to @${row.username}`);
+      const unlockCopy = "Nice. You started the loop.";
+      setFriendUnlockMessage(unlockCopy);
+      toast.success(`${unlockCopy} Request sent to @${row.username}.`);
       track("friend_added", { source: "suggested", mode: "pending" });
       track("friend_add", { source: "suggested", mode: "pending" });
     } else if (row.username) {
-      toast.success(`Connection updated for @${row.username}`);
+      const unlockCopy = "Connection updated. Your signal just got better.";
+      setFriendUnlockMessage(unlockCopy);
+      toast.success(`${unlockCopy} @${row.username} is in motion.`);
       track("friend_added", { source: "suggested", mode: "unknown" });
       track("friend_add", { source: "suggested", mode: "unknown" });
+    }
+
+    if (onboardingMode) {
+      navigate("/explore?onboarding=1", { replace: true });
     }
   };
 
@@ -218,16 +236,47 @@ export default function Friends() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white px-6 py-8">
+    <div className="min-h-screen bg-black text-white px-5 py-8 pb-[calc(13rem+env(safe-area-inset-bottom))] sm:px-6">
       <h1 className="text-3xl font-bold mb-6">Your Friends</h1>
+
+      {onboardingMode ? (
+        <div className="mb-6 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3">
+          <div className="text-sm font-semibold text-white">Step 1: pull your people in</div>
+          <div className="mt-1 text-xs text-zinc-300">
+            Add at least one friend, then we will send you straight to the best event picks.
+          </div>
+        </div>
+      ) : null}
+
+      {friendUnlockMessage ? (
+        <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
+          <div className="text-sm font-semibold text-white">{friendUnlockMessage}</div>
+          <div className="mt-1 text-xs text-zinc-300">
+            More of your people means a sharper feed, better social proof, and faster decisions.
+          </div>
+        </div>
+      ) : null}
+
+      {!loading ? (
+        <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
+          <div className="text-sm font-semibold text-zinc-100">Bring your people in early</div>
+          <div className="mt-1 text-xs text-zinc-400">
+            More friends means better social proof, stronger picks, and more nights that actually turn into plans.
+          </div>
+        </div>
+      ) : null}
 
       {!loading && !suggestionsHidden && (
         <div className="mb-8">
           <h2 className="text-xl font-bold mb-2">Friends already on Whozin</h2>
-          <p className="text-zinc-500 text-sm mb-4">One tap to connect with your crew.</p>
+          <p className="text-zinc-500 text-sm mb-4">
+            Start with one person you actually go out with. The product gets better immediately.
+          </p>
 
           {suggested.length === 0 ? (
-            <div className="text-zinc-500">No more suggestions right now.</div>
+            <div className="text-zinc-500">
+              No more suggestions right now. Add one manually and keep the graph moving.
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {suggested.map((p) => {
@@ -241,7 +290,7 @@ export default function Friends() {
                     key={p.id}
                     className="flex items-center justify-between gap-3 bg-zinc-900/50 border border-white/10 rounded-2xl px-4 py-3"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       {avatar ? (
                           <img
                             src={avatar}
@@ -251,7 +300,7 @@ export default function Friends() {
                       ) : (
                         <div className="w-11 h-11 rounded-full bg-zinc-800" />
                       )}
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         <div className="font-semibold truncate">{displayName}</div>
                         {p.username ? <div className="text-xs text-zinc-500 truncate">@{p.username}</div> : null}
                         <div className="text-xs text-zinc-500">
@@ -302,7 +351,7 @@ export default function Friends() {
       {!loading && pending.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-bold mb-2">Pending requests</h2>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
             {pending.map((f) => {
               const displayName =
                 f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
@@ -312,7 +361,7 @@ export default function Friends() {
               return (
                 <div
                   key={f.friend_id}
-                  className="flex items-center gap-4 bg-zinc-900/40 border border-white/10 rounded-2xl p-4"
+                  className="flex min-w-0 items-center gap-4 bg-zinc-900/40 border border-white/10 rounded-2xl p-4"
                 >
                   {avatar ? (
                       <img
@@ -324,9 +373,9 @@ export default function Friends() {
                     <div className="w-14 h-14 rounded-full bg-zinc-800" />
                   )}
 
-                  <div>
-                    <div className="font-semibold">{displayName}</div>
-                    {handle ? <div className="text-xs text-zinc-500">{handle}</div> : null}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="font-semibold truncate">{displayName}</div>
+                    {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
                     <div className="text-xs text-zinc-500">Requested</div>
                   </div>
                 </div>
@@ -339,9 +388,11 @@ export default function Friends() {
       {loading ? (
         <div className="text-zinc-400">Loading friends...</div>
       ) : friends.length === 0 && pending.length === 0 ? (
-        <div className="text-zinc-500 mb-6">You don't have any friends yet.</div>
+        <div className="text-zinc-500 mb-6">
+          You do not have anyone here yet. Add one real friend and the app starts making more sense fast.
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 sm:gap-6">
           {friends.map((f) => {
             const displayName =
               f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
@@ -351,7 +402,7 @@ export default function Friends() {
             return (
               <div
                 key={f.friend_id}
-                className="flex items-center gap-4 bg-zinc-900/60 border border-white/10 rounded-2xl p-4"
+                className="flex min-w-0 items-center gap-4 bg-zinc-900/60 border border-white/10 rounded-2xl p-4"
               >
                 {avatar ? (
                   <img
@@ -363,9 +414,9 @@ export default function Friends() {
                   <div className="w-14 h-14 rounded-full bg-zinc-800" />
                 )}
 
-                <div>
-                  <div className="font-semibold">{displayName}</div>
-                  {handle ? <div className="text-xs text-zinc-500">{handle}</div> : null}
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="font-semibold truncate">{displayName}</div>
+                  {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
                   <div className="text-xs text-zinc-500">Connected</div>
                 </div>
               </div>
@@ -374,7 +425,16 @@ export default function Friends() {
         </div>
       )}
 
-      <AddFriend onSuccess={loadFriends} />
+      <AddFriend
+        onSuccess={async () => {
+          await loadFriends();
+          setFriendUnlockMessage("Nice. Your feed just got sharper.");
+          toast.success("Nice. Your feed just got sharper.");
+          if (onboardingMode) {
+            navigate("/explore?onboarding=1", { replace: true });
+          }
+        }}
+      />
     </div>
   );
 }

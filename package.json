@@ -11,7 +11,10 @@
     "security:smoke": "node scripts/smoke-security-checks.mjs",
     "security:token": "node -e \"import('node:crypto').then((c)=>console.log(c.randomBytes(32).toString('hex')))\"",
     "ops:data-quality": "node scripts/data-quality-check.mjs",
-    "ops:kpi-export": "node scripts/export-kpi-snapshot.mjs"
+    "ops:kpi-export": "node scripts/export-kpi-snapshot.mjs",
+    "ops:kpi-refresh": "node scripts/refresh-daily-kpis.mjs",
+    "ops:move-refresh": "node scripts/refresh-move-scores.mjs",
+    "ops:event-sync": "node scripts/sync-bay-area-events.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

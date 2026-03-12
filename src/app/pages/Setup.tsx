@@ -5,6 +5,7 @@ import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 import { claimPendingReferral } from "@/lib/referrals";
+import { resolveFirstSessionRoute } from "@/lib/firstSessionRoute";
 
 type Profile = {
   id: string;
@@ -145,7 +146,8 @@ export default function Setup() {
         } catch (err) {
           console.error("Pending referral claim failed:", err);
         }
-        window.location.assign(redirectTo);
+        const nextRoute = await resolveFirstSessionRoute(redirectTo);
+        window.location.assign(nextRoute);
       }
     }
 
@@ -244,7 +246,8 @@ export default function Setup() {
       console.error("Pending referral claim failed:", err);
     }
 
-    window.location.assign(redirectTo);
+    const nextRoute = await resolveFirstSessionRoute(redirectTo);
+    window.location.assign(nextRoute);
   }
 
   return (
