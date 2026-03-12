@@ -136,15 +136,20 @@ function buildInviteImageUrl(params: {
 
 async function fetchSupabaseRow<T>(path: string): Promise<T | null> {
   const baseUrl = process.env.VITE_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    process.env.SERVICE_ROLE_KEY?.trim() ||
+    "";
   const anonKey =
-    process.env.VITE_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+    process.env.VITE_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim() || "";
+  const authKey = serviceRoleKey || anonKey;
 
-  if (!baseUrl || !anonKey) return null;
+  if (!baseUrl || !authKey) return null;
 
   const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
     headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
+      apikey: authKey,
+      Authorization: `Bearer ${authKey}`,
     },
   });
 
