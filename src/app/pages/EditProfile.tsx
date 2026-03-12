@@ -55,7 +55,7 @@ export function EditProfile() {
         .maybeSingle();
 
       if (error) {
-        toast.error("Failed to load profile", { description: error.message });
+        toast.error("Could not load your profile", { description: error.message });
       }
 
       if (data) {
@@ -75,16 +75,16 @@ export function EditProfile() {
 
   const uploadAndSaveAvatar = async (file: File) => {
     if (!userId) {
-      toast.error("Not signed in");
+      toast.error("Sign in first");
       return;
     }
 
     if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
+      toast.error("Pick an image file");
       return;
     }
     if (file.size > 6 * 1024 * 1024) {
-      toast.error("Image too large", { description: "Max size is 6MB." });
+      toast.error("Image is too large", { description: "Max size is 6MB." });
       return;
     }
 
@@ -103,14 +103,14 @@ export function EditProfile() {
       });
 
       if (uploadErr) {
-        toast.error("Upload failed", { description: uploadErr.message });
+        toast.error("Could not upload that", { description: uploadErr.message });
         return;
       }
 
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
       const publicUrl = data?.publicUrl;
       if (!publicUrl) {
-        toast.error("Upload succeeded but no public URL returned");
+        toast.error("Upload worked, but the image URL is missing");
         return;
       }
 
@@ -120,13 +120,13 @@ export function EditProfile() {
         .eq("id", userId);
 
       if (updateErr) {
-        toast.error("Failed to save avatar", { description: updateErr.message });
+        toast.error("Could not save your photo", { description: updateErr.message });
         return;
       }
 
       setAvatarUrl(publicUrl);
       localStorage.setItem("whozin_avatar_bust", Date.now().toString());
-      toast.success("Avatar saved");
+      toast.success("Photo saved.");
     } finally {
       setUploadingAvatar(false);
       URL.revokeObjectURL(localPreview);
@@ -138,11 +138,11 @@ export function EditProfile() {
     const u = normalizedUsername;
 
     if (!u) {
-      toast.error("Username is required");
+      toast.error("Drop an @ first");
       return;
     }
     if (u.length < 3 || u.length > 20) {
-      toast.error("Username must be 3-20 characters");
+      toast.error("@ must be 3-20 characters");
       return;
     }
 
@@ -162,14 +162,14 @@ export function EditProfile() {
 
       if (error) {
         if ((error as any).code === "23505") {
-          toast.error("That username is taken");
+          toast.error("That @ is taken");
         } else {
-          toast.error("Failed to update profile", { description: error.message });
+          toast.error("Could not update your profile", { description: error.message });
         }
         return;
       }
 
-      toast.success("Profile updated");
+      toast.success("Profile saved.");
       track("profile_updated");
       navigate("/profile");
     } finally {
@@ -181,7 +181,7 @@ export function EditProfile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading your profile...</div>
     );
   }
 
@@ -210,7 +210,7 @@ export function EditProfile() {
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 transition disabled:opacity-60"
         >
           <Upload className="w-4 h-4" />
-          {uploadingAvatar ? "Uploading..." : "Upload photo"}
+          {uploadingAvatar ? "Uploading..." : "Change photo"}
         </button>
 
         <input
@@ -239,7 +239,7 @@ export function EditProfile() {
             Use 3-20 characters: letters, numbers, and underscores.
           </p>
           <p className="text-xs text-zinc-500 mt-1">
-            Saved as <span className="text-zinc-300">@{normalizedUsername || "username"}</span>
+            Live as <span className="text-zinc-300">@{normalizedUsername || "username"}</span>
           </p>
         </div>
 
@@ -248,7 +248,7 @@ export function EditProfile() {
           disabled={savingUsername || uploadingAvatar}
           className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold disabled:opacity-60"
         >
-          {savingUsername ? "Saving..." : "Save Changes"}
+          {savingUsername ? "Saving..." : "Save"}
         </button>
       </div>
     </div>

@@ -86,7 +86,7 @@ function RouteFallback() {
 
   return (
     <div className="min-h-[100svh] bg-black text-white flex items-center justify-center">
-      <div className="text-sm text-white/70">Loading...</div>
+      <div className="text-sm text-white/70">Loading the night...</div>
     </div>
   );
 }

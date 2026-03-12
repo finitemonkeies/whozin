@@ -70,13 +70,13 @@ export default function AddByInvite() {
 
     async function load() {
       if (featureFlags.killSwitchInvites || featureFlags.killSwitchFriendAdds) {
-        toast.error("Invite linking is temporarily unavailable");
+        toast.error("Invite links are down right now");
         navigate("/friends");
         return;
       }
 
       if (!username) {
-        toast.error("Invalid invite link");
+        toast.error("That invite link is off");
         navigate("/");
         return;
       }
@@ -150,7 +150,7 @@ export default function AddByInvite() {
 
   const handlePrimaryAction = async () => {
     if (featureFlags.killSwitchInvites || featureFlags.killSwitchFriendAdds) {
-      toast.error("Invite linking is temporarily unavailable");
+      toast.error("Invite links are down right now");
       return;
     }
 
@@ -185,14 +185,14 @@ export default function AddByInvite() {
       if (error) {
         const lowered = (error.message ?? "").toLowerCase();
         if (lowered.includes("duplicate")) {
-          toast.success("You're already connected");
+          toast.success("You're already connected.");
         } else if (lowered.includes("cannot add yourself")) {
           toast.error("That's you.");
         } else {
           throw error;
         }
       } else {
-        toast.success(`You're connected with ${inviterLabel}`);
+        toast.success(`You're in with ${inviterLabel}.`);
         track("friend_add_submitted", { source: "invite" });
         track("friend_add", { source: "invite", mode: "submitted" });
       }
@@ -205,7 +205,7 @@ export default function AddByInvite() {
       navigate("/friends?onboarding=1");
     } catch (error: any) {
       console.error("Invite add error:", error);
-      toast.error(error?.message ?? "Could not continue from invite");
+      toast.error(error?.message ?? "Could not open that invite");
       track("friend_add_failed", { source: "invite" });
     } finally {
       setWorking(false);
@@ -243,13 +243,13 @@ export default function AddByInvite() {
             )}
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.22em] text-pink-300">
-                Invite from your circle
+                From your circle
               </div>
               <div className="mt-1 text-lg font-semibold text-white">
-                {inviterLabel} wants you in the loop
+                {inviterLabel} wants you there
               </div>
               <div className="mt-1 text-sm text-zinc-400">
-                Connect on Whozin and see whether this night is actually the move.
+                Connect on Whozin and see if this is actually the move.
               </div>
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function AddByInvite() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
                 <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] font-semibold text-white/85">
                   <Users className="h-3.5 w-3.5" />
-                  {attendeeCount > 0 ? `${attendeeCount} going` : "Be early on this one"}
+                  {attendeeCount > 0 ? `${attendeeCount} going` : "Be early here"}
                 </div>
                 <div className="absolute bottom-4 left-4 right-4">
                   <div className="text-2xl font-bold leading-tight">{event.title}</div>
@@ -299,10 +299,10 @@ export default function AddByInvite() {
 
                 <div className="rounded-2xl border border-fuchsia-400/15 bg-white/[0.03] p-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-300">
-                    Why open this now
+                    Why this matters
                   </div>
                   <div className="mt-1 text-sm text-zinc-200">
-                    Join {inviterLabel}, see who is going, and decide faster with actual social signal.
+                    Join {inviterLabel}, see who's going, and decide faster with real social signal.
                   </div>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default function AddByInvite() {
             <div className="rounded-[28px] border border-white/10 bg-zinc-900/50 p-5">
               <div className="text-lg font-semibold text-white">Connect with {inviterLabel}</div>
               <div className="mt-2 text-sm text-zinc-400">
-                This invite gets you into their Whozin network so you can see the nights that matter sooner.
+                This gets you into their Whozin circle so you can spot the right nights sooner.
               </div>
             </div>
           )}
@@ -324,18 +324,18 @@ export default function AddByInvite() {
           >
             {sessionReady ? <UserPlus className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
             {working
-              ? "Working..."
+                ? "Joining..."
               : sessionReady
               ? event
-                ? "Connect and open event"
-                : "Connect on Whozin"
+                ? "Join and open event"
+                : "Join Whozin"
               : event
-              ? "Continue to event"
-              : "Continue on Whozin"}
+              ? "Open event"
+              : "Keep going"}
           </button>
 
           <div className="mt-3 text-center text-xs text-zinc-500">
-            Private by default. Your profile stays inside the circle unless you choose to show up.
+            Private by default. You stay inside the circle unless you choose to show up.
           </div>
 
           {event ? (
@@ -345,7 +345,7 @@ export default function AddByInvite() {
                 to={`/event/${event.id}?src=share_link`}
                 className="font-semibold text-zinc-100 hover:text-white"
               >
-                Open the event directly
+                Open event now
               </Link>
             </div>
           ) : null}

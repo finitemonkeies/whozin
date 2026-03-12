@@ -217,7 +217,7 @@ export function EventCard({
 
   const handleShareClick = async () => {
     if (featureFlags.killSwitchInvites) {
-      toast.error("Invites are temporarily unavailable");
+      toast.error("Invites are down right now");
       return;
     }
     if (!canOpenDetails || !inviteSource) return;
@@ -235,9 +235,9 @@ export function EventCard({
         source: inviteSource,
       });
       if (channel === "share_canceled") return;
-      toast.success(channel === "copy_fallback" ? "Invite link copied" : "Invite shared");
+      toast.success(channel === "copy_fallback" ? "Link copied" : "Shared");
     } catch (error: any) {
-      toast.error(error?.message ?? "Could not share invite");
+      toast.error(error?.message ?? "Could not share that");
     }
   };
 
@@ -273,7 +273,7 @@ export function EventCard({
               <div className="flex items-start justify-between gap-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/85">
                   <Ticket className="h-3.5 w-3.5" />
-                  Poster pending
+                  Poster coming
                 </div>
                 <div className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${fallbackArt.accentClass}`}>
                   {fallbackLabel}
@@ -341,7 +341,7 @@ export function EventCard({
               }`}
             >
               <Ticket className="w-3.5 h-3.5" />
-              {quickRsvp.working ? "Saving..." : quickRsvp.going ? "You're going" : "RSVP"}
+              {quickRsvp.working ? "Saving..." : quickRsvp.going ? "You're in" : "I'm going"}
             </button>
           ) : event.price ? (
             <div className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-semibold bg-white/5 border border-white/10 text-white/90">
@@ -389,11 +389,11 @@ export function EventCard({
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {canOpenDetails ? (
             <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-              Open event
+              Open
               <ArrowUpRight className="h-3.5 w-3.5" />
             </div>
           ) : (
-            <span className="text-[11px] text-zinc-600">Preview only</span>
+            <span className="text-[11px] text-zinc-600">Preview</span>
           )}
 
           {canOpenDetails && inviteSource ? (
@@ -407,7 +407,7 @@ export function EventCard({
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10"
             >
               <Share2 className="h-3.5 w-3.5" />
-              Share with one friend
+              Bring your crew
             </button>
           ) : null}
 
@@ -423,7 +423,7 @@ export function EventCard({
               data-no-card-nav="true"
               className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/25"
             >
-              Buy Tickets
+              Get tickets
             </a>
           ) : null}
         </div>

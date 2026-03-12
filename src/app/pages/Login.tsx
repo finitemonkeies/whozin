@@ -59,7 +59,7 @@ export default function Login() {
 
   const startOAuth = async (provider: "google") => {
     if (!oauthEnabled) {
-      toast.message("Google login is coming soon.");
+      toast.message("Google login is not live yet.");
       return;
     }
 
@@ -82,12 +82,12 @@ export default function Login() {
           message: msg,
         });
         if (msg.toLowerCase().includes("provider is not enabled")) {
-          toast.error("Provider not enabled in Supabase", {
+          toast.error("Google login is not set up", {
             description:
               "Either this frontend points at the wrong Supabase project, or the provider is not enabled in Supabase Auth settings.",
           });
         } else {
-          toast.error("Login failed", { description: msg });
+          toast.error("Could not sign you in", { description: msg });
         }
         setLoading(null);
         return;
@@ -101,13 +101,13 @@ export default function Login() {
           provider,
           reason: "missing_redirect_url",
         });
-        toast.error("Login failed", {
-          description: "OAuth redirect URL missing. Please try again.",
+        toast.error("Could not sign you in", {
+          description: "OAuth redirect is missing. Try again.",
         });
       }
     } catch (e: any) {
       trackError("auth_oauth_exception", e, { provider });
-      toast.error("Login failed", { description: e?.message || "Unknown error" });
+      toast.error("Could not sign you in", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -115,7 +115,7 @@ export default function Login() {
   const startMagicLink = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      toast.error("Enter an email");
+      toast.error("Enter your email");
       return;
     }
 
@@ -144,9 +144,9 @@ export default function Login() {
 
         if (isRateLimit) {
           startCooldown(25);
-          toast.error("Too many tries. Please wait a moment and try again.");
+          toast.error("Too many tries. Wait a sec, then try again.");
         } else {
-          toast.error("Magic link failed", { description: msg });
+          toast.error("Could not send the link", { description: msg });
         }
 
         setLoading(null);
@@ -162,7 +162,7 @@ export default function Login() {
       setLoading(null);
     } catch (e: any) {
       trackError("auth_magic_link_exception", e);
-      toast.error("Magic link failed", { description: e?.message || "Unknown error" });
+      toast.error("Could not send the link", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -170,7 +170,7 @@ export default function Login() {
   const sendPhoneCode = async () => {
     const phoneTrimmed = phone.trim();
     if (!phoneTrimmed) {
-      toast.error("Enter a phone number");
+      toast.error("Enter your number");
       return;
     }
     if (loading) return;
@@ -185,16 +185,16 @@ export default function Login() {
       });
 
       if (error) {
-        toast.error("Couldn't send code", { description: error.message });
+        toast.error("Could not send the code", { description: error.message });
         setLoading(null);
         return;
       }
 
       setPhoneCodeSent(true);
-      toast.success("Code sent", { description: "Enter the 6-digit code from SMS." });
+      toast.success("Code sent", { description: "Drop in the 6-digit text code." });
       setLoading(null);
     } catch (e: any) {
-      toast.error("Couldn't send code", { description: e?.message || "Unknown error" });
+      toast.error("Could not send the code", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -203,7 +203,7 @@ export default function Login() {
     const phoneTrimmed = phone.trim();
     const codeTrimmed = phoneCode.trim();
     if (!phoneTrimmed || !codeTrimmed) {
-      toast.error("Enter both phone and code");
+      toast.error("Enter your number and code");
       return;
     }
     if (loading) return;
@@ -217,16 +217,16 @@ export default function Login() {
       });
 
       if (error) {
-        toast.error("Code verification failed", { description: error.message });
+        toast.error("That code did not work", { description: error.message });
         setLoading(null);
         return;
       }
 
       track("phone_login_success", { redirect });
-      toast.success("Signed in");
+      toast.success("You're in.");
       navigate(redirect, { replace: true });
     } catch (e: any) {
-      toast.error("Code verification failed", { description: e?.message || "Unknown error" });
+      toast.error("That code did not work", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -240,9 +240,9 @@ export default function Login() {
     <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
       <div className="max-w-md mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight">Sign in to continue</h1>
+          <h1 className="text-4xl font-bold tracking-tight">Get Back In</h1>
           <p className="text-zinc-400 mt-2">
-            {phoneAuthEnabled ? "Use Google, phone SMS, or a secure magic link." : "Use Google or a secure magic link."}
+            {phoneAuthEnabled ? "Use Google, text, or a magic link." : "Use Google or a magic link."}
           </p>
         </div>
 
@@ -252,7 +252,7 @@ export default function Login() {
             disabled={!!loading}
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-white text-black border border-white/20 transition disabled:opacity-80 disabled:cursor-not-allowed"
           >
-            {loading === "google" ? "Signing in with Google..." : "Continue with Google"}
+            {loading === "google" ? "Opening Google..." : "Use Google"}
           </button>
         </div>
 
@@ -272,7 +272,7 @@ export default function Login() {
             }}
           >
             <div>
-              <label className="text-sm text-zinc-400">Phone number</label>
+              <label className="text-sm text-zinc-400">Phone</label>
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -308,7 +308,7 @@ export default function Login() {
                 ? "Verifying..."
                 : phoneCodeSent
                 ? "Verify code"
-                : "Continue with phone"}
+                : "Use phone"}
             </button>
 
             {phoneCodeSent ? (
@@ -321,7 +321,7 @@ export default function Login() {
                 }}
                 className="w-full px-4 py-3 rounded-2xl font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition disabled:opacity-60"
               >
-                Use a different phone number
+                Use a different number
               </button>
             ) : null}
           </form>
@@ -335,7 +335,7 @@ export default function Login() {
           }}
         >
           <div>
-            <label className="text-sm text-zinc-400">Email address</label>
+            <label className="text-sm text-zinc-400">Email</label>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -364,7 +364,7 @@ export default function Login() {
             disabled={!!loading}
             className="w-full px-4 py-3 rounded-2xl font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition disabled:opacity-60"
           >
-            Cancel
+            Not now
           </button>
         </form>
 

@@ -260,9 +260,9 @@ export default function Setup() {
       <div className="relative mx-auto flex min-h-[100svh] max-w-md flex-col justify-center px-5 py-10">
         <div className="mb-6">
           <div className="text-sm text-white/60">Whozin</div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Complete your profile</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Claim your profile</h1>
           <p className="mt-2 text-sm text-white/70">
-            Pick a username and avatar. You can start discovering events right away.
+            Pick your @ and avatar. Then go find the move.
           </p>
         </div>
 
@@ -280,7 +280,7 @@ export default function Setup() {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-white/70">Avatar</div>
                   <div className="mt-1 text-xs text-white/50">
-                    Auto-generated for alpha. You can change it in Profile.
+                    Auto-generated for now. You can change it later.
                   </div>
                 </div>
                 <button
@@ -294,7 +294,7 @@ export default function Setup() {
                   }
                   className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs font-semibold hover:bg-white/10"
                 >
-                  Shuffle
+                  Switch it up
                 </button>
               </div>
 
@@ -323,7 +323,7 @@ export default function Setup() {
                 disabled={saving}
                 className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold tracking-wide disabled:opacity-60"
               >
-                {saving ? "Saving..." : "Continue to events"}
+                {saving ? "Saving..." : "Find the move"}
               </button>
             </form>
           )}

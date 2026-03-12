@@ -25,7 +25,7 @@ export function SignUp() {
   const sendCode = async () => {
     const phoneTrimmed = phone.trim();
     if (!phoneTrimmed) {
-      toast.error("Enter a phone number");
+      toast.error("Enter your number");
       return;
     }
     if (loading) return;
@@ -40,16 +40,16 @@ export function SignUp() {
       });
 
       if (error) {
-        toast.error("Couldn't send code", { description: error.message });
+        toast.error("Could not send the code", { description: error.message });
         setLoading(null);
         return;
       }
 
       setCodeSent(true);
-      toast.success("Code sent");
+      toast.success("Code sent.");
       setLoading(null);
     } catch (e: any) {
-      toast.error("Couldn't send code", { description: e?.message || "Unknown error" });
+      toast.error("Could not send the code", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -58,7 +58,7 @@ export function SignUp() {
     const phoneTrimmed = phone.trim();
     const codeTrimmed = code.trim();
     if (!phoneTrimmed || !codeTrimmed) {
-      toast.error("Enter your phone and verification code");
+      toast.error("Enter your number and code");
       return;
     }
     if (loading) return;
@@ -72,16 +72,16 @@ export function SignUp() {
       });
 
       if (error) {
-        toast.error("Verification failed", { description: error.message });
+        toast.error("That code did not work", { description: error.message });
         setLoading(null);
         return;
       }
 
       track("phone_signup_success", { redirect });
-      toast.success("Account created");
+      toast.success("You're in.");
       navigate(redirect, { replace: true });
     } catch (e: any) {
-      toast.error("Verification failed", { description: e?.message || "Unknown error" });
+      toast.error("That code did not work", { description: e?.message || "Unknown error" });
       setLoading(null);
     }
   };
@@ -93,7 +93,7 @@ export function SignUp() {
           <div className="mb-8">
             <h1 className="text-4xl font-bold tracking-tight">Sign up</h1>
             <p className="text-zinc-400 mt-2">
-              Phone signup is temporarily paused for alpha. Continue with Google or magic link.
+              Phone signup is paused for now. Use Google or a magic link.
             </p>
           </div>
 
@@ -102,7 +102,7 @@ export function SignUp() {
             onClick={() => navigate(`/login?redirect=${encodeURIComponent(redirect)}`)}
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600"
           >
-            Continue to login
+            Go to login
           </button>
         </div>
       </div>
@@ -114,7 +114,7 @@ export function SignUp() {
       <div className="max-w-md mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight">Create your account</h1>
-          <p className="text-zinc-400 mt-2">Sign up with phone in under 10 seconds.</p>
+          <p className="text-zinc-400 mt-2">Get in with your number in under 10 seconds.</p>
         </div>
 
         <form
@@ -126,7 +126,7 @@ export function SignUp() {
           }}
         >
           <div>
-            <label className="text-sm text-zinc-400">Phone number</label>
+            <label className="text-sm text-zinc-400">Phone</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -162,7 +162,7 @@ export function SignUp() {
               ? "Verifying..."
               : codeSent
               ? "Verify code"
-              : "Continue with phone"}
+              : "Use phone"}
           </button>
 
           {codeSent ? (
@@ -175,7 +175,7 @@ export function SignUp() {
               }}
               className="w-full px-4 py-3 rounded-2xl font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition disabled:opacity-60"
             >
-              Use different phone number
+              Use a different number
             </button>
           ) : null}
         </form>

@@ -86,10 +86,10 @@ function getExploreModeCopy(args: {
   if (args.mode === "friends") {
     return {
       scanTitle: "Follow Your People",
-      scanBody: "Start with where your circle already has motion, then widen out if you need more options.",
+      scanBody: "Start with where your circle already has motion, then widen out if you need more.",
       heroContext: "Your people are moving here",
       pulseTitle: "Your Circle",
-      pulseBody: "The spots your people are already leaning toward.",
+      pulseBody: "Where your people are already leaning.",
       pulseEmpty: "Your people have not separated around one plan yet.",
       picksTitle: "Circle Picks",
       picksBody: "Friend-led first, with a wider fallback behind it.",
@@ -97,14 +97,14 @@ function getExploreModeCopy(args: {
       locationHint: nearbyCity
         ? `Nearby city looks like ${nearbyCity}, but the stronger read right now is your circle.`
         : "City is still loose, so Explore is starting with your circle first.",
-      emptyState: "Your circle is quiet right now. Try another date or switch cities for a wider read.",
+      emptyState: "Your circle is quiet right now. Try another date or switch cities.",
     };
   }
 
   if (args.mode === "bayArea") {
     return {
       scanTitle: "Scan the Bay",
-      scanBody: "No clean city read yet, so Explore is pulling from the strongest Bay Area options.",
+      scanBody: "No clean city read yet, so Explore is pulling the strongest Bay Area options.",
       heroContext: "Bay Area read",
       pulseTitle: "Bay Area Now",
       pulseBody: "The strongest nearby motion while your city settles.",
@@ -115,13 +115,13 @@ function getExploreModeCopy(args: {
       locationHint: nearbyCity
         ? `Nearby city looks like ${nearbyCity}, but the cleaner signal right now is across the Bay Area.`
         : "No city yet, so Explore is starting with a Bay Area read.",
-      emptyState: "Nothing strong is landing in the Bay Area yet. Try another night or set a city manually.",
+      emptyState: "Nothing strong is landing in the Bay yet. Try another night or set a city.",
     };
   }
 
   return {
     scanTitle: "Scan the City",
-    scanBody: "Trim the noise, then follow what fits your night.",
+    scanBody: "Trim the noise, then follow what fits tonight.",
     heroContext: city ? `${city} city read` : "City read",
     pulseTitle: "City Pulse",
     pulseBody: "Fast movers, cleaned up by your filters.",
@@ -130,7 +130,7 @@ function getExploreModeCopy(args: {
     picksBody: "Wider city browse, with a little more control.",
     scopeLabel: city || "your city",
     locationHint: nearbyCity ? `Locked to nearby city: ${nearbyCity}` : undefined,
-    emptyState: "No events match this setup yet. Try another date, genre, or nearby city, then grab one signal and run with it.",
+    emptyState: "Nothing fits this setup yet. Try another date, genre, or nearby city.",
   };
 }
 
@@ -518,7 +518,7 @@ export function Explore() {
       console.error("Explore personalization failed:", error);
       setEvents([]);
       setTrendingEvents([]);
-      toast.error("Could not refresh personalized events right now.");
+      toast.error("Could not refresh the night right now.");
     } finally {
       setLoadingEvents(false);
       setLoadingTrending(false);
@@ -835,7 +835,7 @@ export function Explore() {
             <Sparkles className="w-6 h-6 text-purple-400" />
             Explore
           </h1>
-          <p className="text-zinc-400 mt-1">Scan the city and strip the night down to what fits.</p>
+          <p className="text-zinc-400 mt-1">What's the move tonight?</p>
         </div>
       </div>
 
@@ -844,7 +844,7 @@ export function Explore() {
           <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
             <div className="text-sm font-semibold text-white">Step 2: pick one night</div>
             <div className="mt-1 text-xs text-zinc-300">
-              RSVP to one event and we will take you straight to the page where invites and social proof hit hardest.
+              Lock one plan and we'll take you straight to the page where invites and social proof hit hardest.
             </div>
           </div>
         ) : null}
@@ -876,7 +876,7 @@ export function Explore() {
                   : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
               }`}
             >
-              Coming up next
+              Up next
             </button>
             <button
               type="button"
@@ -898,7 +898,7 @@ export function Explore() {
                   : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
               }`}
             >
-              Most going
+              Most heads
             </button>
           </div>
         </div>
@@ -993,7 +993,7 @@ export function Explore() {
               }}
               className="px-3 py-2 rounded-xl text-sm bg-white/10 border border-white/10 hover:bg-white/15"
             >
-              Refresh
+              Update
             </button>
           </div>
 
@@ -1014,7 +1014,7 @@ export function Explore() {
               <div>
                 <div className="text-sm font-semibold text-white">Filter the night</div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  Narrow by timing, genre, or lock into one date.
+                  Narrow by timing, sound, or one date.
                 </div>
               </div>
               {filtersActive ? (
@@ -1028,7 +1028,7 @@ export function Explore() {
                   className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-zinc-300 hover:border-white/20 hover:text-white"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Clear
+                  Reset
                 </button>
               ) : null}
             </div>
@@ -1090,7 +1090,7 @@ export function Explore() {
                       : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
                   }`}
                 >
-                  All genres
+                  All sounds
                 </button>
                 {availableTags.map((tag) => (
                   <button

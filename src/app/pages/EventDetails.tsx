@@ -75,10 +75,10 @@ function relativeRsvp(ts?: string | null): string {
   if (Number.isNaN(t)) return "";
   const mins = Math.floor((Date.now() - t) / 60000);
   if (mins < 0) return "";
-  if (mins < 10) return "just RSVPed";
-  if (mins < 60) return `RSVPed ${mins}m ago`;
+  if (mins < 10) return "just locked in";
+  if (mins < 60) return `locked in ${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `RSVPed ${hrs}h ago`;
+  if (hrs < 24) return `locked in ${hrs}h ago`;
   return "";
 }
 
@@ -391,7 +391,7 @@ export function EventDetails() {
 
     if (attErr) {
       console.error("Failed loading attendees:", attErr);
-      toast.error(attErr.message ?? "Failed to load attendees");
+      toast.error(attErr.message ?? "Could not load the crowd");
       setAttendees([]);
       setLoadingAttendees(false);
       return [];
@@ -453,7 +453,7 @@ export function EventDetails() {
       }
 
       if (!isEventVisible(eventData as EventRow | null)) {
-        toast.error("Event unavailable");
+        toast.error("That event is not live right now");
         setEvent(null);
         setLoadingEvent(false);
         setLoadingAttendees(false);
@@ -491,7 +491,7 @@ export function EventDetails() {
     } = await supabase.auth.getSession();
 
     if (!session) {
-      toast.error("Sign in to RSVP");
+      toast.error("Sign in to lock in");
       navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`);
       return;
     }
@@ -548,7 +548,7 @@ export function EventDetails() {
         });
         if (error) throw error;
 
-        toast.success("You're going 🎉");
+        toast.success("You're in.");
         track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
         track("rsvp_success", { source: rsvpSource, action: "add", eventId: id });
 
@@ -573,7 +573,7 @@ export function EventDetails() {
           .eq("user_id", uid);
         if (error) throw error;
 
-        toast.message("RSVP removed");
+        toast.message("You're out.");
         track("rsvp_updated", { source: rsvpSource, action: "remove", eventId: id });
         track("rsvp_success", { source: rsvpSource, action: "remove", eventId: id });
       }
@@ -602,11 +602,11 @@ export function EventDetails() {
   };
 
   if (loadingEvent) {
-    return <div className="bg-black min-h-screen text-white p-10">Loading event...</div>;
+    return <div className="bg-black min-h-screen text-white p-10">Loading the night...</div>;
   }
 
   if (!event) {
-    return <div className="bg-black min-h-screen text-white p-10">Event not found</div>;
+    return <div className="bg-black min-h-screen text-white p-10">That event is gone</div>;
   }
 
   const createInviteLink = async () => {
@@ -831,16 +831,16 @@ export function EventDetails() {
           {friendClusterLabel ? (
             <div className="mt-3 text-sm font-semibold text-zinc-100 truncate">{friendClusterLabel}</div>
           ) : totalGoing > 0 ? (
-            <div className="mt-3 text-sm font-semibold text-zinc-100">People are going</div>
+            <div className="mt-3 text-sm font-semibold text-zinc-100">People are in</div>
           ) : (
-            <div className="mt-3 text-sm font-semibold text-zinc-200">Be first to go</div>
+            <div className="mt-3 text-sm font-semibold text-zinc-200">Be first in</div>
           )}
           {friendRecentCue ? <div className="mt-1 text-xs text-zinc-400">{friendRecentCue}</div> : null}
           <div className="mt-2 text-xs text-zinc-300">
-            {totalGoing > 0 ? `🔥 ${totalGoing} going` : "No RSVPs yet"}
+            {totalGoing > 0 ? `${totalGoing} going` : "No one is in yet"}
           </div>
           <div className="mt-2 text-xs text-zinc-500">
-            {isGoing ? "You unlocked attendee visibility." : "RSVP to see everyone"}
+            {isGoing ? "You unlocked the crowd." : "RSVP to unlock the crowd"}
           </div>
         </div>
 
@@ -848,7 +848,7 @@ export function EventDetails() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                {isGoing ? "Bring your people" : "Fastest way to decide"}
+                {isGoing ? "Bring your people" : "Fastest way to call it"}
               </div>
               <div className="mt-1 text-base font-semibold text-white">
                 {isGoing
@@ -877,7 +877,7 @@ export function EventDetails() {
                   disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                   className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  Share with one friend
+                  Bring your crew
                 </button>
                 <button
                   type="button"
@@ -895,7 +895,7 @@ export function EventDetails() {
                 disabled={working || featureFlags.killSwitchRsvpWrites}
                 className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                RSVP and unlock the crowd
+                I'm going
               </button>
             )}
 
@@ -918,7 +918,7 @@ export function EventDetails() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                  Source Trust
+                  Source
                 </div>
                 <div className="mt-1 text-base font-semibold text-white">
                   Imported from {sourceName}
@@ -930,7 +930,7 @@ export function EventDetails() {
                 </div>
               </div>
               <div className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200">
-                Source checked
+                Checked
               </div>
             </div>
 
@@ -988,7 +988,7 @@ export function EventDetails() {
               <Calendar className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <div className="text-xs text-zinc-400">Date</div>
+              <div className="text-xs text-zinc-400">When</div>
               <div className="text-sm font-semibold">{formatEventDateTimeRange(event)}</div>
             </div>
           </div>
@@ -998,7 +998,7 @@ export function EventDetails() {
               <MapPin className="w-5 h-5 text-pink-400" />
             </div>
             <div>
-              <div className="text-xs text-zinc-400">Location</div>
+              <div className="text-xs text-zinc-400">Where</div>
               <div className="text-sm font-semibold">{event.location ?? "TBD"}</div>
             </div>
           </div>
@@ -1007,7 +1007,7 @@ export function EventDetails() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              See who's going{" "}
+              Your people{" "}
               <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded-full">
                 {loadingAttendees || loadingFriendMap ? "..." : friendsGoing.length}
               </span>
@@ -1015,7 +1015,7 @@ export function EventDetails() {
           </div>
 
           {loadingAttendees || loadingFriendMap ? (
-            <div className="text-zinc-400 text-sm">Loading...</div>
+            <div className="text-zinc-400 text-sm">Loading the crowd...</div>
           ) : friendsGoing.length > 0 ? (
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
               {friendsGoing.map((a) => {
@@ -1053,7 +1053,7 @@ export function EventDetails() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              Others Going{" "}
+              Crowd{" "}
               <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded-full">
                 {loadingAttendees || loadingFriendMap ? "..." : othersGoing.length}
               </span>
@@ -1062,10 +1062,10 @@ export function EventDetails() {
 
           {!isGoing ? (
             <div className="text-center py-6 bg-zinc-900/30 rounded-2xl border border-white/5 border-dashed">
-              <p className="text-sm text-zinc-500">RSVP to unlock attendees beyond your friends.</p>
+              <p className="text-sm text-zinc-500">RSVP to unlock the rest of the crowd.</p>
             </div>
           ) : loadingAttendees || loadingFriendMap ? (
-            <div className="text-zinc-400 text-sm">Loading...</div>
+            <div className="text-zinc-400 text-sm">Loading the crowd...</div>
           ) : othersGoing.length > 0 ? (
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
               {othersGoing.map((a) => {
@@ -1094,7 +1094,7 @@ export function EventDetails() {
           ) : (
             <div className="text-center py-6 bg-zinc-900/30 rounded-2xl border border-white/5 border-dashed">
               <p className="text-sm text-zinc-500">
-                Crowd is still forming. You could be the start of it.
+                Crowd is still forming. You could start it.
               </p>
             </div>
           )}
@@ -1102,7 +1102,7 @@ export function EventDetails() {
 
         {showInvitePrompt ? (
           <div className="mb-8 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
-            <div className="text-sm font-semibold">Send this to one friend and see if it becomes the move?</div>
+            <div className="text-sm font-semibold">Send this to one friend and see if it becomes the move.</div>
             <div className="text-xs text-zinc-400 mt-1">
               I'm thinking {event.title} might be the move. Send it to the friend most likely to say yes.
             </div>
@@ -1113,7 +1113,7 @@ export function EventDetails() {
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
               >
-                {creatingInviteLink ? "Preparing..." : "Copy link"}
+                {creatingInviteLink ? "Getting link..." : "Copy link"}
               </button>
               <button
                 type="button"
@@ -1121,7 +1121,7 @@ export function EventDetails() {
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
               >
-                Share now
+                Send now
               </button>
               <button
                 type="button"
@@ -1129,7 +1129,7 @@ export function EventDetails() {
                 disabled={creatingInviteLink || downloadingShareCard || featureFlags.killSwitchInvites}
                 className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
               >
-                {downloadingShareCard ? "Rendering..." : "Download card"}
+                {downloadingShareCard ? "Making card..." : "Save card"}
               </button>
             </div>
             <button
@@ -1154,7 +1154,7 @@ export function EventDetails() {
           }`}
         >
           <Ticket className="w-5 h-5" />
-          {isGoing ? "You're going 🎉 (tap to undo)" : "I'm Going"}
+          {isGoing ? "You're in (tap to undo)" : "I'm going"}
           {working && <div className="absolute inset-0 bg-white/10 animate-pulse" />}
         </button>
       </div>

@@ -58,10 +58,10 @@ export function ActivationChecklist() {
       const items: ChecklistItem[] = [
         {
           key: "profile",
-          label: "Set up your profile",
-          description: "Pick a username so invite links and social proof feel personal.",
+          label: "Claim your handle",
+          description: "Lock your @ so shares and social proof feel like you.",
           href: "/profile/edit",
-          cta: "Finish profile",
+          cta: "Finish it",
           done:
             !!profile?.username &&
             !!profile?.avatar_url &&
@@ -69,26 +69,26 @@ export function ActivationChecklist() {
         },
         {
           key: "friends",
-          label: "Add your first friend",
-          description: "Whozin gets sharper once your people are in the graph.",
+          label: "Bring in one friend",
+          description: "Whozin gets way better once your people are in.",
           href: "/friends",
-          cta: "Find friends",
+          cta: "Bring your crew",
           done: Array.isArray(friendIdsRes.data) && friendIdsRes.data.length > 0,
         },
         {
           key: "rsvp",
-          label: "RSVP to an event",
-          description: "Show intent once and start building momentum around your night.",
+          label: "Lock one plan",
+          description: "Say you're in once and the night starts to take shape.",
           href: "/explore",
-          cta: "Explore events",
+          cta: "Find the move",
           done: (attendeeCountRes.count ?? 0) > 0,
         },
         {
           key: "invite",
-          label: "Invite a few friends",
-          description: "A shared event is more likely to turn into the move.",
+          label: "Send one invite",
+          description: "One clean share is usually enough to get the night moving.",
           href: "/profile",
-          cta: "Open invite tools",
+          cta: "Start the group chat",
           done: (inviteCountRes.count ?? 0) > 0,
         },
       ];
@@ -113,7 +113,7 @@ export function ActivationChecklist() {
   if (state.loading) {
     return (
       <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4">
-        <div className="text-sm text-zinc-400">Checking your momentum...</div>
+        <div className="text-sm text-zinc-400">Checking your signal...</div>
       </div>
     );
   }
@@ -128,13 +128,13 @@ export function ActivationChecklist() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-pink-200">
             <Sparkles className="h-3.5 w-3.5" />
-            Get The Loop Running
+            Get It Moving
           </div>
           <div className="mt-3 text-lg font-semibold text-white">
             {completedCount} of {totalCount} done
           </div>
           <div className="mt-1 text-sm text-zinc-400">
-            Focus on distribution first: friends, RSVPs, and invites compound together.
+            Start with friends, RSVPs, and one share. That's when this starts to hit.
           </div>
         </div>
         <div className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-300">
@@ -172,7 +172,7 @@ export function ActivationChecklist() {
               </div>
             </div>
             <div className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-semibold text-zinc-300">
-              {item.done ? "Done" : item.cta}
+              {item.done ? "Locked" : item.cta}
               <ChevronRight className="h-3.5 w-3.5" />
             </div>
           </Link>

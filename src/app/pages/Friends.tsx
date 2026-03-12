@@ -56,7 +56,7 @@ export default function Friends() {
 
     if (sessionErr) {
       console.error("getSession error:", sessionErr);
-      toast.error("Failed to load session");
+      toast.error("Could not load your session");
       setFriends([]);
       setPending([]);
       setLoading(false);
@@ -64,7 +64,7 @@ export default function Friends() {
     }
 
     if (!session?.user?.id) {
-      toast.error("Please sign in");
+      toast.error("Sign in first");
       setFriends([]);
       setPending([]);
       setSuggested([]);
@@ -83,7 +83,7 @@ export default function Friends() {
 
     if (error) {
       console.error("Failed to load friends:", error);
-      toast.error(error.message ?? "Failed to load friends");
+      toast.error(error.message ?? "Could not load your people");
       setFriends([]);
       setPending([]);
       setLoading(false);
@@ -137,7 +137,7 @@ export default function Friends() {
 
     if (pErr) {
       console.error("Failed to load suggested profiles:", pErr);
-      toast.error(pErr.message ?? "Failed to load suggested friends");
+      toast.error(pErr.message ?? "Could not load suggestions");
       setSuggested([]);
     } else {
       const rows = (profiles ?? []) as SuggestedProfile[];
@@ -165,7 +165,7 @@ export default function Friends() {
 
   const addSuggestedFriend = async (row: SuggestedProfile) => {
     if (featureFlags.killSwitchFriendAdds) {
-      toast.error("Friend requests are temporarily unavailable");
+      toast.error("Friend adds are down right now");
       return;
     }
     if (!row.id || !row.username) return;
@@ -185,7 +185,7 @@ export default function Friends() {
       const isDuplicate = msg.includes("duplicate");
       if (!isDuplicate) {
         setAddedIds((prev) => ({ ...prev, [row.id]: false }));
-        toast.error(error.message ?? "Could not add friend");
+          toast.error(error.message ?? "Could not add them");
         track("friend_add_failed", { source: "suggested" });
         return;
       }
@@ -237,13 +237,13 @@ export default function Friends() {
 
   return (
     <div className="min-h-screen bg-black text-white px-5 py-8 pb-[calc(13rem+env(safe-area-inset-bottom))] sm:px-6">
-      <h1 className="text-3xl font-bold mb-6">Your Friends</h1>
+      <h1 className="text-3xl font-bold mb-6">Your People</h1>
 
       {onboardingMode ? (
         <div className="mb-6 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3">
           <div className="text-sm font-semibold text-white">Step 1: pull your people in</div>
           <div className="mt-1 text-xs text-zinc-300">
-            Add at least one friend, then we will send you straight to the best event picks.
+            Add one friend, then we'll send you straight to tonight's best picks.
           </div>
         </div>
       ) : null}
@@ -252,7 +252,7 @@ export default function Friends() {
         <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
           <div className="text-sm font-semibold text-white">{friendUnlockMessage}</div>
           <div className="mt-1 text-xs text-zinc-300">
-            More of your people means a sharper feed, better social proof, and faster decisions.
+            More of your people means sharper picks, stronger social proof, and faster calls.
           </div>
         </div>
       ) : null}
@@ -261,21 +261,21 @@ export default function Friends() {
         <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
           <div className="text-sm font-semibold text-zinc-100">Bring your people in early</div>
           <div className="mt-1 text-xs text-zinc-400">
-            More friends means better social proof, stronger picks, and more nights that actually turn into plans.
+            More friends means stronger picks and more nights that actually turn into plans.
           </div>
         </div>
       ) : null}
 
       {!loading && !suggestionsHidden && (
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-2">Friends already on Whozin</h2>
+          <h2 className="text-xl font-bold mb-2">Already Here</h2>
           <p className="text-zinc-500 text-sm mb-4">
-            Start with one person you actually go out with. The product gets better immediately.
+            Start with one person you actually go out with. The app gets better immediately.
           </p>
 
           {suggested.length === 0 ? (
             <div className="text-zinc-500">
-              No more suggestions right now. Add one manually and keep the graph moving.
+              No more suggestions right now. Add one manually and keep it moving.
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -306,7 +306,7 @@ export default function Friends() {
                         <div className="text-xs text-zinc-500">
                           {(p.mutualCount ?? 0) > 0
                             ? `${p.mutualCount} mutual ${(p.mutualCount ?? 0) === 1 ? "friend" : "friends"}`
-                            : "Suggested"}
+                            : "Worth adding"}
                         </div>
                       </div>
                     </div>
@@ -329,28 +329,28 @@ export default function Friends() {
               onClick={hideSuggestions}
               className="text-zinc-400 hover:text-white transition-colors"
             >
-              Skip for now
+              Not now
             </button>
-            <span className="text-zinc-600">You can add later from this tab.</span>
+            <span className="text-zinc-600">You can come back anytime.</span>
           </div>
         </div>
       )}
 
       {!loading && suggestionsHidden && (
         <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3 flex items-center justify-between gap-3">
-          <div className="text-sm text-zinc-400">Friend suggestions hidden for now.</div>
+          <div className="text-sm text-zinc-400">Suggestions hidden for now.</div>
           <button
             onClick={showSuggestionsAgain}
             className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/10 hover:bg-white/15"
           >
-            Add later
+            Show again
           </button>
         </div>
       )}
 
       {!loading && pending.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-2">Pending requests</h2>
+          <h2 className="text-xl font-bold mb-2">Pending</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
             {pending.map((f) => {
               const displayName =
@@ -376,7 +376,7 @@ export default function Friends() {
                   <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="font-semibold truncate">{displayName}</div>
                     {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
-                    <div className="text-xs text-zinc-500">Requested</div>
+                    <div className="text-xs text-zinc-500">Request sent</div>
                   </div>
                 </div>
               );
@@ -386,10 +386,10 @@ export default function Friends() {
       )}
 
       {loading ? (
-        <div className="text-zinc-400">Loading friends...</div>
+        <div className="text-zinc-400">Loading your people...</div>
       ) : friends.length === 0 && pending.length === 0 ? (
         <div className="text-zinc-500 mb-6">
-          You do not have anyone here yet. Add one real friend and the app starts making more sense fast.
+          Nobody here yet. Add one real friend and this starts making sense fast.
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 sm:gap-6">
@@ -417,7 +417,7 @@ export default function Friends() {
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <div className="font-semibold truncate">{displayName}</div>
                   {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
-                  <div className="text-xs text-zinc-500">Connected</div>
+                  <div className="text-xs text-zinc-500">In your circle</div>
                 </div>
               </div>
             );

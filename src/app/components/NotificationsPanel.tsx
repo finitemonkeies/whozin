@@ -48,7 +48,7 @@ type NotificationsPanelProps = {
 };
 
 export function NotificationsPanel({
-  title = "Updates",
+  title = "The Loop",
   subtitle = "Friend movement, momentum, and the next nudge worth acting on.",
   limit = 8,
   compact = false,
@@ -124,9 +124,9 @@ export function NotificationsPanel({
         }))
       );
       emitUpdated();
-      toast.success("All caught up");
+      toast.success("You're caught up");
     } catch (error: any) {
-      toast.error(error?.message ?? "Could not mark notifications read");
+      toast.error(error?.message ?? "Could not clear notifications");
     } finally {
       setMarkingAll(false);
     }
@@ -145,13 +145,13 @@ export function NotificationsPanel({
           disabled={markingAll || unreadCount === 0}
           className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
         >
-          {markingAll ? "Updating..." : unreadCount > 0 ? "Mark all read" : "All read"}
+          {markingAll ? "Clearing..." : unreadCount > 0 ? "Mark all read" : "All caught up"}
         </button>
       </div>
 
       {loading ? (
         <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-5 text-sm text-zinc-400">
-          Loading updates...
+          Loading the loop...
         </div>
       ) : notifications.length > 0 ? (
         <div className="space-y-3">
@@ -190,7 +190,7 @@ export function NotificationsPanel({
                     </div>
                     <div className="mt-1 text-sm text-zinc-400">{notification.body}</div>
                     <div className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                      Open
+                      Open it
                     </div>
                   </div>
                 </div>
@@ -203,9 +203,9 @@ export function NotificationsPanel({
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
             <Bell className="h-8 w-8 text-zinc-500" />
           </div>
-          <h3 className="text-lg font-bold">No updates yet</h3>
+          <h3 className="text-lg font-bold">Quiet for now</h3>
           <p className="mt-2 text-sm text-zinc-500">
-            Add one friend, RSVP to one event, and share it once. That is when Whozin starts talking back.
+            Add one friend, lock one plan, and share it once. That's when Whozin starts talking back.
           </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -221,7 +221,7 @@ export function NotificationsPanel({
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
             >
               <Sparkles className="h-4 w-4" />
-              Explore events
+              Find the move
             </Link>
           </div>
         </div>

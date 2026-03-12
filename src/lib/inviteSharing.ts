@@ -13,12 +13,12 @@ function buildShareText(eventTitle?: string | null) {
   if (!title) {
     return {
       title: "Join me on Whozin",
-      text: "See who is going and make the night the move on Whozin.",
+      text: "See who is going and figure out the move on Whozin.",
     };
   }
 
   return {
-    title: `Join me at ${title}`,
+    title: `${title} might be the move`,
     text: `I found ${title} on Whozin. Come through:`,
   };
 }

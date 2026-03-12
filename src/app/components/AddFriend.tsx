@@ -10,11 +10,11 @@ type Props = {
 
 function friendlyError(message?: string) {
   const m = (message ?? "").toLowerCase();
-  if (m.includes("no user found")) return "No account found with that username.";
-  if (m.includes("cannot add yourself")) return "You can't add yourself.";
-  if (m.includes("not authenticated")) return "Please sign in first.";
-  if (m.includes("username is required")) return "Enter a username.";
-  return message ?? "Failed to add friend";
+  if (m.includes("no user found")) return "No one here with that @ yet.";
+  if (m.includes("cannot add yourself")) return "You already have you.";
+  if (m.includes("not authenticated")) return "Sign in first.";
+  if (m.includes("username is required")) return "Drop an @ first.";
+  return message ?? "Could not add friend";
 }
 
 export default function AddFriend({ onSuccess }: Props) {
@@ -23,7 +23,7 @@ export default function AddFriend({ onSuccess }: Props) {
 
   const handleAdd = async () => {
     if (featureFlags.killSwitchFriendAdds) {
-      toast.error("Friend requests are temporarily unavailable");
+      toast.error("Friend adds are down right now");
       return;
     }
     const trimmed = username.trim();
@@ -40,7 +40,7 @@ export default function AddFriend({ onSuccess }: Props) {
       toast.error(friendlyError(error.message));
       track("friend_add_failed", { source: "manual" });
     } else {
-      toast.success("Connection request sent");
+      toast.success("Request sent.");
       track("friend_add_submitted", { source: "manual" });
       track("friend_add", { source: "manual", mode: "submitted" });
       setUsername("");
@@ -53,15 +53,15 @@ export default function AddFriend({ onSuccess }: Props) {
   return (
     <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 mt-8">
       <div className="rounded-[28px] border border-white/10 bg-black/85 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-        <h2 className="text-xl font-bold mb-3">Add Friend</h2>
+        <h2 className="text-xl font-bold mb-3">Bring Your People In</h2>
         <div className="mb-3 text-xs text-zinc-500">
-          Add a few friends now so Whozin can read your actual circle, not just the city.
+          Add one real friend and the app starts reading your actual night, not just the city.
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <input
             type="text"
-            placeholder="username (ex: james_123abc)"
+            placeholder="@username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="min-w-0 flex-1 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none"
@@ -72,11 +72,11 @@ export default function AddFriend({ onSuccess }: Props) {
             disabled={working || featureFlags.killSwitchFriendAdds}
             className="px-6 py-3 rounded-xl font-semibold bg-pink-600 disabled:opacity-50"
           >
-            {working ? "Adding..." : "Add"}
+            {working ? "Adding..." : "Add friend"}
           </button>
         </div>
 
-        <div className="text-xs text-zinc-500 mt-2">Tip: your username is on your Profile page.</div>
+        <div className="text-xs text-zinc-500 mt-2">Tip: your @ is on your profile.</div>
       </div>
     </div>
   );
