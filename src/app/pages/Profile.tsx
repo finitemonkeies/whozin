@@ -8,9 +8,17 @@ import { createReferralInviteLink } from "@/lib/referrals";
 import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 import { isEventVisible } from "@/lib/eventVisibility";
-import { copyInviteLink, shareInviteLink } from "@/lib/inviteSharing";
+import { shareInviteLink } from "@/lib/inviteSharing";
 import { featureFlags } from "@/lib/featureFlags";
 import { NotificationsPanel } from "@/app/components/NotificationsPanel";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/app/components/ui/drawer";
 
 type ProfileRow = {
   id: string;
@@ -87,6 +95,11 @@ function Stat({
 export function Profile() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
+  const [inviteDrawerOpen, setInviteDrawerOpen] = useState(false);
+  const [profileInviteUrl, setProfileInviteUrl] = useState("");
+  const [loadingProfileInviteUrl, setLoadingProfileInviteUrl] = useState(false);
+  const [sharingProfileInvite, setSharingProfileInvite] = useState(false);
+  const [copyingProfileInvite, setCopyingProfileInvite] = useState(false);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [upcoming, setUpcoming] = useState<EventRow[]>([]);
@@ -213,6 +226,131 @@ export function Profile() {
     void load();
   }, []);
 
+  const ensureProfileInviteUrl = async () => {
+    if (profileInviteUrl) return profileInviteUrl;
+
+    const username = profile?.username;
+    if (!username) {
+      throw new Error("Set a username first");
+    }
+
+    setLoadingProfileInviteUrl(true);
+    try {
+      const created = await createReferralInviteLink({
+        source: "profile_share",
+      });
+      setProfileInviteUrl(created.url);
+      return created.url;
+    } finally {
+      setLoadingProfileInviteUrl(false);
+    }
+  };
+
+  const copyInviteUrl = async (url: string) => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(url);
+        return;
+      } catch {
+        // Fall back for Safari/webview cases.
+      }
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = url;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const copied = document.execCommand("copy");
+    textarea.remove();
+
+    if (!copied) throw new Error("Could not copy that link in this browser.");
+  };
+
+  const handleOpenProfileInvite = async () => {
+    const username = profile?.username;
+    if (!username) {
+      toast.error("Set a username first");
+      return;
+    }
+
+    setInviteDrawerOpen(true);
+    try {
+      await ensureProfileInviteUrl();
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not make that link");
+    }
+  };
+
+  const handleShareProfileInvite = async () => {
+    setSharingProfileInvite(true);
+    try {
+      const url = await ensureProfileInviteUrl();
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "Join me on Whozin",
+            text: "See who is going and figure out the move on Whozin.",
+            url,
+          });
+          await logProductEvent({
+            eventName: "invite_sent",
+            source: "profile_share",
+            metadata: { channel: "native_share" },
+          });
+          track("invite_share", { source: "profile_share", channel: "native_share" });
+          toast.success("Invite shared");
+          return;
+        } catch {
+          // Fall back to copy below.
+        }
+      }
+
+      await copyInviteUrl(url);
+      await logProductEvent({
+        eventName: "invite_link_copied",
+        source: "profile_share",
+        metadata: { channel: "copy_fallback" },
+      });
+      track("invite_copy", { source: "profile_share", channel: "copy_fallback" });
+      toast.success("Link copied");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not share that link");
+    } finally {
+      setSharingProfileInvite(false);
+    }
+  };
+
+  const handleCopyProfileInvite = async () => {
+    setCopyingProfileInvite(true);
+    try {
+      const url = await ensureProfileInviteUrl();
+      await copyInviteUrl(url);
+      await logProductEvent({
+        eventName: "invite_link_copied",
+        source: "profile_share",
+        metadata: { channel: "copy" },
+      });
+      track("invite_copy", { source: "profile_share", channel: "copy" });
+      await logProductEvent({
+        eventName: "invite_sent",
+        source: "profile_share",
+        metadata: { channel: "copy" },
+      });
+      track("invite_share", { source: "profile_share", channel: "copy" });
+      toast.success("Link copied");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Could not make that link");
+    } finally {
+      setCopyingProfileInvite(false);
+    }
+  };
+
   const handleShareUpcoming = async (eventId: string, eventTitle: string) => {
     if (featureFlags.killSwitchInvites) {
       toast.error("Invites are temporarily unavailable");
@@ -322,21 +460,7 @@ export function Profile() {
 
           <div className="mt-3 w-full max-w-md">
             <button
-              onClick={async () => {
-                const username = profile?.username;
-                if (!username) {
-                  toast.error("Set a username first");
-                  return;
-                }
-                try {
-                  await copyInviteLink({
-                    source: "profile_share",
-                  });
-                  toast.success("Link copied");
-                } catch (err: any) {
-                  toast.error(err?.message ?? "Could not make that link");
-                }
-              }}
+              onClick={() => void handleOpenProfileInvite()}
               className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
             >
               Copy link for a friend
@@ -515,6 +639,60 @@ export function Profile() {
           </div>
         ) : null}
       </div>
+
+      <Drawer open={inviteDrawerOpen} onOpenChange={setInviteDrawerOpen}>
+        <DrawerContent className="border-white/10 bg-zinc-950 text-white">
+          <DrawerHeader className="px-5 pb-2">
+            <DrawerTitle className="text-xl">Bring a friend</DrawerTitle>
+            <DrawerDescription className="text-zinc-400">
+              Share your invite link, or copy the URL below if Safari gets weird.
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="px-5 pb-2">
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                Invite link
+              </div>
+              <input
+                readOnly
+                value={loadingProfileInviteUrl ? "Generating your link..." : profileInviteUrl}
+                onFocus={(event) => event.currentTarget.select()}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-zinc-100 outline-none"
+              />
+              <div className="mt-2 text-xs text-zinc-500">
+                If copy fails, press and hold the link to select it manually.
+              </div>
+            </div>
+          </div>
+
+          <DrawerFooter className="px-5 pt-3 pb-6">
+            <button
+              type="button"
+              onClick={() => void handleShareProfileInvite()}
+              disabled={loadingProfileInviteUrl || sharingProfileInvite}
+              className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {sharingProfileInvite ? "Sharing..." : "Share link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyProfileInvite()}
+              disabled={loadingProfileInviteUrl || copyingProfileInvite}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-zinc-100 disabled:opacity-60"
+            >
+              {copyingProfileInvite ? "Copying..." : "Copy link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setInviteDrawerOpen(false)}
+              className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-zinc-300"
+            >
+              Close
+            </button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }
