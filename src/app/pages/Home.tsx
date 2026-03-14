@@ -14,6 +14,7 @@ import { MakeTheMoveHero, TheMoveHero } from "@/app/components/TheMoveHero";
 import { ActivationChecklist } from "@/app/components/ActivationChecklist";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { isEventVisible } from "@/lib/eventVisibility";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 type EventRow = {
   id: string;
@@ -142,6 +143,7 @@ function AvatarStack({
 
 export function Home() {
   const navigate = useNavigate();
+  const { loading: authLoading, user } = useAuth();
 
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,8 +170,9 @@ export function Home() {
   const [workingByEvent, setWorkingByEvent] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    if (authLoading) return;
     void load();
-  }, []);
+  }, [authLoading, user?.id]);
 
   const resetSocialState = () => {
     setFriendIds(new Set());
@@ -187,12 +190,7 @@ export function Home() {
 
   const load = async () => {
     setLoading(true);
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    const uid = session?.user?.id ?? null;
+    const uid = user?.id ?? null;
     setViewerId(uid);
 
     if (!uid) {
@@ -437,17 +435,13 @@ export function Home() {
       toast.error("RSVP is temporarily unavailable");
       return;
     }
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.user?.id) {
+    if (!user?.id) {
       toast.error("Sign in to RSVP");
       navigate("/login");
       return;
     }
 
-    const uid = session.user.id;
+    const uid = user.id;
     if (workingByEvent[eventId]) return;
 
     const rl = getRateLimitStatus(`rsvp_home:${uid}:${eventId}`, 2000);

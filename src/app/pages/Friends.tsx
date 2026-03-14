@@ -7,6 +7,7 @@ import AddFriend from "../components/AddFriend";
 import { featureFlags } from "@/lib/featureFlags";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { Share2 } from "lucide-react";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 type FriendRow = {
   friend_id: string;
@@ -67,6 +68,7 @@ function suggestionReason(profile: SuggestedProfile) {
 export default function Friends() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { loading: authLoading, user } = useAuth();
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [pending, setPending] = useState<FriendRow[]>([]);
@@ -90,21 +92,7 @@ export default function Friends() {
   } | null> => {
     setLoading(true);
 
-    const {
-      data: { session },
-      error: sessionErr,
-    } = await supabase.auth.getSession();
-
-    if (sessionErr) {
-      console.error("getSession error:", sessionErr);
-      toast.error("Could not load your session");
-      setFriends([]);
-      setPending([]);
-      setLoading(false);
-      return null;
-    }
-
-    if (!session?.user?.id) {
+    if (!user?.id) {
       toast.error("Sign in first");
       setFriends([]);
       setPending([]);
@@ -113,14 +101,14 @@ export default function Friends() {
       return null;
     }
 
-    setViewerId(session.user.id);
+    setViewerId(user.id);
 
     const { data, error } = await supabase
       .from("friendships")
       .select(
         "friend_id,status, friend_profile:profiles!friendships_friend_id_fkey(display_name, username, avatar_url)"
       )
-      .eq("user_id", session.user.id);
+      .eq("user_id", user.id);
 
     if (error) {
       console.error("Failed to load friends:", error);
@@ -168,7 +156,7 @@ export default function Friends() {
           const candidateId = row.friend_id as string | null;
           if (
             !candidateId ||
-            candidateId === session.user.id ||
+            candidateId === user.id ||
             connectedIds.has(candidateId)
           ) {
             continue;
@@ -297,7 +285,7 @@ export default function Friends() {
     const fallbackProfilesPromise = supabase
       .from("profiles")
       .select("id,display_name,username,avatar_url")
-      .neq("id", session.user.id)
+      .neq("id", user.id)
       .not("username", "is", null)
       .limit(80);
 
@@ -423,8 +411,9 @@ export default function Friends() {
   };
 
   useEffect(() => {
-    loadFriends();
-  }, []);
+    if (authLoading) return;
+    void loadFriends();
+  }, [authLoading, user?.id]);
 
   const handleShareInvite = async (placement: "friends_intro" | "friends_sticky_cta") => {
     if (sharingInvite) return;

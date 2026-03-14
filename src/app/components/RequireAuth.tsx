@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 type ProfileGate = {
   username: string | null;
@@ -15,6 +16,7 @@ type RequireAuthProps = {
 
 export function RequireAuth({ children }: RequireAuthProps) {
   const location = useLocation();
+  const { loading: authLoading, user } = useAuth();
 
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
@@ -35,10 +37,8 @@ export function RequireAuth({ children }: RequireAuthProps) {
     let cancelled = false;
 
     async function run() {
+      if (authLoading) return;
       setChecking(true);
-
-      const { data: sessionRes } = await supabase.auth.getSession();
-      const user = sessionRes.session?.user;
 
       if (!user) {
         if (!cancelled) {
@@ -68,17 +68,12 @@ export function RequireAuth({ children }: RequireAuthProps) {
       }
     }
 
-    run();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      run();
-    });
+    void run();
 
     return () => {
       cancelled = true;
-      sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [authLoading, user]);
 
   // Only show a full-screen loader on the very first load.
   // After that, keep rendering children to avoid flicker.

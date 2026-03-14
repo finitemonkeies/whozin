@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, ChevronRight, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 type ChecklistItem = {
   key: string;
@@ -19,15 +20,14 @@ type ChecklistState = {
 
 export function ActivationChecklist() {
   const [state, setState] = useState<ChecklistState>({ loading: true, items: [] });
+  const { loading: authLoading, user } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
+      if (authLoading) return;
+      const userId = user?.id;
 
       if (!userId) {
         if (!cancelled) {
@@ -102,7 +102,7 @@ export function ActivationChecklist() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, user?.id]);
 
   const completedCount = useMemo(
     () => state.items.filter((item) => item.done).length,

@@ -12,6 +12,7 @@ import { featureFlags } from "@/lib/featureFlags";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveHero } from "@/app/components/TheMoveHero";
+import { useAuth } from "@/app/providers/AuthProvider";
 
 const ExploreDatePicker = lazy(() =>
   import("@/app/components/ExploreDatePicker").then((m) => ({ default: m.ExploreDatePicker }))
@@ -337,6 +338,7 @@ async function fetchExploreSnapshot(args: {
 export function Explore() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { loading: authLoading, user } = useAuth();
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [loadingTrending, setLoadingTrending] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
@@ -391,14 +393,11 @@ export function Explore() {
 
   useEffect(() => {
     const resolveAutoCity = async () => {
+      if (authLoading) return;
       if (autoCityHint.trim()) {
         setLocationReady(true);
         return;
       }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
 
       const profileCity =
         (user?.user_metadata?.city as string | undefined)?.trim() ||
@@ -437,7 +436,7 @@ export function Explore() {
     };
 
     void resolveAutoCity();
-  }, [autoCityHint, activeCity]);
+  }, [activeCity, authLoading, autoCityHint, user]);
 
   const refreshRecommendations = async (city: string) => {
     setLoadingEvents(true);
@@ -523,10 +522,7 @@ export function Explore() {
       return;
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const viewerId = session?.user?.id ?? null;
+    const viewerId = user?.id ?? null;
 
     const { data: rows, error } = await supabase
       .from("attendees")
@@ -767,15 +763,12 @@ export function Explore() {
       return;
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session?.user?.id) {
+    if (!user?.id) {
       toast.error("Sign in to RSVP");
       return;
     }
 
-    const uid = session.user.id;
+    const uid = user.id;
     const rl = getRateLimitStatus(`rsvp_explore:${uid}:${event.id}`, 2000);
     if (!rl.allowed) {
       const seconds = formatRetrySeconds(rl.retryAfterMs);
