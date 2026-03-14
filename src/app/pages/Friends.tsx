@@ -76,6 +76,7 @@ export default function Friends() {
   const [addingIds, setAddingIds] = useState<Record<string, boolean>>({});
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsHidden, setSuggestionsHidden] = useState(
     localStorage.getItem("whozin_hide_friend_suggestions") === "true"
   );
@@ -131,214 +132,225 @@ export default function Friends() {
     const acceptedNameById = new Map(
       accepted.map((f) => [f.friend_id, profileLabel(f.friend_profile ?? null)])
     );
+    setLoading(false);
 
-    const acceptedList = [...acceptedIds];
-    let mutualCounts = new Map<string, number>();
-    let mutualPreviewByCandidate = new Map<string, string[]>();
-    let sharedEventCounts = new Map<string, number>();
-    let recentSharedEventCounts = new Map<string, number>();
-    let sharedEventTitleByCandidate = new Map<string, string>();
+    const loadSuggestions = async () => {
+      setLoadingSuggestions(true);
+      try {
 
-    if (acceptedList.length > 0) {
-      const { data: networkRows, error: networkErr } = await supabase
-        .from("friendships")
-        .select("user_id,friend_id,status")
-        .in("user_id", acceptedList)
-        .eq("status", "accepted");
+        const acceptedList = [...acceptedIds];
+        let mutualCounts = new Map<string, number>();
+        let mutualPreviewByCandidate = new Map<string, string[]>();
+        let sharedEventCounts = new Map<string, number>();
+        let recentSharedEventCounts = new Map<string, number>();
+        let sharedEventTitleByCandidate = new Map<string, string>();
 
-      if (networkErr) {
-        console.error("Failed to load mutual network:", networkErr);
-      } else {
-        mutualCounts = new Map<string, number>();
-        mutualPreviewByCandidate = new Map<string, string[]>();
+        if (acceptedList.length > 0) {
+        const { data: networkRows, error: networkErr } = await supabase
+          .from("friendships")
+          .select("user_id,friend_id,status")
+          .in("user_id", acceptedList)
+          .eq("status", "accepted");
 
-        for (const row of (networkRows ?? []) as Array<{ user_id: string | null; friend_id: string | null }>) {
-          const candidateId = row.friend_id as string | null;
-          if (
-            !candidateId ||
-            candidateId === user.id ||
-            connectedIds.has(candidateId)
-          ) {
-            continue;
-          }
+        if (networkErr) {
+          console.error("Failed to load mutual network:", networkErr);
+        } else {
+          mutualCounts = new Map<string, number>();
+          mutualPreviewByCandidate = new Map<string, string[]>();
 
-          mutualCounts.set(candidateId, (mutualCounts.get(candidateId) ?? 0) + 1);
+          for (const row of (networkRows ?? []) as Array<{ user_id: string | null; friend_id: string | null }>) {
+            const candidateId = row.friend_id as string | null;
+            if (
+              !candidateId ||
+              candidateId === user.id ||
+              connectedIds.has(candidateId)
+            ) {
+              continue;
+            }
 
-          const mutualName = acceptedNameById.get(row.user_id ?? "");
-          if (!mutualName) continue;
-          const current = mutualPreviewByCandidate.get(candidateId) ?? [];
-          if (!current.includes(mutualName)) {
-            current.push(mutualName);
-            mutualPreviewByCandidate.set(candidateId, current);
-          }
-        }
-      }
-    }
+            mutualCounts.set(candidateId, (mutualCounts.get(candidateId) ?? 0) + 1);
 
-    const socialSeedUserIds = Array.from(
-      new Set([session.user.id, ...acceptedList])
-    );
-
-    if (socialSeedUserIds.length > 0) {
-      const recentWindowIso = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: seedAttendance, error: seedAttendanceErr } = await supabase
-        .from("attendees")
-        .select("event_id,user_id,created_at")
-        .in("user_id", socialSeedUserIds)
-        .gte("created_at", recentWindowIso);
-
-      if (seedAttendanceErr) {
-        console.error("Failed to load shared-event suggestions:", seedAttendanceErr);
-      } else {
-        const eventIds = Array.from(
-          new Set(
-            (seedAttendance ?? [])
-              .map((row) => String(row.event_id ?? ""))
-              .filter(Boolean)
-          )
-        );
-
-        if (eventIds.length > 0) {
-          const [{ data: allAttendance, error: allAttendanceErr }, { data: eventRows, error: eventRowsErr }] =
-            await Promise.all([
-              supabase
-                .from("attendees")
-                .select("event_id,user_id,created_at")
-                .in("event_id", eventIds),
-              supabase
-                .from("events")
-                .select("id,title")
-                .in("id", eventIds),
-            ]);
-
-          if (allAttendanceErr) {
-            console.error("Failed to load candidate attendance:", allAttendanceErr);
-          } else {
-            const eventTitleById = new Map(
-              ((eventRows ?? []) as Array<{ id: string; title: string | null }>).map((row) => [
-                row.id,
-                (row.title ?? "").trim(),
-              ])
-            );
-            const recentThreshold = Date.now() - 14 * 24 * 60 * 60 * 1000;
-
-            const viewerEventIds = new Set(
-              ((seedAttendance ?? []) as Array<{ event_id: string; user_id: string; created_at?: string | null }>)
-                .filter((row) => row.user_id === session.user.id)
-                .map((row) => row.event_id)
-            );
-
-            for (const row of (allAttendance ?? []) as Array<{
-              event_id: string;
-              user_id: string;
-              created_at?: string | null;
-            }>) {
-              const candidateId = row.user_id;
-              if (
-                !candidateId ||
-                candidateId === session.user.id ||
-                connectedIds.has(candidateId)
-              ) {
-                continue;
-              }
-
-              if (!viewerEventIds.has(row.event_id)) continue;
-
-              sharedEventCounts.set(candidateId, (sharedEventCounts.get(candidateId) ?? 0) + 1);
-
-              const createdAt = row.created_at ? new Date(row.created_at).getTime() : NaN;
-              if (!Number.isNaN(createdAt) && createdAt >= recentThreshold) {
-                recentSharedEventCounts.set(
-                  candidateId,
-                  (recentSharedEventCounts.get(candidateId) ?? 0) + 1
-                );
-              }
-
-              if (!sharedEventTitleByCandidate.has(candidateId)) {
-                const title = eventTitleById.get(row.event_id);
-                if (title) sharedEventTitleByCandidate.set(candidateId, title);
-              }
+            const mutualName = acceptedNameById.get(row.user_id ?? "");
+            if (!mutualName) continue;
+            const current = mutualPreviewByCandidate.get(candidateId) ?? [];
+            if (!current.includes(mutualName)) {
+              current.push(mutualName);
+              mutualPreviewByCandidate.set(candidateId, current);
             }
           }
+        }
+      }
 
-          if (eventRowsErr) {
-            console.error("Failed to load shared-event titles:", eventRowsErr);
+        const socialSeedUserIds = Array.from(
+        new Set([user.id, ...acceptedList])
+      );
+
+        if (socialSeedUserIds.length > 0) {
+        const recentWindowIso = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: seedAttendance, error: seedAttendanceErr } = await supabase
+          .from("attendees")
+          .select("event_id,user_id,created_at")
+          .in("user_id", socialSeedUserIds)
+          .gte("created_at", recentWindowIso);
+
+        if (seedAttendanceErr) {
+          console.error("Failed to load shared-event suggestions:", seedAttendanceErr);
+        } else {
+          const eventIds = Array.from(
+            new Set(
+              (seedAttendance ?? [])
+                .map((row) => String(row.event_id ?? ""))
+                .filter(Boolean)
+            )
+          );
+
+          if (eventIds.length > 0) {
+            const [{ data: allAttendance, error: allAttendanceErr }, { data: eventRows, error: eventRowsErr }] =
+              await Promise.all([
+                supabase
+                  .from("attendees")
+                  .select("event_id,user_id,created_at")
+                  .in("event_id", eventIds),
+                supabase
+                  .from("events")
+                  .select("id,title")
+                  .in("id", eventIds),
+              ]);
+
+            if (allAttendanceErr) {
+              console.error("Failed to load candidate attendance:", allAttendanceErr);
+            } else {
+              const eventTitleById = new Map(
+                ((eventRows ?? []) as Array<{ id: string; title: string | null }>).map((row) => [
+                  row.id,
+                  (row.title ?? "").trim(),
+                ])
+              );
+              const recentThreshold = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+              const viewerEventIds = new Set(
+                ((seedAttendance ?? []) as Array<{ event_id: string; user_id: string; created_at?: string | null }>)
+                  .filter((row) => row.user_id === user.id)
+                  .map((row) => row.event_id)
+              );
+
+              for (const row of (allAttendance ?? []) as Array<{
+                event_id: string;
+                user_id: string;
+                created_at?: string | null;
+              }>) {
+                const candidateId = row.user_id;
+                if (
+                  !candidateId ||
+                  candidateId === user.id ||
+                  connectedIds.has(candidateId)
+                ) {
+                  continue;
+                }
+
+                if (!viewerEventIds.has(row.event_id)) continue;
+
+                sharedEventCounts.set(candidateId, (sharedEventCounts.get(candidateId) ?? 0) + 1);
+
+                const createdAt = row.created_at ? new Date(row.created_at).getTime() : NaN;
+                if (!Number.isNaN(createdAt) && createdAt >= recentThreshold) {
+                  recentSharedEventCounts.set(
+                    candidateId,
+                    (recentSharedEventCounts.get(candidateId) ?? 0) + 1
+                  );
+                }
+
+                if (!sharedEventTitleByCandidate.has(candidateId)) {
+                  const title = eventTitleById.get(row.event_id);
+                  if (title) sharedEventTitleByCandidate.set(candidateId, title);
+                }
+              }
+            }
+
+            if (eventRowsErr) {
+              console.error("Failed to load shared-event titles:", eventRowsErr);
+            }
           }
         }
       }
-    }
 
-    const prioritizedCandidateIds = Array.from(
-      new Set([
-        ...sharedEventCounts.keys(),
-        ...mutualCounts.keys(),
-      ])
-    ).slice(0, 80);
+        const prioritizedCandidateIds = Array.from(
+        new Set([
+          ...sharedEventCounts.keys(),
+          ...mutualCounts.keys(),
+        ])
+      ).slice(0, 80);
 
-    const prioritizedProfilesPromise = prioritizedCandidateIds.length
-      ? supabase
-          .from("profiles")
-          .select("id,display_name,username,avatar_url")
-          .in("id", prioritizedCandidateIds)
-      : Promise.resolve({ data: [], error: null });
+        const prioritizedProfilesPromise = prioritizedCandidateIds.length
+        ? supabase
+            .from("profiles")
+            .select("id,display_name,username,avatar_url")
+            .in("id", prioritizedCandidateIds)
+        : Promise.resolve({ data: [], error: null });
 
-    const fallbackProfilesPromise = supabase
-      .from("profiles")
-      .select("id,display_name,username,avatar_url")
-      .neq("id", user.id)
-      .not("username", "is", null)
-      .limit(80);
+        const fallbackProfilesPromise = supabase
+        .from("profiles")
+        .select("id,display_name,username,avatar_url")
+        .neq("id", user.id)
+        .not("username", "is", null)
+        .limit(80);
 
-    const [{ data: prioritizedProfiles, error: prioritizedErr }, { data: fallbackProfiles, error: fallbackErr }] =
-      await Promise.all([prioritizedProfilesPromise, fallbackProfilesPromise]);
+        const [{ data: prioritizedProfiles, error: prioritizedErr }, { data: fallbackProfiles, error: fallbackErr }] =
+        await Promise.all([prioritizedProfilesPromise, fallbackProfilesPromise]);
 
-    const pErr = prioritizedErr ?? fallbackErr;
-    const profiles = [
-      ...((prioritizedProfiles ?? []) as SuggestedProfile[]),
-      ...((fallbackProfiles ?? []) as SuggestedProfile[]),
-    ];
+        const pErr = prioritizedErr ?? fallbackErr;
+        const profiles = [
+        ...((prioritizedProfiles ?? []) as SuggestedProfile[]),
+        ...((fallbackProfiles ?? []) as SuggestedProfile[]),
+      ];
 
-    if (pErr) {
-      console.error("Failed to load suggested profiles:", pErr);
-      toast.error(pErr.message ?? "Could not load suggestions");
-      setSuggested([]);
-    } else {
-      const prioritized = profiles
-        .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id))
-        .filter(
-          (profile, index, arr) => arr.findIndex((candidate) => candidate.id === profile.id) === index
-        )
-        .map((r) => {
-          const next: SuggestedProfile = {
-            ...r,
-            mutualCount: mutualCounts.get(r.id) ?? 0,
-            mutualPreview: (mutualPreviewByCandidate.get(r.id) ?? []).slice(0, 2),
-            sharedEventCount: sharedEventCounts.get(r.id) ?? 0,
-            recentSharedEventCount: recentSharedEventCounts.get(r.id) ?? 0,
-            sharedEventTitle: sharedEventTitleByCandidate.get(r.id) ?? null,
-          };
-          next.reason = suggestionReason(next);
-          return next;
-        })
-        .sort((a, b) => {
-          const aScore =
-            (a.sharedEventCount ?? 0) * 12 +
-            (a.recentSharedEventCount ?? 0) * 6 +
-            (a.mutualCount ?? 0) * 5;
-          const bScore =
-            (b.sharedEventCount ?? 0) * 12 +
-            (b.recentSharedEventCount ?? 0) * 6 +
-            (b.mutualCount ?? 0) * 5;
-          if (bScore !== aScore) return bScore - aScore;
-          const aName = (a.display_name || a.username || "").toLowerCase();
-          const bName = (b.display_name || b.username || "").toLowerCase();
-          return aName.localeCompare(bName);
-        })
-        .slice(0, 20);
-      setSuggested(prioritized);
-    }
+        if (pErr) {
+          console.error("Failed to load suggested profiles:", pErr);
+          toast.error(pErr.message ?? "Could not load suggestions");
+          setSuggested([]);
+        } else {
+          const prioritized = profiles
+          .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id))
+          .filter(
+            (profile, index, arr) => arr.findIndex((candidate) => candidate.id === profile.id) === index
+          )
+          .map((r) => {
+            const next: SuggestedProfile = {
+              ...r,
+              mutualCount: mutualCounts.get(r.id) ?? 0,
+              mutualPreview: (mutualPreviewByCandidate.get(r.id) ?? []).slice(0, 2),
+              sharedEventCount: sharedEventCounts.get(r.id) ?? 0,
+              recentSharedEventCount: recentSharedEventCounts.get(r.id) ?? 0,
+              sharedEventTitle: sharedEventTitleByCandidate.get(r.id) ?? null,
+            };
+            next.reason = suggestionReason(next);
+            return next;
+          })
+          .sort((a, b) => {
+            const aScore =
+              (a.sharedEventCount ?? 0) * 12 +
+              (a.recentSharedEventCount ?? 0) * 6 +
+              (a.mutualCount ?? 0) * 5;
+            const bScore =
+              (b.sharedEventCount ?? 0) * 12 +
+              (b.recentSharedEventCount ?? 0) * 6 +
+              (b.mutualCount ?? 0) * 5;
+            if (bScore !== aScore) return bScore - aScore;
+            const aName = (a.display_name || a.username || "").toLowerCase();
+            const bName = (b.display_name || b.username || "").toLowerCase();
+            return aName.localeCompare(bName);
+          })
+          .slice(0, 20);
+          setSuggested(prioritized);
+        }
+      } catch (error) {
+        console.error("Failed to hydrate friend suggestions:", error);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
 
-    setLoading(false);
+    void loadSuggestions();
     return { acceptedIds, pendingIds };
   };
 
@@ -484,7 +496,11 @@ export default function Friends() {
             Start with one person you actually go out with. The app gets better immediately.
           </p>
 
-          {suggested.length === 0 ? (
+          {loadingSuggestions ? (
+            <div className="text-zinc-500">
+              Looking for the strongest people to pull in...
+            </div>
+          ) : suggested.length === 0 ? (
             <div className="text-zinc-500">
               No more suggestions right now. Add one manually and keep it moving.
             </div>
