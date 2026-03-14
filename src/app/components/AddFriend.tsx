@@ -6,6 +6,7 @@ import { featureFlags } from "@/lib/featureFlags";
 
 type Props = {
   onSuccess?: () => void | Promise<void>;
+  sticky?: boolean;
 };
 
 function friendlyError(message?: string) {
@@ -17,7 +18,7 @@ function friendlyError(message?: string) {
   return message ?? "Could not add friend";
 }
 
-export default function AddFriend({ onSuccess }: Props) {
+export default function AddFriend({ onSuccess, sticky = true }: Props) {
   const [username, setUsername] = useState("");
   const [working, setWorking] = useState(false);
 
@@ -51,7 +52,7 @@ export default function AddFriend({ onSuccess }: Props) {
   };
 
   return (
-    <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 mt-8">
+    <div className={`${sticky ? "sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20" : ""} mt-8`}>
       <div className="rounded-[28px] border border-white/10 bg-black/85 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
         <h2 className="text-xl font-bold mb-3">Bring Your People In</h2>
         <div className="mb-3 text-xs text-zinc-500">

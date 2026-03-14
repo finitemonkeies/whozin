@@ -29,7 +29,7 @@ type RsvpState = {
   recentCount?: number;
 };
 
-type ExploreTimeFilter = "all" | "tonight" | "thisWeek" | "weekend" | "pickDate";
+type ExploreTimeFilter = "all" | "tonight" | "weekend" | "pickDate";
 type ExploreDiscoveryMode = "city" | "friends" | "bayArea";
 type ExploreSnapshotRow = {
   id: string;
@@ -86,14 +86,14 @@ function getExploreModeCopy(args: {
   if (args.mode === "friends") {
     return {
       scanTitle: "Follow Your People",
-      scanBody: "Start with where your circle already has motion, then widen out if you need more.",
+      scanBody: "Start with where your circle already has motion tonight, then widen out if you need more.",
       heroContext: "Your people are moving here",
       pulseTitle: "Your Circle",
       pulseBody: "Where your people are already leaning.",
       pulseEmpty: "Your people have not separated around one plan yet.",
-      picksTitle: "Circle Picks",
-      picksBody: "Friend-led first, with a wider fallback behind it.",
-      scopeLabel: "your circle",
+      picksTitle: "More This Week",
+      picksBody: "Other strong options if your circle's pick is not the one.",
+      scopeLabel: "your circle and the Bay",
       locationHint: nearbyCity
         ? `Nearby city looks like ${nearbyCity}, but the stronger read right now is your circle.`
         : "City is still loose, so Explore is starting with your circle first.",
@@ -104,7 +104,7 @@ function getExploreModeCopy(args: {
   if (args.mode === "bayArea") {
     return {
       scanTitle: "Scan the Bay",
-      scanBody: "No clean city read yet, so Explore is pulling the strongest Bay Area options.",
+      scanBody: "Start with what's moving tonight across the Bay, then widen out when you want more.",
       heroContext: "Bay Area read",
       pulseTitle: "Bay Area Now",
       pulseBody: "The strongest nearby motion while your city settles.",
@@ -120,17 +120,17 @@ function getExploreModeCopy(args: {
   }
 
   return {
-    scanTitle: "Scan the City",
-    scanBody: "Trim the noise, then follow what fits tonight.",
-    heroContext: city ? `${city} city read` : "City read",
-    pulseTitle: "City Pulse",
-    pulseBody: "Fast movers, cleaned up by your filters.",
-    pulseEmpty: "Nothing is clearly separating yet. Try loosening one filter or switching nights.",
-    picksTitle: "All Picks",
-    picksBody: "Wider city browse, with a little more control.",
-    scopeLabel: city || "your city",
-    locationHint: nearbyCity ? `Locked to nearby city: ${nearbyCity}` : undefined,
-    emptyState: "Nothing fits this setup yet. Try another date, genre, or nearby city.",
+    scanTitle: "Scan the Bay",
+    scanBody: "Start with what's moving tonight, then branch into the weekend or pick a day.",
+    heroContext: city ? `${city} in the Bay` : "Bay Area read",
+    pulseTitle: "Bay Area Now",
+    pulseBody: "Fast movers from around the Bay, cleaned up by your filters.",
+    pulseEmpty: "Nothing is clearly separating yet. Try loosening a filter or switching nights.",
+    picksTitle: "More This Week",
+    picksBody: "A wider Bay Area browse, with a little more control.",
+    scopeLabel: "the Bay Area",
+    locationHint: nearbyCity ? `Nearby read: ${nearbyCity}` : undefined,
+    emptyState: "Nothing fits this setup yet. Try another date or sound.",
   };
 }
 
@@ -235,10 +235,6 @@ function matchesTimeFilter(event: Event, filter: ExploreTimeFilter, selectedDate
 
   if (filter === "tonight") {
     return isSameDay(eventDate, now);
-  }
-
-  if (filter === "thisWeek") {
-    return eventDate >= today && eventDate <= endOfWeek(now, { weekStartsOn: 1 });
   }
 
   if (filter === "weekend") {
@@ -350,21 +346,20 @@ export function Explore() {
   const [eventSort, setEventSort] = useState<"theMove" | "soonest" | "thisWeek" | "mostGoing">(
     "theMove"
   );
-  const [timeFilter, setTimeFilter] = useState<ExploreTimeFilter>("all");
+  const [timeFilter, setTimeFilter] = useState<ExploreTimeFilter>("tonight");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [tagFilter, setTagFilter] = useState("all");
 
-  const [cityInput, setCityInput] = useState(localStorage.getItem("whozin_explore_city") || "");
   const [autoCityHint, setAutoCityHint] = useState(
     localStorage.getItem("whozin_explore_auto_city") || ""
   );
-  const [activeCity, setActiveCity] = useState(localStorage.getItem("whozin_explore_city") || "");
+  const [activeCity, setActiveCity] = useState("");
   const onboardingMode = useMemo(
     () => new URLSearchParams(location.search).get("onboarding") === "1",
     [location.search]
   );
   const [locationReady, setLocationReady] = useState(
-    Boolean(localStorage.getItem("whozin_explore_city") || localStorage.getItem("whozin_explore_auto_city"))
+    Boolean(localStorage.getItem("whozin_explore_auto_city"))
   );
 
   const effectiveCity = activeCity.trim() || autoCityHint.trim();
@@ -383,23 +378,19 @@ export function Explore() {
       return {
         mode: "friends" as ExploreDiscoveryMode,
         ranked: dedupeEventsById([...socialFallback, ...regionalFallback]),
-        trending: socialFallback.slice(0, 6),
+        trending: socialFallback,
       };
     }
 
     return {
       mode: "bayArea" as ExploreDiscoveryMode,
       ranked: regionalFallback,
-      trending: regionalFallback.slice(0, 6),
+      trending: regionalFallback,
     };
   };
 
   useEffect(() => {
     const resolveAutoCity = async () => {
-      if (cityInput.trim()) {
-        setLocationReady(true);
-        return;
-      }
       if (autoCityHint.trim()) {
         setLocationReady(true);
         return;
@@ -446,7 +437,7 @@ export function Explore() {
     };
 
     void resolveAutoCity();
-  }, [cityInput, autoCityHint, activeCity]);
+  }, [autoCityHint, activeCity]);
 
   const refreshRecommendations = async (city: string) => {
     setLoadingEvents(true);
@@ -701,6 +692,34 @@ export function Explore() {
       }),
     [autoCityHint, discoveryMode, effectiveCity]
   );
+  const primarySectionTitle = useMemo(() => {
+    if (timeFilter === "tonight") return "The Move Tonight";
+    if (timeFilter === "weekend") return "This Weekend";
+    if (timeFilter === "pickDate") return "On This Day";
+    return modeCopy.pulseTitle;
+  }, [modeCopy.pulseTitle, timeFilter]);
+  const primarySectionBody = useMemo(() => {
+    if (timeFilter === "tonight") {
+      return discoveryMode === "friends"
+        ? "Where your people and the city are actually heading tonight."
+        : "Where people are actually heading tonight.";
+    }
+    if (timeFilter === "weekend") return "The strongest plans building for the weekend.";
+    if (timeFilter === "pickDate") return "The best signal for the day you picked.";
+    return modeCopy.pulseBody;
+  }, [discoveryMode, modeCopy.pulseBody, timeFilter]);
+  const browseSectionTitle = useMemo(() => {
+    if (timeFilter === "tonight") return "Happening Later";
+    if (timeFilter === "weekend") return "More This Weekend";
+    if (timeFilter === "pickDate") return "More On This Day";
+    return modeCopy.picksTitle;
+  }, [modeCopy.picksTitle, timeFilter]);
+  const browseSectionBody = useMemo(() => {
+    if (timeFilter === "tonight") return "More good options if the move is not obvious yet.";
+    if (timeFilter === "weekend") return "Other strong weekend options across the Bay.";
+    if (timeFilter === "pickDate") return "Other strong options for the date you picked.";
+    return modeCopy.picksBody;
+  }, [modeCopy.picksBody, timeFilter]);
   const heroEvent = useMemo(
     () =>
       heroSignal
@@ -726,6 +745,16 @@ export function Explore() {
         })
         .slice(0, 3),
     [filteredSignalsById, filteredTrendingEvents, heroEvent?.id, rsvpByEventId]
+  );
+  const featuredEventIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (heroEvent?.id) ids.add(heroEvent.id);
+    for (const event of cityPulseEvents) ids.add(event.id);
+    return ids;
+  }, [cityPulseEvents, heroEvent?.id]);
+  const browseEvents = useMemo(
+    () => filteredSortedEvents.filter((event) => !featuredEventIds.has(event.id)),
+    [featuredEventIds, filteredSortedEvents]
   );
 
   const handleQuickRsvp = async (event: Event) => {
@@ -855,52 +884,60 @@ export function Explore() {
             <div className="text-xs text-zinc-600 mt-0.5">{modeCopy.scanBody}</div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setEventSort("theMove")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                eventSort === "theMove"
-                  ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                  : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              The Move
-            </button>
-            <button
-              type="button"
-              onClick={() => setEventSort("soonest")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                eventSort === "soonest"
-                  ? "border-white bg-white text-black"
-                  : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              Up next
-            </button>
-            <button
-              type="button"
-              onClick={() => setEventSort("thisWeek")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                eventSort === "thisWeek"
-                  ? "border-white bg-white text-black"
-                  : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              This week
-            </button>
-            <button
-              type="button"
-              onClick={() => setEventSort("mostGoing")}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                eventSort === "mostGoing"
-                  ? "border-white bg-white text-black"
-                  : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              Most heads
-            </button>
+          <div className="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
+            <div>
+              <div className="text-sm font-semibold text-white">Pick the night</div>
+              <div className="mt-1 text-xs text-zinc-500">
+                Start with tonight, jump to the weekend, pick a date, or widen out to everything happening.
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["tonight", "Tonight"],
+                ["weekend", "Weekend"],
+                ["all", "Happening"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setTimeFilter(value as ExploreTimeFilter);
+                    if (value !== "pickDate") setSelectedDate(undefined);
+                  }}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    timeFilter === value
+                      ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
+                      : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+
+              <Suspense
+                fallback={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/60 px-3 py-1.5 text-xs font-semibold text-zinc-300"
+                  >
+                    {selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date"}
+                  </button>
+                }
+              >
+                <ExploreDatePicker
+                  selectedDate={selectedDate}
+                  active={timeFilter === "pickDate"}
+                  availableDateKeys={availableDateKeys}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setTimeFilter(date ? "pickDate" : "all");
+                  }}
+                />
+              </Suspense>
+            </div>
           </div>
+
         </div>
 
         <div className="space-y-4">
@@ -918,10 +955,10 @@ export function Explore() {
           <div className="flex items-end justify-between">
             <div>
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                {modeCopy.pulseTitle}
+                {primarySectionTitle}
                 {loadingTrending && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
               </h3>
-              <div className="text-xs text-zinc-600 mt-0.5">{modeCopy.pulseBody}</div>
+              <div className="text-xs text-zinc-600 mt-0.5">{primarySectionBody}</div>
             </div>
           </div>
 
@@ -965,56 +1002,19 @@ export function Explore() {
           <div id="all-picks" className="flex items-end justify-between">
             <div>
               <h3 className="text-lg font-semibold flex items-center gap-2">
-                {modeCopy.picksTitle}
+                {browseSectionTitle}
                 {loadingEvents && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
               </h3>
-              <div className="text-xs text-zinc-600 mt-0.5">{modeCopy.picksBody}</div>
+              <div className="text-xs text-zinc-600 mt-0.5">{browseSectionBody}</div>
             </div>
           </div>
-
-          <div className="flex gap-2">
-            <input
-              value={cityInput}
-              onChange={(event) => setCityInput(event.target.value)}
-              placeholder="Change city (ex: Chicago)"
-              className="flex-1 bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const city = cityInput.trim() || autoCityHint.trim();
-                if (cityInput.trim()) {
-                  localStorage.setItem("whozin_explore_city", cityInput.trim());
-                } else {
-                  localStorage.removeItem("whozin_explore_city");
-                }
-                setLocationReady(true);
-                setActiveCity(city);
-              }}
-              className="px-3 py-2 rounded-xl text-sm bg-white/10 border border-white/10 hover:bg-white/15"
-            >
-              Update
-            </button>
-          </div>
-
-          {!cityInput.trim() && modeCopy.locationHint ? (
-            <div className="text-xs text-zinc-500">
-              {discoveryMode === "city" && autoCityHint.trim() ? (
-                <>
-                  Locked to nearby city: <span className="text-zinc-300">{autoCityHint}</span>
-                </>
-              ) : (
-                modeCopy.locationHint
-              )}
-            </div>
-          ) : null}
 
           <div className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-white">Filter the night</div>
+                <div className="text-sm font-semibold text-white">Refine the mix</div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  Narrow by timing, sound, or one date.
+                  Narrow by sound, then reset if you want the full Bay read again.
                 </div>
               </div>
               {filtersActive ? (
@@ -1031,52 +1031,6 @@ export function Explore() {
                   Reset
                 </button>
               ) : null}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {[
-                ["all", "All nights"],
-                ["tonight", "Tonight"],
-                ["thisWeek", "This week"],
-                ["weekend", "Weekend"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setTimeFilter(value as ExploreTimeFilter);
-                    if (value !== "pickDate") setSelectedDate(undefined);
-                  }}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    timeFilter === value
-                      ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                      : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-
-              <Suspense
-                fallback={
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/60 px-3 py-1.5 text-xs font-semibold text-zinc-300"
-                  >
-                    {selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date"}
-                  </button>
-                }
-              >
-                <ExploreDatePicker
-                  selectedDate={selectedDate}
-                  active={timeFilter === "pickDate"}
-                  availableDateKeys={availableDateKeys}
-                  onSelect={(date) => {
-                    setSelectedDate(date);
-                    setTimeFilter(date ? "pickDate" : "all");
-                  }}
-                />
-              </Suspense>
             </div>
 
             {availableTags.length > 0 ? (
@@ -1110,18 +1064,9 @@ export function Explore() {
             ) : null}
 
             <div className="text-xs text-zinc-500">
-              Showing <span className="text-zinc-200">{filteredSortedEvents.length}</span> events
-              {discoveryMode === "city" && effectiveCity ? (
-                <>
-                  {" "}
-                  for <span className="text-zinc-200">{effectiveCity}</span>
-                </>
-              ) : (
-                <>
-                  {" "}
-                  from <span className="text-zinc-200">{modeCopy.scopeLabel}</span>
-                </>
-              )}
+              Showing <span className="text-zinc-200">{browseEvents.length}</span> events
+              {" "}
+              from <span className="text-zinc-200">{modeCopy.scopeLabel}</span>
               {selectedDate ? (
                 <>
                   {" "}
@@ -1142,8 +1087,8 @@ export function Explore() {
             </div>
           ) : (
             <div className="grid gap-6">
-              {filteredSortedEvents.length > 0 ? (
-                filteredSortedEvents.map((event) => (
+              {browseEvents.length > 0 ? (
+                browseEvents.map((event) => (
                   <EventCard
                     key={event.id}
                     event={event}

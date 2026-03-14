@@ -694,9 +694,6 @@ export function Home() {
                     <h2 className="line-clamp-2 text-[1.6rem] font-semibold leading-[1.05] text-white sm:text-[1.8rem]">
                       {event.title}
                     </h2>
-                    {socialLabel ? (
-                      <p className="mt-2 text-sm font-medium text-zinc-200">{socialLabel}</p>
-                    ) : null}
                   </div>
                 </div>
               </div>
@@ -721,6 +718,9 @@ export function Home() {
                         {moveRanking.signalsById[event.id].explainer}
                       </div>
                     ) : null}
+                    {socialLabel ? (
+                      <p className="mt-2 text-sm font-medium text-zinc-200">{socialLabel}</p>
+                    ) : null}
                     {friendCue ? (
                       <div className="mt-2 text-xs text-zinc-400">{friendCue}</div>
                     ) : null}
@@ -742,9 +742,7 @@ export function Home() {
 
                 <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-1">
                   <div className="text-xs text-zinc-500">
-                    {totalGoing > 0
-                      ? `${totalGoing} going${!going ? " • RSVP to join your circle" : ""}`
-                      : "Quiet for now"}
+                    {totalGoing > 0 ? (!going ? "RSVP to join your circle" : "You're in") : "Quiet for now"}
                   </div>
 
                   <div className="flex items-center gap-2">
