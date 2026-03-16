@@ -60,7 +60,7 @@ export default function AuthCallback() {
             localStorage.removeItem("whozin_post_auth_redirect");
             const nextRoute = await resolveFirstSessionRoute(redirect);
             track("auth_callback_success", { redirect: nextRoute });
-            navigate(nextRoute);
+            navigate(nextRoute, { replace: true });
             return;
           }
           await new Promise((r) => setTimeout(r, 200));
@@ -73,11 +73,11 @@ export default function AuthCallback() {
         toast.error("Login timed out", {
           description: "Session not established. Try again.",
         });
-        navigate("/login");
+        navigate("/login", { replace: true });
       } catch (err) {
         trackError("auth_callback_exception", err);
         toast.error("Login failed", { description: "Unexpected callback error. Try again." });
-        navigate("/login");
+        navigate("/login", { replace: true });
       }
     };
 

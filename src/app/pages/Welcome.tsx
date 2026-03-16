@@ -90,17 +90,17 @@ export function Welcome() {
   const onContinue = () => {
     // Preserve the original redirect all the way through setup
     const next = encodeURIComponent(redirect);
-    navigate(`/setup?redirect=${next}`);
+    navigate(`/setup?redirect=${next}`, { replace: true });
   };
 
   const onSignIn = () => {
     const next = encodeURIComponent(location.pathname + location.search);
-    navigate(`/login?redirect=${next}`);
+    navigate(`/login?redirect=${next}`, { replace: true });
   };
 
   const onSignUp = () => {
     const next = encodeURIComponent(location.pathname + location.search);
-    navigate(`/signup?redirect=${next}`);
+    navigate(`/signup?redirect=${next}`, { replace: true });
   };
 
   return (
@@ -130,7 +130,7 @@ export function Welcome() {
         <p className="text-zinc-500 text-center mb-12 text-lg">
           {authed
             ? "You're almost in. One quick setup."
-            : "Sign in or create an account to get started."}
+            : "Start with the social loop, then sign in when it clicks."}
         </p>
 
         {/* Buttons */}
@@ -146,18 +146,24 @@ export function Welcome() {
           ) : (
             <>
               <button
-                onClick={onSignIn}
+                onClick={() => {
+                  const next = encodeURIComponent(redirect);
+                  navigate(`/intro?redirect=${next}`, { replace: true });
+                }}
                 className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-2xl font-bold text-lg shadow-[0_0_20px_rgba(219,39,119,0.4)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)] transition-all active:scale-95 flex items-center justify-center"
               >
-                Sign In
+                See How It Works
               </button>
 
-              <button
-                onClick={onSignUp}
-                className="w-full py-4 bg-zinc-900 border border-zinc-800 text-white rounded-2xl font-bold text-lg hover:bg-zinc-800 transition-colors active:scale-95"
-              >
-                Sign Up
-              </button>
+              <div className="flex items-center justify-center gap-3 text-sm text-zinc-500">
+                <button onClick={onSignIn} className="hover:text-white transition-colors">
+                  Sign In
+                </button>
+                <span className="text-zinc-700">/</span>
+                <button onClick={onSignUp} className="hover:text-white transition-colors">
+                  Sign Up
+                </button>
+              </div>
             </>
           )}
         </div>

@@ -117,7 +117,7 @@ export function SignUp() {
 
           <button
             type="button"
-            onClick={() => navigate(`/login?redirect=${encodeURIComponent(redirect)}`)}
+            onClick={() => navigate(`/login?redirect=${encodeURIComponent(redirect)}`, { replace: true })}
             className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600"
           >
             Go to login

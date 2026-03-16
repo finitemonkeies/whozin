@@ -111,6 +111,7 @@ export default function Login() {
         toast.error("Could not sign you in", {
           description: "OAuth redirect is missing. Try again.",
         });
+        setLoading(null);
       }
     } catch (e: any) {
       trackError("auth_oauth_exception", e, { provider });

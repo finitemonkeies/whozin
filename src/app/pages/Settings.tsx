@@ -3,14 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   User,
-  Phone,
-  Ticket,
   Shield,
   Bell,
-  HelpCircle,
   LogOut,
-  ChevronRight,
   MessageCircle,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -23,6 +20,12 @@ import {
   type AttendanceVisibility,
   type BlockedUserRow,
 } from "@/lib/privacySafety";
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  loadPushStatus,
+  type PushStatus,
+} from "@/lib/pushNotifications";
 
 export function Settings() {
   const navigate = useNavigate();
@@ -37,6 +40,14 @@ export function Settings() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUserRow[]>([]);
   const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(true);
   const [unblockingUserId, setUnblockingUserId] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<PushStatus>({
+    supported: false,
+    permission: "unsupported",
+    subscribed: false,
+    needsStandaloneIosPrompt: false,
+  });
+  const [loadingPushStatus, setLoadingPushStatus] = useState(true);
+  const [savingPushStatus, setSavingPushStatus] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,8 +133,31 @@ export function Settings() {
       }
     }
 
+    async function loadBrowserPushStatus() {
+      setLoadingPushStatus(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      try {
+        const status = await loadPushStatus(user?.id ?? null);
+        if (!cancelled) setPushStatus(status);
+      } catch {
+        if (!cancelled) {
+          setPushStatus({
+            supported: false,
+            permission: "unsupported",
+            subscribed: false,
+            needsStandaloneIosPrompt: false,
+          });
+        }
+      } finally {
+        if (!cancelled) setLoadingPushStatus(false);
+      }
+    }
+
     void loadMarketingPreference();
     void loadSafetySettings();
+    void loadBrowserPushStatus();
 
     return () => {
       cancelled = true;
@@ -177,7 +211,7 @@ export function Settings() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast.success("Logged out");
-    navigate("/welcome");
+    navigate("/welcome", { replace: true });
   };
 
   const persistPrivacySettings = async (next: {
@@ -236,11 +270,43 @@ export function Settings() {
     }
   };
 
+  const handleTogglePush = async () => {
+    if (savingPushStatus) return;
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+
+    if (userErr || !user) {
+      toast.error("Please sign in again to update push alerts.");
+      return;
+    }
+
+    setSavingPushStatus(true);
+    try {
+      if (pushStatus.subscribed) {
+        await disablePushNotifications(user.id);
+        toast.success("Browser push alerts turned off");
+      } else {
+        await enablePushNotifications(user.id);
+        toast.success("Browser push alerts enabled");
+      }
+      const nextStatus = await loadPushStatus(user.id);
+      setPushStatus(nextStatus);
+    } catch (error: any) {
+      toast.error("Could not update push alerts", {
+        description: error?.message ?? "Please try again.",
+      });
+    } finally {
+      setSavingPushStatus(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       {/* Header */}
       <div className="sticky top-0 bg-black/80 backdrop-blur-md z-10 p-4 border-b border-white/5 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+        <button onClick={() => navigate("/profile")} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold">Settings</h1>
@@ -253,7 +319,7 @@ export function Settings() {
           <div className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden">
             <div
               onClick={() => navigate("/profile/edit")}
-              className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer border-b border-white/5"
+              className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <User className="w-5 h-5 text-zinc-400" />
@@ -263,32 +329,6 @@ export function Settings() {
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-zinc-600" />
-            </div>
-            <div className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer">
-              <div className="flex items-center gap-3">
-                <Phone className="w-5 h-5 text-zinc-400" />
-                <div>
-                  <div className="font-medium">Phone Number</div>
-                  <div className="text-xs text-zinc-500">+1 (555) 123-4567</div>
-                </div>
-              </div>
-              <div className="text-xs font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded">Verified</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Integrations Section */}
-        <section>
-          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 px-2">Integrations</h2>
-          <div className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden">
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Ticket className="w-5 h-5 text-blue-500" />
-                <div className="font-medium">Ticketmaster</div>
-              </div>
-              <button className="text-sm font-bold px-3 py-1.5 rounded-lg bg-zinc-800 text-white border border-white/10 hover:bg-zinc-700 transition-colors">
-                Manage
-              </button>
             </div>
           </div>
         </section>
@@ -365,6 +405,25 @@ export function Settings() {
                 onChange={() => void updateMarketingEmails(!marketingEmailsEnabled)}
               />
             </div>
+
+            <div className="p-4 flex items-center justify-between border-t border-white/5">
+              <div className="flex items-center gap-3">
+                <Bell className="w-5 h-5 text-zinc-400" />
+                <div>
+                  <div className="font-medium">Browser Push Alerts</div>
+                  <div className="text-xs text-zinc-500">
+                    {pushStatus.needsStandaloneIosPrompt
+                      ? "On iPhone, add Whozin to your Home Screen first."
+                      : "Get heads up when your people start moving."}
+                  </div>
+                </div>
+              </div>
+              <Toggle
+                checked={pushStatus.subscribed}
+                disabled={!pushStatus.supported || loadingPushStatus || savingPushStatus}
+                onChange={() => void handleTogglePush()}
+              />
+            </div>
           </div>
         </section>
 
@@ -421,27 +480,23 @@ export function Settings() {
           </div>
         </section>
 
-        {/* Support Section */}
         <section>
-          <div className="space-y-2">
-            <button className="w-full p-4 flex items-center justify-between bg-zinc-900/30 border border-white/5 rounded-2xl hover:bg-zinc-800/50 transition-colors text-left">
-              <div className="flex items-center gap-3">
-                <HelpCircle className="w-5 h-5 text-zinc-400" />
-                <span className="font-medium">Help & Support</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-zinc-600" />
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="w-full p-4 flex items-center justify-between bg-red-500/10 border border-red-500/20 rounded-2xl hover:bg-red-500/20 transition-colors text-left group"
-            >
-              <div className="flex items-center gap-3">
-                <LogOut className="w-5 h-5 text-red-500" />
-                <span className="font-medium text-red-500">Log Out</span>
-              </div>
-            </button>
+          <div className="rounded-2xl border border-white/5 bg-zinc-900/30 p-4">
+            <div className="text-sm font-medium text-white">More controls are coming.</div>
+            <p className="mt-1 text-xs text-zinc-500">
+              We are keeping Settings focused on the parts that already work end-to-end.
+            </p>
           </div>
+
+          <button
+            onClick={handleLogout}
+            className="mt-3 w-full p-4 flex items-center justify-between bg-red-500/10 border border-red-500/20 rounded-2xl hover:bg-red-500/20 transition-colors text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <LogOut className="w-5 h-5 text-red-500" />
+              <span className="font-medium text-red-500">Log Out</span>
+            </div>
+          </button>
 
           <div className="text-center mt-8">
             <p className="text-xs text-zinc-700">Whozin v1.0.0 (MVP)</p>

@@ -8,6 +8,7 @@ import "@/styles/tailwind.css";
 import "@/styles/theme.css";
 import "@/styles/fonts.css";
 import "@/styles/index.css";
+import { registerPushServiceWorker } from "@/lib/pushNotifications";
 
 initGlobalErrorTracking();
 
@@ -18,3 +19,4 @@ createRoot(document.getElementById("root")!).render(
 );
 
 initMonitoring();
+void registerPushServiceWorker();

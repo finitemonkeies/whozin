@@ -1,9 +1,19 @@
 import { supabase } from "@/lib/supabase";
+import { decideFirstSessionRoute as decideFirstSessionRouteImpl } from "./firstSessionRoute.shared.js";
 
-const DEFAULT_REDIRECTS = new Set(["/", "/intro", "/welcome"]);
+export function decideFirstSessionRoute(
+  redirect: string,
+  counts: {
+    friendCount: number;
+    rsvpCount: number;
+    inviteCount: number;
+  }
+): string {
+  return decideFirstSessionRouteImpl(redirect, counts);
+}
 
 export async function resolveFirstSessionRoute(redirect: string): Promise<string> {
-  if (!DEFAULT_REDIRECTS.has(redirect)) return redirect;
+  if (redirect !== "/" && redirect !== "/intro" && redirect !== "/welcome") return redirect;
 
   const {
     data: { session },
@@ -26,9 +36,9 @@ export async function resolveFirstSessionRoute(redirect: string): Promise<string
   const rsvpCount = attendeeCountRes.count ?? 0;
   const inviteCount = inviteCountRes.count ?? 0;
 
-  if (friendCount === 0) return "/friends?onboarding=1";
-  if (rsvpCount === 0) return "/explore?onboarding=1";
-  if (inviteCount === 0) return "/profile?onboarding=1";
-
-  return redirect;
+  return decideFirstSessionRoute(redirect, {
+    friendCount,
+    rsvpCount,
+    inviteCount,
+  });
 }

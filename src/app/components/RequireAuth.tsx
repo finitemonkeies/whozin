@@ -1,4 +1,3 @@
-// src/app/components/RequireAuth.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -82,7 +81,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
   if (shouldBlockUI) {
     return (
       <div className="min-h-[100svh] bg-black text-white flex items-center justify-center">
-        <div className="text-sm text-white/70">Checking session…</div>
+        <div className="text-sm text-white/70">Checking session...</div>
       </div>
     );
   }

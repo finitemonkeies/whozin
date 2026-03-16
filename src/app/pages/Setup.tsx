@@ -140,14 +140,14 @@ export default function Setup() {
         try {
           const claimed = await claimPendingReferral("share_link");
           if (claimed?.eventId) {
-            window.location.assign(`/event/${claimed.eventId}?src=share_link`);
+            window.location.replace(`/event/${claimed.eventId}?src=share_link`);
             return;
           }
         } catch (err) {
           console.error("Pending referral claim failed:", err);
         }
         const nextRoute = await resolveFirstSessionRoute(redirectTo);
-        window.location.assign(nextRoute);
+        window.location.replace(nextRoute);
       }
     }
 
@@ -239,7 +239,7 @@ export default function Setup() {
     try {
       const claimed = await claimPendingReferral("share_link");
       if (claimed?.eventId) {
-        window.location.assign(`/event/${claimed.eventId}?src=share_link`);
+        window.location.replace(`/event/${claimed.eventId}?src=share_link`);
         return;
       }
     } catch (err) {
@@ -247,7 +247,7 @@ export default function Setup() {
     }
 
     const nextRoute = await resolveFirstSessionRoute(redirectTo);
-    window.location.assign(nextRoute);
+    window.location.replace(nextRoute);
   }
 
   return (

@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
 
 export function DesktopScanning() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Simulate scan
-    setTimeout(() => {
+    const timer = window.setTimeout(() => {
       navigate("/web/match");
     }, 3000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [navigate]);
 
   return (
@@ -32,7 +34,7 @@ export function DesktopScanning() {
         </div>
 
         <h1 className="text-3xl font-bold mb-2">Scanning your inbox...</h1>
-        <p className="text-zinc-500 text-lg">This takes about 10 seconds.</p>
+        <p className="text-zinc-500 text-lg">This takes a few seconds.</p>
       </motion.div>
     </div>
   );

@@ -83,7 +83,7 @@ export function Onboarding() {
     });
     // Always route through login from intro so first-time users
     // explicitly enter auth before any setup/profile screen.
-    navigate(`/login?redirect=${next}`);
+    navigate(`/login?redirect=${next}`, { replace: true });
   };
 
   return (

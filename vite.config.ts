@@ -30,9 +30,8 @@ export default defineConfig({
           ) {
             return "vendor-ui-heavy";
           }
-          if (id.includes("node_modules/@sentry/") || id.includes("node_modules/posthog-js")) {
-            return "vendor-monitoring";
-          }
+          if (id.includes("node_modules/@sentry/")) return "vendor-sentry";
+          if (id.includes("node_modules/posthog-js")) return "vendor-posthog";
           return undefined;
         },
       },
