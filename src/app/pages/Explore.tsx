@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { endOfWeek, format, isSameDay, startOfDay } from "date-fns";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { addDays, endOfDay, format, isSameDay, startOfDay } from "date-fns";
+import { Loader2, Sparkles, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
+import { ExploreDatePicker } from "@/app/components/ExploreDatePicker";
 import { Event } from "../../data/mock";
 import { supabase } from "@/lib/supabase";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -13,10 +14,6 @@ import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveHero } from "@/app/components/TheMoveHero";
 import { useAuth } from "@/app/providers/AuthProvider";
-
-const ExploreDatePicker = lazy(() =>
-  import("@/app/components/ExploreDatePicker").then((m) => ({ default: m.ExploreDatePicker }))
-);
 
 const exploreCoverStyle = {
   background:
@@ -30,150 +27,7 @@ type RsvpState = {
   recentCount?: number;
 };
 
-type ExploreTimeFilter = "all" | "tonight" | "weekend" | "pickDate";
-type ExploreDiscoveryMode = "city" | "friends" | "bayArea";
-type ExploreSnapshotRow = {
-  id: string;
-  title: string;
-  location?: string | null;
-  city?: string | null;
-  event_date?: string | null;
-  event_end_date?: string | null;
-  image_url?: string | null;
-  description?: string | null;
-  event_source?: string | null;
-  ticket_url?: string | null;
-  move_explainer?: string | null;
-  move_secondary?: string | null;
-  move_status?: string | null;
-  move_score?: number | null;
-  total_rsvps?: number | null;
-  recent_rsvps_6h?: number | null;
-  viewer_going?: boolean | null;
-};
-
-type ExploreSnapshotPayload = {
-  ok?: boolean;
-  city_pulse?: ExploreSnapshotRow[];
-  all_picks?: ExploreSnapshotRow[];
-};
-
-type ExploreModeCopy = {
-  scanTitle: string;
-  scanBody: string;
-  heroContext: string;
-  pulseTitle: string;
-  pulseBody: string;
-  pulseEmpty: string;
-  picksTitle: string;
-  picksBody: string;
-  scopeLabel: string;
-  locationHint?: string;
-  emptyState: string;
-};
-
-const exploreRpcEnabled =
-  ((import.meta.env.VITE_ENABLE_EXPLORE_RPC as string | undefined)?.trim() || "").toLowerCase() ===
-  "true";
-
-function getExploreModeCopy(args: {
-  mode: ExploreDiscoveryMode;
-  city: string;
-  nearbyCity: string;
-}): ExploreModeCopy {
-  const city = args.city.trim();
-  const nearbyCity = args.nearbyCity.trim();
-
-  if (args.mode === "friends") {
-    return {
-      scanTitle: "Follow Your People",
-      scanBody: "Start with where your circle already has motion tonight, then widen out if you need more.",
-      heroContext: "Your people are moving here",
-      pulseTitle: "Your Circle",
-      pulseBody: "Where your people are already leaning.",
-      pulseEmpty: "Your people have not separated around one plan yet.",
-      picksTitle: "More This Week",
-      picksBody: "Other strong options if your circle's pick is not the one.",
-      scopeLabel: "your circle and the Bay",
-      locationHint: nearbyCity
-        ? `Nearby city looks like ${nearbyCity}, but the stronger read right now is your circle.`
-        : "City is still loose, so Explore is starting with your circle first.",
-      emptyState: "Your circle is quiet right now. Try another date or switch cities.",
-    };
-  }
-
-  if (args.mode === "bayArea") {
-    return {
-      scanTitle: "Scan the Bay",
-      scanBody: "Start with what's moving tonight across the Bay, then widen out when you want more.",
-      heroContext: "Bay Area read",
-      pulseTitle: "Bay Area Now",
-      pulseBody: "The strongest nearby motion while your city settles.",
-      pulseEmpty: "Nothing nearby is breaking away from the pack yet.",
-      picksTitle: "Bay Area Picks",
-      picksBody: "A wider Bay Area browse until your city comes through.",
-      scopeLabel: "the Bay Area",
-      locationHint: nearbyCity
-        ? `Nearby city looks like ${nearbyCity}, but the cleaner signal right now is across the Bay Area.`
-        : "No city yet, so Explore is starting with a Bay Area read.",
-      emptyState: "Nothing strong is landing in the Bay yet. Try another night or set a city.",
-    };
-  }
-
-  return {
-    scanTitle: "Scan the Bay",
-    scanBody: "Start with what's moving tonight, then branch into the weekend or pick a day.",
-    heroContext: city ? `${city} in the Bay` : "Bay Area read",
-    pulseTitle: "Bay Area Now",
-    pulseBody: "Fast movers from around the Bay, cleaned up by your filters.",
-    pulseEmpty: "Nothing is clearly separating yet. Try loosening a filter or switching nights.",
-    picksTitle: "More This Week",
-    picksBody: "A wider Bay Area browse, with a little more control.",
-    scopeLabel: "the Bay Area",
-    locationHint: nearbyCity ? `Nearby read: ${nearbyCity}` : undefined,
-    emptyState: "Nothing fits this setup yet. Try another date or sound.",
-  };
-}
-
-function getBrowserPosition(): Promise<{ lat: number; lon: number }> {
-  return new Promise((resolve, reject) => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      reject(new Error("Geolocation unavailable"));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 }
-    );
-  });
-}
-
-async function reverseGeocodeCity(lat: number, lon: number): Promise<string> {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
-    String(lat)
-  )}&lon=${encodeURIComponent(String(lon))}`;
-  const res = await fetch(url);
-  if (!res.ok) return "";
-  const json = await res.json();
-  const addr = json?.address ?? {};
-  return (
-    addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.county ?? ""
-  )
-    .toString()
-    .trim();
-}
-
-async function inferCityFromIp(): Promise<string> {
-  try {
-    const res = await fetch("https://ipapi.co/json/");
-    if (!res.ok) return "";
-    const json = await res.json();
-    return (json?.city ?? "").toString().trim();
-  } catch {
-    return "";
-  }
-}
+type ExploreFeedMode = "tonight" | "upcoming";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -186,332 +40,173 @@ function eventTimestamp(event: Event): number {
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
-function normalizeCityToken(value: string): string {
-  return value.trim().toLowerCase();
+function sourcePriority(source?: string) {
+  const normalized = (source ?? "").trim().toLowerCase();
+  if (!normalized || normalized === "internal") return 3;
+  if (normalized === "19hz" || normalized === "ra") return 2;
+  return 1;
 }
 
-function formatEventLocation(location?: string | null, city?: string | null): string {
-  const cleanLocation = (location ?? "").trim();
-  const cleanCity = (city ?? "").trim();
+function mergeEventCollections(...collections: Event[][]): Event[] {
+  const merged = new Map<string, Event>();
 
-  if (cleanLocation && cleanCity) {
-    const lowerLocation = cleanLocation.toLowerCase();
-    const lowerCity = cleanCity.toLowerCase();
-    if (lowerLocation.includes(lowerCity)) return cleanLocation;
-    return `${cleanLocation}, ${cleanCity}`;
+  for (const collection of collections) {
+    for (const event of collection) {
+      const existing = merged.get(event.id);
+      if (!existing) {
+        merged.set(event.id, {
+          ...event,
+          tags: Array.isArray(event.tags) ? [...event.tags] : [],
+        });
+        continue;
+      }
+
+      const combinedTags = Array.from(
+        new Set([...(existing.tags ?? []), ...(Array.isArray(event.tags) ? event.tags : [])].filter(Boolean))
+      ).slice(0, 4);
+
+      merged.set(event.id, {
+        ...existing,
+        ...event,
+        attendees: Math.max(existing.attendees ?? 0, event.attendees ?? 0),
+        description:
+          existing.description?.trim().length > 0 ? existing.description : event.description,
+        matchReason:
+          existing.matchReason?.trim().length > 0 ? existing.matchReason : event.matchReason,
+        tags: combinedTags,
+      });
+    }
   }
 
-  return cleanLocation || cleanCity || "Location TBD";
+  return Array.from(merged.values());
 }
 
-function matchesCityFilter(event: Event, cityHint: string): boolean {
-  const hint = normalizeCityToken(cityHint);
-  if (!hint) return true;
-
-  const city = normalizeCityToken(event.city ?? "");
-  if (city) {
-    if (city.includes(hint)) return true;
-  }
-
-  const location = normalizeCityToken(event.location ?? "");
-  if (location && location.includes(hint)) return true;
-
-  const cityTokens = hint.split(/[^a-z0-9]+/g).filter(Boolean);
-  if (cityTokens.length === 0) return true;
-
-  const haystackTokens = new Set([...city.split(/[^a-z0-9]+/g), ...location.split(/[^a-z0-9]+/g)].filter(Boolean));
-  const overlap = cityTokens.filter((token) => haystackTokens.has(token)).length;
-  return overlap / cityTokens.length >= 0.5;
-}
-
-function matchesTimeFilter(event: Event, filter: ExploreTimeFilter, selectedDate?: Date) {
-  if (filter === "all") return true;
-
+function matchesFeedMode(event: Event, mode: ExploreFeedMode) {
   const ts = eventTimestamp(event);
   if (!Number.isFinite(ts) || ts === Number.MAX_SAFE_INTEGER) return false;
 
   const eventDate = new Date(ts);
-  const now = new Date();
-  const today = startOfDay(now);
+  const todayStart = startOfDay(new Date());
+  const tomorrowStart = addDays(todayStart, 1);
+  const todayEnd = endOfDay(todayStart);
 
-  if (filter === "tonight") {
-    return isSameDay(eventDate, now);
+  if (mode === "tonight") {
+    return eventDate >= todayStart && eventDate <= todayEnd;
   }
 
-  if (filter === "weekend") {
-    const day = eventDate.getDay();
-    return eventDate >= today && [5, 6, 0].includes(day);
-  }
-
-  if (filter === "pickDate") {
-    return !!selectedDate && isSameDay(eventDate, selectedDate);
-  }
-
-  return true;
+  return eventDate >= tomorrowStart;
 }
 
-function dedupeEventsById(events: Event[]) {
-  return Array.from(new Map(events.map((event) => [event.id, event])).values());
+function hasTasteSignal(event: Event) {
+  const reason = (event.matchReason ?? "").toLowerCase();
+  return reason.includes("because you like") || reason.includes("suggested");
 }
 
-function buildMoveCandidates(items: Event[], rsvpByEventId: Record<string, RsvpState>) {
-  return dedupeEventsById(items).map((event) => ({
-    id: event.id,
-    title: event.title,
-    startAt: event.eventDateIso ?? event.date,
-    totalRsvps: rsvpByEventId[event.id]?.count ?? event.attendees ?? 0,
-    recentRsvps: rsvpByEventId[event.id]?.recentCount ?? 0,
-    quality: event.ticketUrl ? 1 : 0.9,
-  }));
+function formatScopeSummary(mode: ExploreFeedMode) {
+  if (mode === "tonight") return "Bay-wide tonight";
+  return "Bay-wide upcoming";
 }
 
-function mapSnapshotRowToEvent(row: ExploreSnapshotRow): Event {
-  const eventDateIso = row.event_date ?? undefined;
-  const eventDateLabel = eventDateIso
-    ? new Date(eventDateIso).toLocaleString(undefined, {
-        month: "short",
-        day: "2-digit",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "Date TBD";
-
-  const moveReason =
-    row.move_explainer?.trim() ||
-    (row.move_status === "the_move"
-      ? "This is where the night is building fastest."
-      : row.move_status === "building_fast"
-        ? "Momentum is climbing right now."
-        : row.move_status === "might_be_the_move"
-          ? "Not fully there yet, but the energy is real."
-          : "Momentum is building.");
-
-  const tags: string[] = [];
-  if (row.move_status === "the_move") tags.push("The Move");
-  if (row.move_status === "building_fast") tags.push("Building Fast");
-  if (row.move_status === "might_be_the_move") tags.push("Might Be The Move");
-
-  return {
-    id: row.id,
-    title: row.title,
-    date: eventDateLabel,
-    eventDateIso,
-    eventEndDateIso: row.event_end_date ?? undefined,
-    location: formatEventLocation(row.location, row.city),
-    city: row.city ?? undefined,
-    image: row.image_url ?? "",
-    attendees: row.total_rsvps ?? 0,
-    price: row.ticket_url ? "Tickets" : "RSVP",
-    description: row.description?.trim() || moveReason,
-    tags,
-    ticketUrl: row.ticket_url ?? undefined,
-    eventSource: row.event_source ?? "internal",
-    matchReason: moveReason,
-  };
-}
-
-async function fetchExploreSnapshot(args: {
-  city: string;
-  timeFilter: ExploreTimeFilter;
-  selectedDate?: Date;
+function scoreForFeed(args: {
+  event: Event;
+  mode: ExploreFeedMode;
+  friendCount: number;
+  attendeeCount: number;
+  recentCount: number;
+  trending: boolean;
 }) {
-  const { data, error } = await supabase.rpc("get_explore_snapshot", {
-    p_city: args.city || null,
-    p_time_filter: args.timeFilter,
-    p_selected_date: args.selectedDate ? format(args.selectedDate, "yyyy-MM-dd") : null,
-    p_limit: 80,
-    p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago",
-  });
+  const { event, mode, friendCount, attendeeCount, recentCount, trending } = args;
+  const ts = eventTimestamp(event);
+  const nowTs = Date.now();
+  const diffDays = Number.isFinite(ts) ? (ts - nowTs) / (24 * 60 * 60 * 1000) : 999;
+  const sourceWeight = sourcePriority(event.eventSource);
+  const internalBoost = sourceWeight >= 3 ? 36 : sourceWeight === 2 ? 14 : 0;
+  const friendBoost = friendCount > 0 ? 42 + Math.max(0, friendCount - 1) * 18 : 0;
+  const crowdBoost = Math.log1p(Math.max(0, attendeeCount)) * 14;
+  const recentBoost = Math.min(5, recentCount) * 8;
+  const trendingBoost = trending ? 6 : 0;
+  const tasteBoost = hasTasteSignal(event) ? 6 : 0;
 
-  if (error) throw error;
-  const payload = (data ?? {}) as ExploreSnapshotPayload;
-  if (!payload || payload.ok === false) {
-    throw new Error("Explore snapshot unavailable");
+  let timeBoost = 0;
+  if (mode === "tonight") {
+    if (Number.isFinite(ts)) {
+      const hoursUntilStart = (ts - nowTs) / (1000 * 60 * 60);
+      if (hoursUntilStart >= -3 && hoursUntilStart <= 4) timeBoost = 18;
+      else if (hoursUntilStart <= 10) timeBoost = 12;
+      else timeBoost = 6;
+    }
+  } else {
+    if (diffDays <= 2) timeBoost = 20;
+    else if (diffDays <= 7) timeBoost = 14;
+    else if (diffDays <= 21) timeBoost = 9;
+    else timeBoost = 4;
   }
 
-  return {
-    ranked: Array.isArray(payload.all_picks) ? payload.all_picks.map(mapSnapshotRowToEvent) : [],
-    trending: Array.isArray(payload.city_pulse) ? payload.city_pulse.map(mapSnapshotRowToEvent) : [],
-  };
+  return internalBoost + friendBoost + crowdBoost + recentBoost + trendingBoost + tasteBoost + timeBoost;
 }
 
 export function Explore() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { loading: authLoading, user } = useAuth();
+  const { user } = useAuth();
   const [loadingEvents, setLoadingEvents] = useState(false);
-  const [loadingTrending, setLoadingTrending] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
+  const [friendEvents, setFriendEvents] = useState<Event[]>([]);
   const [trendingEvents, setTrendingEvents] = useState<Event[]>([]);
-  const [discoveryMode, setDiscoveryMode] = useState<ExploreDiscoveryMode>("city");
   const [rsvpByEventId, setRsvpByEventId] = useState<Record<string, RsvpState>>({});
-  const [eventSort, setEventSort] = useState<"theMove" | "soonest" | "thisWeek" | "mostGoing">(
-    "theMove"
-  );
-  const [timeFilter, setTimeFilter] = useState<ExploreTimeFilter>("tonight");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [feedMode, setFeedMode] = useState<ExploreFeedMode>("tonight");
   const [tagFilter, setTagFilter] = useState("all");
+  const [selectedUpcomingDate, setSelectedUpcomingDate] = useState<Date | undefined>();
 
-  const [autoCityHint, setAutoCityHint] = useState(
-    localStorage.getItem("whozin_explore_auto_city") || ""
-  );
-  const [activeCity, setActiveCity] = useState("");
   const onboardingMode = useMemo(
     () => new URLSearchParams(location.search).get("onboarding") === "1",
     [location.search]
   );
-  const [locationReady, setLocationReady] = useState(
-    Boolean(localStorage.getItem("whozin_explore_auto_city"))
-  );
 
-  const effectiveCity = activeCity.trim() || autoCityHint.trim();
-
-  const loadExploreFallback = async () => {
-    const { loadFriendsFallbackExplore, loadRegionalFallbackExplore } = await import(
-      "@/lib/explorePersonalization"
-    );
-
-    const [socialFallback, regionalFallback] = await Promise.all([
-      loadFriendsFallbackExplore(),
-      loadRegionalFallbackExplore(),
-    ]);
-
-    if (socialFallback.length > 0) {
-      return {
-        mode: "friends" as ExploreDiscoveryMode,
-        ranked: dedupeEventsById([...socialFallback, ...regionalFallback]),
-        trending: socialFallback,
-      };
-    }
-
-    return {
-      mode: "bayArea" as ExploreDiscoveryMode,
-      ranked: regionalFallback,
-      trending: regionalFallback,
-    };
-  };
-
-  useEffect(() => {
-    const resolveAutoCity = async () => {
-      if (authLoading) return;
-      if (autoCityHint.trim()) {
-        setLocationReady(true);
-        return;
-      }
-
-      const profileCity =
-        (user?.user_metadata?.city as string | undefined)?.trim() ||
-        (user?.user_metadata?.location as string | undefined)?.trim() ||
-        "";
-
-      if (profileCity) {
-        setAutoCityHint(profileCity);
-        localStorage.setItem("whozin_explore_auto_city", profileCity);
-        if (!activeCity.trim()) setActiveCity(profileCity);
-        setLocationReady(true);
-        return;
-      }
-
-      try {
-        const { lat, lon } = await getBrowserPosition();
-        const city = await reverseGeocodeCity(lat, lon);
-        if (city) {
-          setAutoCityHint(city);
-          localStorage.setItem("whozin_explore_auto_city", city);
-          if (!activeCity.trim()) setActiveCity(city);
-          setLocationReady(true);
-          return;
-        }
-      } catch {
-        // User denied geolocation or unavailable.
-      }
-
-      const ipCity = await inferCityFromIp();
-      if (ipCity) {
-        setAutoCityHint(ipCity);
-        localStorage.setItem("whozin_explore_auto_city", ipCity);
-        if (!activeCity.trim()) setActiveCity(ipCity);
-      }
-      setLocationReady(true);
-    };
-
-    void resolveAutoCity();
-  }, [activeCity, authLoading, autoCityHint, user]);
-
-  const refreshRecommendations = async (city: string) => {
+  const refreshRecommendations = async () => {
     setLoadingEvents(true);
-    setLoadingTrending(true);
     try {
-      let ranked: Event[] = [];
-      let trending: Event[] = [];
-      let nextDiscoveryMode: ExploreDiscoveryMode = city.trim() ? "city" : "bayArea";
+      const {
+        loadFriendsFallbackExplore,
+        loadPersonalizedExplore,
+        loadRegionalFallbackExplore,
+        loadTrendingExplore,
+      } = await import("@/lib/explorePersonalization");
 
-      if (!city.trim()) {
-        const fallback = await loadExploreFallback();
-        nextDiscoveryMode = fallback.mode;
-        ranked = fallback.ranked;
-        trending = fallback.trending;
-      } else {
-        try {
-          if (!exploreRpcEnabled) {
-            throw new Error("Explore RPC disabled");
-          }
-          const snapshot = await fetchExploreSnapshot({
-            city,
-            timeFilter,
-            selectedDate,
-          });
-          ranked = snapshot.ranked;
-          trending = snapshot.trending;
-        } catch (snapshotError) {
-          console.info("[explore] snapshot fallback", snapshotError);
-          const { loadPersonalizedExplore, loadTrendingExplore } = await import(
-            "@/lib/explorePersonalization"
-          );
-          [ranked, trending] = await Promise.all([
-            loadPersonalizedExplore(city),
-            loadTrendingExplore(city),
-          ]);
-        }
+      const [friends, personalized, regional, trending] = await Promise.all([
+        loadFriendsFallbackExplore(),
+        loadPersonalizedExplore(""),
+        loadRegionalFallbackExplore(),
+        loadTrendingExplore(""),
+      ]);
 
-        if (ranked.length === 0 && trending.length === 0) {
-          const fallback = await loadExploreFallback();
-          nextDiscoveryMode = fallback.mode;
-          ranked = fallback.ranked;
-          trending = fallback.trending;
-        }
-      }
+      const merged = mergeEventCollections(friends, personalized, trending, regional);
 
-      setDiscoveryMode(nextDiscoveryMode);
-      setEvents(ranked);
+      setEvents(merged);
+      setFriendEvents(friends);
       setTrendingEvents(trending);
-      void hydrateExploreRsvpState([...ranked, ...trending]);
+      void hydrateExploreRsvpState([...merged, ...friends, ...trending]);
 
       void logProductEvent({
         eventName: "explore_feed_loaded",
         source: "explore",
         metadata: {
-          city: city || null,
-          discovery_mode: nextDiscoveryMode,
-          spotify_connected: false,
-          result_count: ranked.length,
+          bay_scope: true,
+          feed_mode: feedMode,
+          result_count: merged.length,
+          friend_count: friends.length,
           trending_count: trending.length,
-          artist_matched_count: ranked.filter(
-            (event) =>
-              (event.matchReason ?? "").toLowerCase().includes("because you like") ||
-              (event.matchReason ?? "").toLowerCase().includes("suggested")
-          ).length,
-          ticketed_count: ranked.filter((event) => !!event.ticketUrl).length,
+          internal_count: merged.filter((event) => sourcePriority(event.eventSource) === 3).length,
         },
       });
     } catch (error: any) {
-      console.error("Explore personalization failed:", error);
+      console.error("Explore load failed:", error);
       setEvents([]);
+      setFriendEvents([]);
       setTrendingEvents([]);
-      toast.error("Could not refresh the night right now.");
+      toast.error("Could not refresh Explore right now.");
     } finally {
       setLoadingEvents(false);
-      setLoadingTrending(false);
     }
   };
 
@@ -563,45 +258,67 @@ export function Explore() {
     setRsvpByEventId(next);
   };
 
-  const cityScopedTrendingEvents = useMemo(
-    () =>
-      discoveryMode === "city"
-        ? trendingEvents.filter((event) => matchesCityFilter(event, effectiveCity))
-        : trendingEvents,
-    [discoveryMode, effectiveCity, trendingEvents]
+  useEffect(() => {
+    void refreshRecommendations();
+  }, []);
+
+  const friendCountByEventId = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const event of friendEvents) {
+      next[event.id] = Math.max(next[event.id] ?? 0, event.attendees ?? 0);
+    }
+    return next;
+  }, [friendEvents]);
+
+  const trendingEventIds = useMemo(() => new Set(trendingEvents.map((event) => event.id)), [trendingEvents]);
+
+  const feedScopedEvents = useMemo(
+    () => events.filter((event) => matchesFeedMode(event, feedMode)),
+    [events, feedMode]
   );
 
-  const cityScopedEvents = useMemo(
-    () =>
-      discoveryMode === "city"
-        ? events.filter((event) => matchesCityFilter(event, effectiveCity))
-        : events,
-    [discoveryMode, effectiveCity, events]
+  const hasTonightEvents = useMemo(
+    () => events.some((event) => matchesFeedMode(event, "tonight")),
+    [events]
   );
 
-  const availableDateKeys = useMemo(() => {
+  const nearestUpcomingDate = useMemo(() => {
+    const upcomingTimestamps = events
+      .filter((event) => matchesFeedMode(event, "upcoming"))
+      .map((event) => eventTimestamp(event))
+      .filter((ts) => Number.isFinite(ts) && ts !== Number.MAX_SAFE_INTEGER)
+      .sort((a, b) => a - b);
+
+    if (upcomingTimestamps.length === 0) return undefined;
+    return startOfDay(new Date(upcomingTimestamps[0]));
+  }, [events]);
+
+  const availableUpcomingDateKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const event of dedupeEventsById([...cityScopedTrendingEvents, ...cityScopedEvents])) {
+    for (const event of events) {
+      if (!matchesFeedMode(event, "upcoming")) continue;
       const ts = eventTimestamp(event);
       if (!Number.isFinite(ts) || ts === Number.MAX_SAFE_INTEGER) continue;
       keys.add(format(new Date(ts), "yyyy-MM-dd"));
     }
     return keys;
-  }, [cityScopedEvents, cityScopedTrendingEvents]);
+  }, [events]);
 
-  const timeScopedTrendingEvents = useMemo(
-    () => cityScopedTrendingEvents.filter((event) => matchesTimeFilter(event, timeFilter, selectedDate)),
-    [cityScopedTrendingEvents, selectedDate, timeFilter]
-  );
+  useEffect(() => {
+    if (feedMode !== "tonight" || hasTonightEvents) return;
 
-  const timeScopedEvents = useMemo(
-    () => cityScopedEvents.filter((event) => matchesTimeFilter(event, timeFilter, selectedDate)),
-    [cityScopedEvents, selectedDate, timeFilter]
-  );
+    setFeedMode("upcoming");
+    setSelectedUpcomingDate((current) => current ?? nearestUpcomingDate);
+  }, [feedMode, hasTonightEvents, nearestUpcomingDate]);
+
+  const activateUpcomingDate = () => {
+    setFeedMode("upcoming");
+    setSelectedUpcomingDate((current) => current ?? nearestUpcomingDate);
+  };
 
   const availableTags = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const event of dedupeEventsById([...timeScopedTrendingEvents, ...timeScopedEvents])) {
+    for (const event of feedScopedEvents) {
       for (const tag of Array.isArray(event.tags) ? event.tags : []) {
         const cleanTag = tag.trim();
         if (!cleanTag) continue;
@@ -613,145 +330,118 @@ export function Explore() {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 8)
       .map(([tag]) => tag);
-  }, [timeScopedEvents, timeScopedTrendingEvents]);
+  }, [feedScopedEvents]);
 
-  const filteredTrendingEvents = useMemo(
+  const filteredFeedEvents = useMemo(
     () =>
-      timeScopedTrendingEvents.filter(
-        (event) => tagFilter === "all" || (Array.isArray(event.tags) ? event.tags : []).includes(tagFilter)
-      ),
-    [tagFilter, timeScopedTrendingEvents]
-  );
+      feedScopedEvents.filter((event) => {
+        if (tagFilter !== "all" && !(Array.isArray(event.tags) ? event.tags : []).includes(tagFilter)) {
+          return false;
+        }
 
-  const filteredEventPool = useMemo(
-    () =>
-      timeScopedEvents.filter(
-        (event) => tagFilter === "all" || (Array.isArray(event.tags) ? event.tags : []).includes(tagFilter)
-      ),
-    [tagFilter, timeScopedEvents]
-  );
+        if (feedMode === "upcoming" && selectedUpcomingDate) {
+          const ts = eventTimestamp(event);
+          if (!Number.isFinite(ts) || ts === Number.MAX_SAFE_INTEGER) return false;
+          return isSameDay(new Date(ts), selectedUpcomingDate);
+        }
 
-  const activeMoveRanking = useMemo(
-    () =>
-      rankMoveCandidates(
-        buildMoveCandidates([...filteredTrendingEvents, ...filteredEventPool], rsvpByEventId),
-        "city"
-      ),
-    [filteredEventPool, filteredTrendingEvents, rsvpByEventId]
-  );
-
-  const filteredSortedEvents = useMemo(() => {
-    return [...filteredEventPool].sort((a, b) => {
-      const aCount = rsvpByEventId[a.id]?.count ?? a.attendees ?? 0;
-      const bCount = rsvpByEventId[b.id]?.count ?? b.attendees ?? 0;
-      const aMove = activeMoveRanking.signalsById[a.id]?.score ?? -999;
-      const bMove = activeMoveRanking.signalsById[b.id]?.score ?? -999;
-      const nowTs = Date.now();
-      const weekEndTs = nowTs + 7 * 24 * 60 * 60 * 1000;
-      const aTs = eventTimestamp(a);
-      const bTs = eventTimestamp(b);
-      const aThisWeek = aTs >= nowTs && aTs <= weekEndTs ? 1 : 0;
-      const bThisWeek = bTs >= nowTs && bTs <= weekEndTs ? 1 : 0;
-
-      if (eventSort === "theMove") {
-        if (bMove !== aMove) return bMove - aMove;
-        if (bCount !== aCount) return bCount - aCount;
-        return aTs - bTs;
-      }
-
-      if (eventSort === "mostGoing") {
-        if (bCount !== aCount) return bCount - aCount;
-        return aTs - bTs;
-      }
-
-      if (eventSort === "thisWeek") {
-        if (aThisWeek !== bThisWeek) return bThisWeek - aThisWeek;
-        if (aTs !== bTs) return aTs - bTs;
-        return bCount - aCount;
-      }
-
-      const dateDelta = aTs - bTs;
-      if (dateDelta !== 0) return dateDelta;
-      return bCount - aCount;
-    });
-  }, [activeMoveRanking.signalsById, eventSort, filteredEventPool, rsvpByEventId]);
-
-  const filtersActive = timeFilter !== "all" || tagFilter !== "all" || !!selectedDate;
-  const filteredSignalsById = activeMoveRanking.signalsById;
-  const heroSignal = activeMoveRanking.topSignal;
-  const modeCopy = useMemo(
-    () =>
-      getExploreModeCopy({
-        mode: discoveryMode,
-        city: effectiveCity,
-        nearbyCity: autoCityHint,
+        return true;
       }),
-    [autoCityHint, discoveryMode, effectiveCity]
-  );
-  const primarySectionTitle = useMemo(() => {
-    if (timeFilter === "tonight") return "The Move Tonight";
-    if (timeFilter === "weekend") return "This Weekend";
-    if (timeFilter === "pickDate") return "On This Day";
-    return modeCopy.pulseTitle;
-  }, [modeCopy.pulseTitle, timeFilter]);
-  const primarySectionBody = useMemo(() => {
-    if (timeFilter === "tonight") {
-      return discoveryMode === "friends"
-        ? "Where your people and the city are actually heading tonight."
-        : "Where people are actually heading tonight.";
-    }
-    if (timeFilter === "weekend") return "The strongest plans building for the weekend.";
-    if (timeFilter === "pickDate") return "The best signal for the day you picked.";
-    return modeCopy.pulseBody;
-  }, [discoveryMode, modeCopy.pulseBody, timeFilter]);
-  const browseSectionTitle = useMemo(() => {
-    if (timeFilter === "tonight") return "Happening Later";
-    if (timeFilter === "weekend") return "More This Weekend";
-    if (timeFilter === "pickDate") return "More On This Day";
-    return modeCopy.picksTitle;
-  }, [modeCopy.picksTitle, timeFilter]);
-  const browseSectionBody = useMemo(() => {
-    if (timeFilter === "tonight") return "More good options if the move is not obvious yet.";
-    if (timeFilter === "weekend") return "Other strong weekend options across the Bay.";
-    if (timeFilter === "pickDate") return "Other strong options for the date you picked.";
-    return modeCopy.picksBody;
-  }, [modeCopy.picksBody, timeFilter]);
-  const heroEvent = useMemo(
-    () =>
-      heroSignal
-        ? dedupeEventsById([...filteredTrendingEvents, ...filteredSortedEvents]).find(
-            (event) => event.id === heroSignal.eventId
-          ) ?? null
-        : null,
-    [filteredSortedEvents, filteredTrendingEvents, heroSignal]
+    [feedScopedEvents, feedMode, selectedUpcomingDate, tagFilter]
   );
 
-  const cityPulseEvents = useMemo(
-    () =>
-      [...filteredTrendingEvents]
-        .filter((event) => event.id !== heroEvent?.id)
-        .sort((a, b) => {
-          const aMove = filteredSignalsById[a.id]?.score ?? -999;
-          const bMove = filteredSignalsById[b.id]?.score ?? -999;
-          if (aMove !== bMove) return bMove - aMove;
-          const aCount = rsvpByEventId[a.id]?.count ?? a.attendees ?? 0;
-          const bCount = rsvpByEventId[b.id]?.count ?? b.attendees ?? 0;
-          if (aCount !== bCount) return bCount - aCount;
-          return eventTimestamp(a) - eventTimestamp(b);
-        })
-        .slice(0, 3),
-    [filteredSignalsById, filteredTrendingEvents, heroEvent?.id, rsvpByEventId]
+  const friendSpotlightEvents = useMemo(() => {
+    return [...friendEvents]
+      .filter((event) => matchesFeedMode(event, feedMode))
+      .filter((event) => tagFilter === "all" || (Array.isArray(event.tags) ? event.tags : []).includes(tagFilter))
+      .sort((a, b) => {
+        const aFriends = friendCountByEventId[a.id] ?? 0;
+        const bFriends = friendCountByEventId[b.id] ?? 0;
+        if (aFriends !== bFriends) return bFriends - aFriends;
+        return eventTimestamp(a) - eventTimestamp(b);
+      })
+      .slice(0, 3);
+  }, [feedMode, friendCountByEventId, friendEvents, tagFilter]);
+
+  const moveRanking = useMemo(() => {
+    return rankMoveCandidates(
+      filteredFeedEvents.map((event) => ({
+        id: event.id,
+        title: event.title,
+        startAt: event.eventDateIso ?? event.date,
+        totalRsvps: rsvpByEventId[event.id]?.count ?? event.attendees ?? 0,
+        friendRsvps: friendCountByEventId[event.id] ?? 0,
+        recentRsvps: rsvpByEventId[event.id]?.recentCount ?? 0,
+        quality: sourcePriority(event.eventSource) >= 2 ? 1 : 0.92,
+      })),
+      "circle"
+    );
+  }, [filteredFeedEvents, friendCountByEventId, rsvpByEventId]);
+
+  const heroSignal = feedMode === "tonight" ? moveRanking.topSignal : null;
+  const heroEvent = useMemo(
+    () => (heroSignal ? filteredFeedEvents.find((event) => event.id === heroSignal.eventId) ?? null : null),
+    [filteredFeedEvents, heroSignal]
   );
+
   const featuredEventIds = useMemo(() => {
     const ids = new Set<string>();
     if (heroEvent?.id) ids.add(heroEvent.id);
-    for (const event of cityPulseEvents) ids.add(event.id);
+    for (const event of friendSpotlightEvents) ids.add(event.id);
     return ids;
-  }, [cityPulseEvents, heroEvent?.id]);
-  const browseEvents = useMemo(
-    () => filteredSortedEvents.filter((event) => !featuredEventIds.has(event.id)),
-    [featuredEventIds, filteredSortedEvents]
-  );
+  }, [friendSpotlightEvents, heroEvent?.id]);
+
+  const rankedFeedEvents = useMemo(() => {
+    return [...filteredFeedEvents]
+      .sort((a, b) => {
+        const aCount = rsvpByEventId[a.id]?.count ?? a.attendees ?? 0;
+        const bCount = rsvpByEventId[b.id]?.count ?? b.attendees ?? 0;
+        const aScore = scoreForFeed({
+          event: a,
+          mode: feedMode,
+          friendCount: friendCountByEventId[a.id] ?? 0,
+          attendeeCount: aCount,
+          recentCount: rsvpByEventId[a.id]?.recentCount ?? 0,
+          trending: trendingEventIds.has(a.id),
+        });
+        const bScore = scoreForFeed({
+          event: b,
+          mode: feedMode,
+          friendCount: friendCountByEventId[b.id] ?? 0,
+          attendeeCount: bCount,
+          recentCount: rsvpByEventId[b.id]?.recentCount ?? 0,
+          trending: trendingEventIds.has(b.id),
+        });
+
+        if (bScore !== aScore) return bScore - aScore;
+        const aSource = sourcePriority(a.eventSource);
+        const bSource = sourcePriority(b.eventSource);
+        if (aSource !== bSource) return bSource - aSource;
+        const aFriends = friendCountByEventId[a.id] ?? 0;
+        const bFriends = friendCountByEventId[b.id] ?? 0;
+        if (aFriends !== bFriends) return bFriends - aFriends;
+        const aTs = eventTimestamp(a);
+        const bTs = eventTimestamp(b);
+        if (aTs !== bTs) return aTs - bTs;
+        return bCount - aCount;
+      })
+      .filter((event) => !featuredEventIds.has(event.id));
+  }, [featuredEventIds, feedMode, filteredFeedEvents, friendCountByEventId, rsvpByEventId, trendingEventIds]);
+
+  const filtersActive = tagFilter !== "all" || (feedMode === "upcoming" && !!selectedUpcomingDate);
+  const heroHeading =
+    feedMode === "tonight"
+      ? heroEvent
+        ? "The Bay is converging here tonight."
+        : "No single event has pulled away yet."
+      : "Upcoming keeps the strongest Bay picks in one place.";
+  const primarySectionTitle = feedMode === "tonight" ? "Best In The Bay Tonight" : "Upcoming Across The Bay";
+  const primarySectionBody =
+    feedMode === "tonight"
+      ? heroEvent
+        ? "Friends, attendance, and momentum are quietly shaping this ranking."
+        : "Signal is still soft, so this is the best stack of options right now."
+      : "Future events start tomorrow and stay ranked Bay-wide, with internal events first.";
 
   const handleQuickRsvp = async (event: Event) => {
     if (featureFlags.killSwitchRsvpWrites) {
@@ -843,134 +533,111 @@ export function Explore() {
     }
   };
 
-  useEffect(() => {
-    if (!locationReady) return;
-    void refreshRecommendations(effectiveCity);
-  }, [effectiveCity, locationReady, selectedDate, timeFilter]);
-
   return (
-    <div className="min-h-screen bg-black text-white pb-24 relative">
+    <div className="min-h-screen bg-black pb-24 text-white relative">
       <div className="relative h-48" style={exploreCoverStyle}>
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black" />
         <div className="relative px-5 pt-12">
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-purple-400" />
+          <h1 className="flex items-center gap-2 text-3xl font-bold">
+            <Sparkles className="h-6 w-6 text-purple-400" />
             Explore
           </h1>
-          <p className="text-zinc-400 mt-1">What's the move tonight?</p>
+          <p className="mt-1 text-zinc-400">Bay-wide rave discovery, built for tonight first.</p>
         </div>
       </div>
 
-      <div className="px-5 pt-4 space-y-6">
+      <div className="space-y-6 px-5 pt-4">
         {onboardingMode ? (
           <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
             <div className="text-sm font-semibold text-white">Step 2: pick one night</div>
             <div className="mt-1 text-xs text-zinc-300">
-              Lock one plan and we'll take you straight to the page where invites and social proof hit hardest.
+              Lock one plan and we&apos;ll take you straight to the page where invites and social proof hit hardest.
             </div>
           </div>
         ) : null}
 
-        <div className="space-y-3">
+        <div className="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
           <div>
-            <h3 className="text-lg font-semibold">{modeCopy.scanTitle}</h3>
-            <div className="text-xs text-zinc-600 mt-0.5">{modeCopy.scanBody}</div>
+            <div className="text-sm font-semibold text-white">Choose the lens</div>
+            <div className="mt-1 text-xs text-zinc-500">
+              {hasTonightEvents
+                ? "Tonight helps you decide now. Upcoming starts tomorrow and keeps the next Bay events in one place."
+                : "No events are live tonight, so Explore starts with the closest upcoming date instead."}
+            </div>
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
-            <div>
-              <div className="text-sm font-semibold text-white">Pick the night</div>
-              <div className="mt-1 text-xs text-zinc-500">
-                Start with tonight, jump to the weekend, pick a date, or widen out to everything happening.
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {[
-                ["tonight", "Tonight"],
-                ["weekend", "Weekend"],
-                ["all", "Happening"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setTimeFilter(value as ExploreTimeFilter);
-                    if (value !== "pickDate") setSelectedDate(undefined);
-                  }}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    timeFilter === value
-                      ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
-                      : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-
-              <Suspense
-                fallback={
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/60 px-3 py-1.5 text-xs font-semibold text-zinc-300"
-                  >
-                    {selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date"}
-                  </button>
-                }
+          <div className="flex flex-wrap gap-2">
+            {hasTonightEvents ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFeedMode("tonight");
+                  setSelectedUpcomingDate(undefined);
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  feedMode === "tonight"
+                    ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
+                    : "border-white/10 bg-zinc-900/60 text-zinc-300 hover:border-white/20 hover:text-white"
+                }`}
               >
-                <ExploreDatePicker
-                  selectedDate={selectedDate}
-                  active={timeFilter === "pickDate"}
-                  availableDateKeys={availableDateKeys}
-                  onSelect={(date) => {
-                    setSelectedDate(date);
-                    setTimeFilter(date ? "pickDate" : "all");
-                  }}
-                />
-              </Suspense>
-            </div>
+                Tonight
+              </button>
+            ) : null}
+
+            <ExploreDatePicker
+              selectedDate={selectedUpcomingDate}
+              active={feedMode === "upcoming"}
+              availableDateKeys={availableUpcomingDateKeys}
+              emptyLabel="Upcoming"
+              onActivate={activateUpcomingDate}
+              onSelect={(date) => {
+                setFeedMode("upcoming");
+                setSelectedUpcomingDate(date ?? nearestUpcomingDate);
+              }}
+            />
           </div>
 
+          <div className="text-xs text-zinc-500">
+            Bay Area only for now. Internal events rank first, and friend activity carries the most weight.
+          </div>
         </div>
 
-        <div className="space-y-4">
-          {heroSignal && heroEvent ? (
+        {heroSignal && heroEvent ? (
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-lg font-semibold">Top Pick Tonight</h3>
+              <div className="mt-0.5 text-xs text-zinc-600">{heroHeading}</div>
+            </div>
             <TheMoveHero
               eventId={heroEvent.id}
               title={heroEvent.title}
-              context={modeCopy.heroContext}
+              context="Bay Area tonight"
               meta={heroEvent.location || "Location TBD"}
               signal={heroSignal}
               source="explore"
             />
-          ) : null}
-
-          <div className="flex items-end justify-between">
-            <div>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                {primarySectionTitle}
-                {loadingTrending && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
-              </h3>
-              <div className="text-xs text-zinc-600 mt-0.5">{primarySectionBody}</div>
-            </div>
           </div>
+        ) : null}
 
-          {loadingTrending ? (
-            <div className="space-y-4">
-              {[1, 2].map((i) => (
-                <div
-                  key={`trending-skeleton-${i}`}
-                  className="bg-zinc-900/50 border border-white/10 h-56 rounded-2xl animate-pulse"
-                />
-              ))}
+        {friendSpotlightEvents.length > 0 ? (
+          <div className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-lg font-semibold">
+                  <Users className="h-4 w-4 text-fuchsia-300" />
+                  Friends Are Going
+                </h3>
+                <div className="mt-0.5 text-xs text-zinc-600">
+                  Friend activity stays visible and also boosts these events in the Bay ranking.
+                </div>
+              </div>
             </div>
-          ) : cityPulseEvents.length > 0 ? (
+
             <div className="grid gap-6">
-              {cityPulseEvents.map((event) => (
+              {friendSpotlightEvents.map((event) => (
                 <EventCard
-                  key={`trending-${event.id}`}
+                  key={`friend-${event.id}`}
                   event={event}
-                  moveSignal={filteredSignalsById[event.id]}
                   surface="explore"
                   inviteSource="share_link"
                   quickRsvp={
@@ -986,19 +653,17 @@ export function Explore() {
                 />
               ))}
             </div>
-          ) : (
-            <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
-              {modeCopy.pulseEmpty}
-            </div>
-          )}
+          </div>
+        ) : null}
 
-          <div id="all-picks" className="flex items-end justify-between">
+        <div className="space-y-4">
+          <div className="flex items-end justify-between">
             <div>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                {browseSectionTitle}
-                {loadingEvents && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
+              <h3 className="flex items-center gap-2 text-lg font-semibold">
+                {primarySectionTitle}
+                {loadingEvents ? <Loader2 className="h-4 w-4 animate-spin text-zinc-500" /> : null}
               </h3>
-              <div className="text-xs text-zinc-600 mt-0.5">{browseSectionBody}</div>
+              <div className="mt-0.5 text-xs text-zinc-600">{primarySectionBody}</div>
             </div>
           </div>
 
@@ -1007,16 +672,15 @@ export function Explore() {
               <div>
                 <div className="text-sm font-semibold text-white">Refine the mix</div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  Narrow by sound, then reset if you want the full Bay read again.
+                  Filter by sound while keeping the Bay-wide ranking logic intact.
                 </div>
               </div>
               {filtersActive ? (
                 <button
                   type="button"
                   onClick={() => {
-                    setTimeFilter("all");
-                    setSelectedDate(undefined);
                     setTagFilter("all");
+                    setSelectedUpcomingDate(undefined);
                   }}
                   className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-zinc-300 hover:border-white/20 hover:text-white"
                 >
@@ -1057,13 +721,11 @@ export function Explore() {
             ) : null}
 
             <div className="text-xs text-zinc-500">
-              Showing <span className="text-zinc-200">{browseEvents.length}</span> events
-              {" "}
-              from <span className="text-zinc-200">{modeCopy.scopeLabel}</span>
-              {selectedDate ? (
+              Showing <span className="text-zinc-200">{rankedFeedEvents.length}</span> events from{" "}
+              <span className="text-zinc-200">{formatScopeSummary(feedMode)}</span>
+              {feedMode === "upcoming" && selectedUpcomingDate ? (
                 <>
-                  {" "}
-                  on <span className="text-zinc-200">{format(selectedDate, "EEEE, MMM d")}</span>
+                  {" "}on <span className="text-zinc-200">{format(selectedUpcomingDate, "EEEE, MMM d")}</span>
                 </>
               ) : null}
             </div>
@@ -1074,37 +736,36 @@ export function Explore() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="bg-zinc-900/50 border border-white/10 h-64 rounded-2xl animate-pulse"
+                  className="h-64 animate-pulse rounded-2xl border border-white/10 bg-zinc-900/50"
+                />
+              ))}
+            </div>
+          ) : rankedFeedEvents.length > 0 ? (
+            <div className="grid gap-6">
+              {rankedFeedEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  surface="explore"
+                  inviteSource="share_link"
+                  quickRsvp={
+                    isUuid(event.id)
+                      ? {
+                          going: rsvpByEventId[event.id]?.going ?? false,
+                          working: rsvpByEventId[event.id]?.working ?? false,
+                          count: rsvpByEventId[event.id]?.count ?? event.attendees,
+                          onToggle: () => void handleQuickRsvp(event),
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </div>
           ) : (
-            <div className="grid gap-6">
-              {browseEvents.length > 0 ? (
-                browseEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    moveSignal={filteredSignalsById[event.id]}
-                    surface="explore"
-                    inviteSource="share_link"
-                    quickRsvp={
-                      isUuid(event.id)
-                        ? {
-                            going: rsvpByEventId[event.id]?.going ?? false,
-                            working: rsvpByEventId[event.id]?.working ?? false,
-                            count: rsvpByEventId[event.id]?.count ?? event.attendees,
-                            onToggle: () => void handleQuickRsvp(event),
-                          }
-                        : undefined
-                    }
-                  />
-                ))
-              ) : (
-                <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5 text-sm text-zinc-400">
-                  {modeCopy.emptyState}
-                </div>
-              )}
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-5 text-sm text-zinc-400">
+              {feedMode === "tonight"
+                ? "Nothing strong is landing in the Bay tonight yet. Check upcoming or loosen the sound filter."
+                : "No upcoming events fit this filter yet. Reset the sound filter and try again."}
             </div>
           )}
         </div>

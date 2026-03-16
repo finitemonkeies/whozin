@@ -6,19 +6,24 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/pop
 export function ExploreDatePicker({
   selectedDate,
   onSelect,
+  onActivate,
   availableDateKeys,
   active,
+  emptyLabel = "Pick a date",
 }: {
   selectedDate?: Date;
   onSelect: (date?: Date) => void;
+  onActivate?: () => void;
   availableDateKeys: Set<string>;
   active: boolean;
+  emptyLabel?: string;
 }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
+          onClick={onActivate}
           className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
             active
               ? "border-fuchsia-300 bg-gradient-to-r from-pink-500 to-violet-500 text-white"
@@ -26,7 +31,7 @@ export function ExploreDatePicker({
           }`}
         >
           <CalendarDays className="h-3.5 w-3.5" />
-          {selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date"}
+          {selectedDate ? format(selectedDate, "EEE, MMM d") : emptyLabel}
         </button>
       </PopoverTrigger>
       <PopoverContent
