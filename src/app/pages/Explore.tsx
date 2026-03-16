@@ -173,12 +173,35 @@ export function Explore() {
         loadTrendingExplore,
       } = await import("@/lib/explorePersonalization");
 
-      const [friends, personalized, regional, trending] = await Promise.all([
+      const [friendsResult, personalizedResult, regionalResult, trendingResult] = await Promise.allSettled([
         loadFriendsFallbackExplore(),
         loadPersonalizedExplore(""),
         loadRegionalFallbackExplore(),
         loadTrendingExplore(""),
       ]);
+
+      const friends = friendsResult.status === "fulfilled" ? friendsResult.value : [];
+      const personalized = personalizedResult.status === "fulfilled" ? personalizedResult.value : [];
+      const regional = regionalResult.status === "fulfilled" ? regionalResult.value : [];
+      const trending = trendingResult.status === "fulfilled" ? trendingResult.value : [];
+
+      const failedSources = [
+        friendsResult.status === "rejected" ? "friends" : null,
+        personalizedResult.status === "rejected" ? "personalized" : null,
+        regionalResult.status === "rejected" ? "regional" : null,
+        trendingResult.status === "rejected" ? "trending" : null,
+      ].filter(Boolean) as string[];
+
+      if (failedSources.length > 0) {
+        console.error("Explore sources failed:", {
+          failedSources,
+          friendsError: friendsResult.status === "rejected" ? friendsResult.reason : null,
+          personalizedError:
+            personalizedResult.status === "rejected" ? personalizedResult.reason : null,
+          regionalError: regionalResult.status === "rejected" ? regionalResult.reason : null,
+          trendingError: trendingResult.status === "rejected" ? trendingResult.reason : null,
+        });
+      }
 
       const merged = mergeEventCollections(friends, personalized, trending, regional);
 
@@ -186,6 +209,10 @@ export function Explore() {
       setFriendEvents(friends);
       setTrendingEvents(trending);
       void hydrateExploreRsvpState([...merged, ...friends, ...trending]);
+
+      if (merged.length === 0 && failedSources.length > 0) {
+        toast.error("Some Explore sources failed. Showing what we could recover.");
+      }
 
       void logProductEvent({
         eventName: "explore_feed_loaded",
