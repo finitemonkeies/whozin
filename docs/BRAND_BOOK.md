@@ -89,6 +89,7 @@ Examples already aligned with the product:
 - "See who's going."
 - "Find Your People"
 - "Discover events and see who is going."
+- "Find your next move"
 - "Private by default. No public profile."
 - "One quick setup."
 
@@ -265,6 +266,8 @@ That fallback style is not a placeholder accident. It is part of the brand syste
 
 The app uses lightweight line icons from Lucide. This fits the product because icons support the interface instead of dominating it.
 
+For brand-mark usage, Whozin now ships a separate app icon treatment: a rounded-square pink-to-purple gradient tile with a white `W` glyph. That mark should be used for favicon, PWA, home-screen, and brand-lockup contexts instead of Lucide icons.
+
 Best-fit icon traits:
 
 - Simple stroke icons
@@ -400,6 +403,7 @@ If you need a short prompt for marketing, deck, or visual exploration:
 This brand book is inferred from the current shipped UI patterns in:
 
 - [`/C:/Users/jvinc/Desktop/Whozin/src/app/App.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\App.tsx)
+- [`/C:/Users/jvinc/Desktop/Whozin/src/app/components/WhozinLogo.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\components\WhozinLogo.tsx)
 - [`/C:/Users/jvinc/Desktop/Whozin/src/app/pages/Onboarding.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\pages\Onboarding.tsx)
 - [`/C:/Users/jvinc/Desktop/Whozin/src/app/pages/Welcome.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\pages\Welcome.tsx)
 - [`/C:/Users/jvinc/Desktop/Whozin/src/app/pages/Login.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\pages\Login.tsx)

@@ -5,9 +5,9 @@
 The current product implies a brand mark with two parts:
 
 - a rounded-square gradient tile
-- a white lightning-style `Zap` glyph
+- a bold white `W` glyph
 
-This appears in the welcome flow and is the closest thing to a formal logo in the codebase today.
+This appears in the welcome flow and PWA assets and is the current implementation reference in the codebase today.
 
 ## Recommended System
 
@@ -16,7 +16,7 @@ This appears in the welcome flow and is the closest thing to a formal logo in th
 Use:
 
 - gradient rounded-square icon
-- white lightning glyph
+- white `W` glyph
 - optional wordmark `Whozin`
 
 Best for:
@@ -31,6 +31,7 @@ Best for:
 Use:
 
 - gradient tile plus white glyph only
+- specifically the white `W` mark
 
 Best for:
 
@@ -84,7 +85,7 @@ Recommended behavior:
 - simple silhouette
 - no outline treatment
 
-The glyph should feel like momentum, electricity, and instant signal.
+The glyph should feel direct, confident, and easy to recognize in compact app-icon contexts. It should read as Whozin first, not as a generic nightlife symbol.
 
 ## Clear Space
 
@@ -107,15 +108,15 @@ For icon-plus-wordmark lockups:
 ### Preferred
 
 - gradient tile
-- white glyph
+- white `W` glyph
 
 ### One-Color Dark
 
-- white glyph on black or near-black tile
+- white `W` glyph on black or near-black tile
 
 ### One-Color Light
 
-- black glyph on white tile
+- black `W` glyph on white tile
 
 Use one-color versions only when gradients are impractical.
 
@@ -140,7 +141,7 @@ Do:
 
 - keep the mark bold and simple
 - preserve generous corner radius
-- use white glyph over saturated tile
+- use white `W` glyph over saturated tile
 - pair with strong sans typography
 
 Don't:
@@ -152,4 +153,8 @@ Don't:
 
 ## Interim Implementation Note
 
-Until a final vector logo exists, the current best implementation reference is the welcome screen in [`/C:/Users/jvinc/Desktop/Whozin/src/app/pages/Welcome.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\pages\Welcome.tsx).
+Current implementation references:
+
+- reusable in-app mark: [`/C:/Users/jvinc/Desktop/Whozin/src/app/components/WhozinLogo.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\components\WhozinLogo.tsx)
+- welcome surface usage: [`/C:/Users/jvinc/Desktop/Whozin/src/app/pages/Welcome.tsx`](C:\Users\jvinc\Desktop\Whozin\src\app\pages\Welcome.tsx)
+- PWA/app icon assets: [`/C:/Users/jvinc/Desktop/Whozin/public/icon-192.svg`](C:\Users\jvinc\Desktop\Whozin\public\icon-192.svg), [`/C:/Users/jvinc/Desktop/Whozin/public/icon-512.svg`](C:\Users\jvinc\Desktop\Whozin\public\icon-512.svg), and [`/C:/Users/jvinc/Desktop/Whozin/public/apple-touch-icon.png`](C:\Users\jvinc\Desktop\Whozin\public\apple-touch-icon.png)
