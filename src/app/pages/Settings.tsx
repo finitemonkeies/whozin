@@ -48,6 +48,10 @@ export function Settings() {
   });
   const [loadingPushStatus, setLoadingPushStatus] = useState(true);
   const [savingPushStatus, setSavingPushStatus] = useState(false);
+  const [showPushInstallHint, setShowPushInstallHint] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("whozin:push-install-hint-dismissed") !== "1";
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -302,6 +306,13 @@ export function Settings() {
     }
   };
 
+  const dismissPushInstallHint = () => {
+    setShowPushInstallHint(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("whozin:push-install-hint-dismissed", "1");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       {/* Header */}
@@ -336,6 +347,31 @@ export function Settings() {
         {/* Privacy Section */}
         <section>
           <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4 px-2">Privacy & Notifications</h2>
+          {pushStatus.needsStandaloneIosPrompt && showPushInstallHint ? (
+            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-amber-100">Add Whozin to Home Screen for push</div>
+                  <div className="mt-1 text-xs text-amber-200/80">
+                    On iPhone, web push only works from the Home Screen app.
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-amber-50/90">
+                    <div>1. Tap the Share button in Safari</div>
+                    <div>2. Choose `Add to Home Screen`</div>
+                    <div>3. Open Whozin from the new Home Screen icon</div>
+                    <div>4. Come back here and turn on `Browser Push Alerts`</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissPushInstallHint}
+                  className="rounded-lg border border-amber-400/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-black/30"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden">
             <div className="p-4 flex items-center justify-between border-b border-white/5">
               <div className="flex items-center gap-3">
@@ -414,6 +450,8 @@ export function Settings() {
                   <div className="text-xs text-zinc-500">
                     {pushStatus.needsStandaloneIosPrompt
                       ? "On iPhone, add Whozin to your Home Screen first."
+                      : pushStatus.permission === "denied"
+                        ? "Notifications are blocked in browser settings right now."
                       : "Get heads up when your people start moving."}
                   </div>
                 </div>
