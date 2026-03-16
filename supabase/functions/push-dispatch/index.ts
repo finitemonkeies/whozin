@@ -69,6 +69,26 @@ type SubscriptionRow = {
   auth: string;
 };
 
+const DEFAULT_ALLOWED_TYPES = ["friend_joined_event", "event_momentum"];
+
+function parseAllowedTypes(input: unknown): string[] {
+  if (Array.isArray(input)) {
+    return unique(
+      input
+        .map((value) => asString(value)?.toLowerCase())
+        .filter((value): value is string => !!value)
+    );
+  }
+  const raw = asString(input);
+  if (!raw) return [...DEFAULT_ALLOWED_TYPES];
+  return unique(
+    raw
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return jsonResponse(405, { error: "Method not allowed" });
@@ -112,6 +132,7 @@ Deno.serve(async (req) => {
     const limit = Math.max(1, Math.min(Number(body?.limit ?? 150) || 150, 500));
     const dryRun = body?.dry_run === true;
     const filterUserId = asString(body?.user_id);
+    const allowedTypes = parseAllowedTypes(body?.types);
     const sinceIso = new Date(Date.now() - sinceMinutes * 60 * 1000).toISOString();
 
     const notificationsQuery = service
@@ -119,6 +140,7 @@ Deno.serve(async (req) => {
       .select("id,user_id,event_id,type,title,body,cta_path,created_at")
       .is("read_at", null)
       .gte("created_at", sinceIso)
+      .in("type", allowedTypes)
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -132,6 +154,7 @@ Deno.serve(async (req) => {
       return jsonResponse(200, {
         ok: true,
         dry_run: dryRun,
+        types: allowedTypes,
         evaluated_notifications: 0,
         attempted_deliveries: 0,
         sent: 0,
@@ -154,6 +177,7 @@ Deno.serve(async (req) => {
       return jsonResponse(200, {
         ok: true,
         dry_run: dryRun,
+        types: allowedTypes,
         evaluated_notifications: typedNotifications.length,
         attempted_deliveries: 0,
         sent: 0,
@@ -259,6 +283,7 @@ Deno.serve(async (req) => {
     return jsonResponse(200, {
       ok: true,
       dry_run: dryRun,
+      types: allowedTypes,
       evaluated_notifications: typedNotifications.length,
       subscriptions: typedSubscriptions.length,
       attempted_deliveries: attemptedDeliveries,

@@ -93,6 +93,43 @@ type EventFreshnessData = {
   anchor_events: EventFreshnessAnchorEvent[];
 };
 
+type PushHealthPlatform = {
+  platform: string;
+  active: number;
+  disabled: number;
+};
+
+type PushHealthType = {
+  type: string;
+  sent: number;
+  failed: number;
+};
+
+type PushHealthError = {
+  sent_at: string;
+  status: string;
+  error: string | null;
+  type: string;
+  platform: string;
+};
+
+type PushHealthData = {
+  active_subscriptions: number;
+  disabled_subscriptions: number;
+  deliveries_24h: number;
+  deliveries_7d: number;
+  sent_24h: number;
+  failed_24h: number;
+  opens_24h: number;
+  opens_7d: number;
+  open_rate_7d: number;
+  rsvp_after_open_7d: number;
+  invite_after_open_7d: number;
+  platforms: PushHealthPlatform[];
+  top_types: PushHealthType[];
+  recent_errors: PushHealthError[];
+};
+
 function statusChip(ok: boolean) {
   return ok
     ? "inline-flex items-center rounded-full bg-green-500/20 border border-green-500/40 px-2 py-0.5 text-xs text-green-300"
@@ -138,6 +175,8 @@ export default function AdminHealth() {
   const [loadingSyncHealth, setLoadingSyncHealth] = useState(false);
   const [eventFreshness, setEventFreshness] = useState<EventFreshnessData | null>(null);
   const [loadingEventFreshness, setLoadingEventFreshness] = useState(false);
+  const [pushHealth, setPushHealth] = useState<PushHealthData | null>(null);
+  const [loadingPushHealth, setLoadingPushHealth] = useState(false);
 
   const deriveProjectRef = (url?: string): string => {
     if (!url) return "unknown";
@@ -203,6 +242,21 @@ export default function AdminHealth() {
       setEventFreshness(null);
     } finally {
       setLoadingEventFreshness(false);
+    }
+  };
+
+  const loadPushHealth = async () => {
+    setLoadingPushHealth(true);
+    try {
+      const { data, error } = await supabase.rpc("get_admin_push_health");
+      if (error) throw error;
+      setPushHealth((data ?? null) as PushHealthData | null);
+    } catch (e: any) {
+      console.error("Failed loading push health:", e);
+      toast.error(e?.message ?? "Failed to load push health");
+      setPushHealth(null);
+    } finally {
+      setLoadingPushHealth(false);
     }
   };
 
@@ -389,7 +443,7 @@ export default function AdminHealth() {
       setAllowed(ok);
       setLoading(false);
       if (ok) {
-        await Promise.all([runChecks(), loadSyncHealth(), loadEventFreshness()]);
+        await Promise.all([runChecks(), loadSyncHealth(), loadEventFreshness(), loadPushHealth()]);
       }
     };
     void init();
@@ -435,6 +489,13 @@ export default function AdminHealth() {
             className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
           >
             {loadingEventFreshness ? "Loading freshness..." : "Reload freshness"}
+          </button>
+          <button
+            onClick={() => void loadPushHealth()}
+            disabled={loadingPushHealth}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+          >
+            {loadingPushHealth ? "Loading push..." : "Reload push"}
           </button>
           <button
             onClick={() => void exportKpiCsv()}
@@ -730,6 +791,148 @@ export default function AdminHealth() {
         ) : (
           <div className="text-xs text-zinc-500">
             {loadingSyncHealth ? "Loading sync health..." : "No sync health data available yet."}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="text-sm font-semibold">Push Health</div>
+            <div className="text-xs text-zinc-500">
+              Subscription coverage, recent delivery volume, and push failure signal.
+            </div>
+          </div>
+          <span className={statusChip((pushHealth?.active_subscriptions ?? 0) > 0)}>
+            {(pushHealth?.active_subscriptions ?? 0) > 0 ? "LIVE" : "NO SUBSCRIPTIONS"}
+          </span>
+        </div>
+
+        {pushHealth ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Active subscriptions</div>
+                <div className="text-lg font-semibold">{pushHealth.active_subscriptions}</div>
+                <div className="text-xs text-zinc-500 mt-1">{pushHealth.disabled_subscriptions} disabled</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Deliveries, 24h</div>
+                <div className="text-lg font-semibold">{pushHealth.deliveries_24h}</div>
+                <div className="text-xs text-zinc-500 mt-1">{pushHealth.deliveries_7d} in 7 days</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Sent, 24h</div>
+                <div className="text-lg font-semibold">{pushHealth.sent_24h}</div>
+                <div className="text-xs text-zinc-500 mt-1">Successful deliveries</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Failed, 24h</div>
+                <div className="text-lg font-semibold">{pushHealth.failed_24h}</div>
+                <div className="text-xs text-zinc-500 mt-1">Watch for expired endpoints</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Opens, 24h</div>
+                <div className="text-lg font-semibold">{pushHealth.opens_24h}</div>
+                <div className="text-xs text-zinc-500 mt-1">{pushHealth.opens_7d} in 7 days</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Open rate, 7d</div>
+                <div className="text-lg font-semibold">{Math.round(pushHealth.open_rate_7d)}%</div>
+                <div className="text-xs text-zinc-500 mt-1">Push opens / deliveries</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">RSVP after open</div>
+                <div className="text-lg font-semibold">{pushHealth.rsvp_after_open_7d}</div>
+                <div className="text-xs text-zinc-500 mt-1">Within 24h, last 7 days</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invite after open</div>
+                <div className="text-lg font-semibold">{pushHealth.invite_after_open_7d}</div>
+                <div className="text-xs text-zinc-500 mt-1">Within 24h, last 7 days</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400 mb-2">Platform Mix</div>
+                {pushHealth.platforms.length > 0 ? (
+                  <div className="space-y-2">
+                    {pushHealth.platforms.map((row) => (
+                      <div key={row.platform} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-sm">
+                        <div className="text-zinc-200">{row.platform}</div>
+                        <div className="text-right">
+                          <div className="font-medium text-zinc-100">{row.active} active</div>
+                          <div className="text-xs text-zinc-500">{row.disabled} disabled</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-zinc-500">No push subscriptions yet.</div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400 mb-2">Top Push Types, 7d</div>
+                {pushHealth.top_types.length > 0 ? (
+                  <div className="space-y-2">
+                    {pushHealth.top_types.map((row) => (
+                      <div key={row.type} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-sm">
+                        <div className="text-zinc-200">{row.type}</div>
+                        <div className="text-right">
+                          <div className="font-medium text-zinc-100">{row.sent} sent</div>
+                          <div className="text-xs text-zinc-500">{row.failed} failed</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-zinc-500">No push deliveries recorded in the last 7 days.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto mt-4">
+              <div className="text-xs text-zinc-400 mb-2">Recent Push Failures</div>
+              {pushHealth.recent_errors.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="text-zinc-500">
+                    <tr>
+                      <th className="text-left pb-2 pr-3">When</th>
+                      <th className="text-left pb-2 pr-3">Type</th>
+                      <th className="text-left pb-2 pr-3">Platform</th>
+                      <th className="text-left pb-2 pr-3">Status</th>
+                      <th className="text-left pb-2">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pushHealth.recent_errors.map((row, index) => (
+                      <tr key={`${row.sent_at}:${row.type}:${index}`} className="border-t border-white/5">
+                        <td className="py-2 pr-3 text-zinc-300">{formatDateTime(row.sent_at)}</td>
+                        <td className="py-2 pr-3 text-zinc-300">{row.type}</td>
+                        <td className="py-2 pr-3 text-zinc-300">{row.platform}</td>
+                        <td className="py-2 pr-3">
+                          <span className={sourceStatusChip(row.status === "sent" ? "healthy" : "missing")}>
+                            {row.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-2 text-zinc-500">{row.error ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-xs text-zinc-500">No recent push failures. Nice and quiet.</div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingPushHealth ? "Loading push health..." : "No push health data available yet. Run the SQL migration first."}
           </div>
         )}
       </div>

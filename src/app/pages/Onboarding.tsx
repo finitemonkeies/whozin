@@ -116,7 +116,7 @@ export function Onboarding() {
           disabled={checking}
           className="mt-10 w-full py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-pink-600 to-purple-600 hover:brightness-110 transition active:scale-[0.98] disabled:opacity-60"
         >
-          {checking ? "Loading..." : "Start the loop"}
+          {checking ? "Loading..." : "Find your next move"}
         </button>
 
         <div className="mt-3 text-xs text-white/50">Private by default. Made for real plans, not public clout.</div>

@@ -17,8 +17,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Whozin";
   const options = {
     body: payload.body || "Open Whozin to see the latest update.",
-    icon: "/icon-192.svg",
-    badge: "/icon-192.svg",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
     tag: payload.tag || "whozin-push",
     data: {
       url: payload.url || "/activity?src=push",
@@ -33,7 +33,19 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification?.data?.url || "/activity?src=push";
+  const rawTargetUrl = event.notification?.data?.url || "/activity?src=push";
+  const target = new URL(rawTargetUrl, self.location.origin);
+  target.searchParams.set("src", "push");
+  if (event.notification?.data?.notificationId) {
+    target.searchParams.set("notification_id", event.notification.data.notificationId);
+  }
+  if (event.notification?.data?.type) {
+    target.searchParams.set("push_type", event.notification.data.type);
+  }
+  if (event.notification?.data?.eventId) {
+    target.searchParams.set("event_id", event.notification.data.eventId);
+  }
+  const targetUrl = `${target.pathname}${target.search}${target.hash}`;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {

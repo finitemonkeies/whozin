@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Zap } from "lucide-react";
 import { motion } from "motion/react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
+import { WhozinLogo } from "../components/WhozinLogo";
 
 function useQuery() {
   const { search } = useLocation();
@@ -118,8 +118,8 @@ export function Welcome() {
         className="w-full max-w-sm z-10 flex flex-col items-center"
       >
         {/* Logo */}
-        <div className="w-20 h-20 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_40px_rgba(236,72,153,0.4)] mb-8">
-          <Zap className="w-10 h-10 text-white fill-white" />
+        <div className="mb-8">
+          <WhozinLogo />
         </div>
 
         {/* Headlines */}

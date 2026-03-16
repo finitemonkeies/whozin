@@ -89,7 +89,8 @@ Body:
 {
   "dry_run": false,
   "since_minutes": 20,
-  "limit": 150
+  "limit": 150,
+  "types": ["friend_joined_event", "event_momentum"]
 }
 ```
 
@@ -103,7 +104,8 @@ Start with:
 {
   "dry_run": true,
   "since_minutes": 20,
-  "limit": 50
+  "limit": 50,
+  "types": ["friend_joined_event", "event_momentum"]
 }
 ```
 
@@ -121,7 +123,8 @@ Switch back to:
 {
   "dry_run": false,
   "since_minutes": 20,
-  "limit": 150
+  "limit": 150,
+  "types": ["friend_joined_event", "event_momentum"]
 }
 ```
 
@@ -135,17 +138,15 @@ separate trigger system.
 
 ## MVP guidance
 
-For MVP, prefer sending only the highest-value notification types:
+`push-dispatch` now defaults to only the highest-value notification types:
 
 - `friend_joined_event`
 - `event_momentum`
 
-If you later want stricter filtering, add type filtering inside
-`push-dispatch`.
+You can override this by passing a `types` array in the request body.
 
 ## Operational notes
 
 - `404` and `410` push provider responses disable dead subscriptions
 - sends are deduped per `notification_id + subscription_id`
 - iPhone users need the app added to the Home Screen to receive web push
-

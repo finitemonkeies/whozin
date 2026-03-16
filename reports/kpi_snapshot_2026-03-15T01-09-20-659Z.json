@@ -1,0 +1,150 @@
+{
+  "generated_at": "2026-03-15T01:09:20.648Z",
+  "timezone": "America/Chicago",
+  "trend_7d": [
+    {
+      "day_local": "2026-03-07",
+      "new_users": 0,
+      "active_users": 0,
+      "rsvps": 0,
+      "friend_adds": 0,
+      "events_happening": 0
+    },
+    {
+      "day_local": "2026-03-08",
+      "new_users": 0,
+      "active_users": 0,
+      "rsvps": 0,
+      "friend_adds": 0,
+      "events_happening": 0
+    },
+    {
+      "day_local": "2026-03-09",
+      "new_users": 0,
+      "active_users": 0,
+      "rsvps": 0,
+      "friend_adds": 0,
+      "events_happening": 0
+    },
+    {
+      "day_local": "2026-03-10",
+      "new_users": 0,
+      "active_users": 3,
+      "rsvps": 0,
+      "friend_adds": 4,
+      "events_happening": 0
+    },
+    {
+      "day_local": "2026-03-11",
+      "new_users": 0,
+      "active_users": 0,
+      "rsvps": 0,
+      "friend_adds": 0,
+      "events_happening": 3
+    },
+    {
+      "day_local": "2026-03-12",
+      "new_users": 3,
+      "active_users": 14,
+      "rsvps": 5,
+      "friend_adds": 18,
+      "events_happening": 12
+    },
+    {
+      "day_local": "2026-03-13",
+      "new_users": 1,
+      "active_users": 4,
+      "rsvps": 2,
+      "friend_adds": 4,
+      "events_happening": 35
+    }
+  ],
+  "rsvp_source_split_7d": [
+    {
+      "source": "explore",
+      "rsvp_count": 4
+    },
+    {
+      "source": "home",
+      "rsvp_count": 2
+    },
+    {
+      "source": "unknown",
+      "rsvp_count": 1
+    }
+  ],
+  "weekly_efficiency_6w": [
+    {
+      "week_start_local": "2026-01-26",
+      "rsvps": 0,
+      "active_users": 0,
+      "rsvps_per_active_user": 0
+    },
+    {
+      "week_start_local": "2026-02-02",
+      "rsvps": 0,
+      "active_users": 0,
+      "rsvps_per_active_user": 0
+    },
+    {
+      "week_start_local": "2026-02-09",
+      "rsvps": 0,
+      "active_users": 0,
+      "rsvps_per_active_user": 0
+    },
+    {
+      "week_start_local": "2026-02-16",
+      "rsvps": 1,
+      "active_users": 3,
+      "rsvps_per_active_user": 0.3333
+    },
+    {
+      "week_start_local": "2026-02-23",
+      "rsvps": 15,
+      "active_users": 12,
+      "rsvps_per_active_user": 1.25
+    },
+    {
+      "week_start_local": "2026-03-02",
+      "rsvps": 14,
+      "active_users": 16,
+      "rsvps_per_active_user": 0.875
+    }
+  ],
+  "referral_baseline_7d": {
+    "rsvps": 7,
+    "invite_sent": 11,
+    "invite_opened": 0,
+    "invite_signup_completed": 0,
+    "invite_rsvp_completed": 0
+  },
+  "observability_funnel_24h": [
+    {
+      "event_name": "event_detail_view",
+      "events_24h": 4
+    },
+    {
+      "event_name": "invite_sent",
+      "events_24h": 3
+    },
+    {
+      "event_name": "invite_link_copied",
+      "events_24h": 2
+    },
+    {
+      "event_name": "invite_signup_completed",
+      "events_24h": 0
+    },
+    {
+      "event_name": "invite_rsvp_completed",
+      "events_24h": 0
+    }
+  ],
+  "errors_24h": [
+    {
+      "surface": "frontend",
+      "kind": "unhandled_rejection",
+      "errors_24h": 8
+    }
+  ]
+}

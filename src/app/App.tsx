@@ -1,9 +1,10 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import { Suspense, lazy, type ReactNode, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { RequireAuth } from "./components/RequireAuth";
 import { BottomNav } from "./components/BottomNav";
+import { logProductEvent } from "@/lib/productEvents";
 
 const Home = lazy(() => import("./pages/Home").then((m) => ({ default: m.Home })));
 const EventDetails = lazy(() =>
@@ -104,6 +105,34 @@ function protectedRoute(node: ReactNode) {
 function AppShell() {
   const location = useLocation();
   const path = location.pathname;
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("src") !== "push") return;
+
+    const notificationId = params.get("notification_id")?.trim() ?? "";
+    const pushType = params.get("push_type")?.trim() ?? "";
+    const eventId = params.get("event_id")?.trim() ?? "";
+    const dedupeKey = notificationId || `${location.pathname}?${params.toString()}`;
+    const storageKey = `whozin:push-opened:${dedupeKey}`;
+
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(storageKey)) return;
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(storageKey, "1");
+    }
+
+    void logProductEvent({
+      eventName: "push_opened",
+      eventId: eventId || null,
+      source: "push",
+      metadata: {
+        notification_id: notificationId || null,
+        push_type: pushType || null,
+        path: location.pathname,
+      },
+    });
+  }, [location.pathname, location.search]);
 
   const hideBottomNav =
     path.startsWith("/web") ||

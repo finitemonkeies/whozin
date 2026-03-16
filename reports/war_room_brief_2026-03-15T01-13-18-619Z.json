@@ -1,0 +1,205 @@
+{
+  "generated_at": "2026-03-15T01:13:18.618Z",
+  "window": {
+    "now": "2026-03-15T01:13:16.950Z",
+    "plus_24h": "2026-03-16T01:13:16.950Z",
+    "minus_24h": "2026-03-14T01:13:16.950Z"
+  },
+  "counts": {
+    "events_in_next_24h": 8,
+    "attendees_24h": 0,
+    "invite_events_24h": 0,
+    "rsvp_users_24h": 0
+  },
+  "top5": [
+    {
+      "id": "632e8a27-1e52-4f7e-81d6-55493acf784b",
+      "title": "Coffee & Beats: Chico Chaboya, Clancy Hickinbotham, Phil Spank",
+      "event_date": "2026-03-15T11:00:00+00:00",
+      "event_end_date": null,
+      "venue_name": null,
+      "city": "San Francisco",
+      "image_url": null,
+      "external_url": "https://19hz.info/eventlisting_BayArea.php",
+      "description": "Tags: free | Price/Age: Lose Yourself | Organizers: Instagram Page | Imported from 19hz Bay Area listings.",
+      "ticket_url": null,
+      "event_source": "19hz",
+      "move_score": 0,
+      "move_status": null,
+      "move_total_rsvps": 0,
+      "move_recent_rsvps_6h": 0,
+      "recent_rsvps_6h": 0,
+      "total_rsvps": 0,
+      "invite_sent_24h": 0,
+      "rsvps_24h": 0
+    },
+    {
+      "id": "4595a2e4-1de3-4513-a025-32d6da8eb75f",
+      "title": "HiBunny Society Monthly Pop-Up: Uzai, Casual Business, Darkstar, DatGai, Sasquatch, CrashoutT, Nikon, HailZ",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "event_end_date": null,
+      "venue_name": null,
+      "city": "San Francisco",
+      "image_url": null,
+      "external_url": "https://19hz.info/eventlisting_BayArea.php",
+      "description": "Tags: free | Price/Age: HiBunny Society | Organizers: Instagram Page | Imported from 19hz Bay Area listings.",
+      "ticket_url": null,
+      "event_source": "19hz",
+      "move_score": 0,
+      "move_status": null,
+      "move_total_rsvps": 0,
+      "move_recent_rsvps_6h": 0,
+      "recent_rsvps_6h": 0,
+      "total_rsvps": 0,
+      "invite_sent_24h": 0,
+      "rsvps_24h": 0
+    },
+    {
+      "id": "3743a179-4a0c-4dc9-ba5e-05e85f5b7c67",
+      "title": "Open Decks: House Music All Day Long",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "event_end_date": null,
+      "venue_name": null,
+      "city": "San Francisco",
+      "image_url": null,
+      "external_url": "https://19hz.info/eventlisting_BayArea.php",
+      "description": "Tags: free | Price/Age: Dom Bello, Bendi | Organizers: Instagram Page | Imported from 19hz Bay Area listings.",
+      "ticket_url": null,
+      "event_source": "19hz",
+      "move_score": 0,
+      "move_status": null,
+      "move_total_rsvps": 0,
+      "move_recent_rsvps_6h": 0,
+      "recent_rsvps_6h": 0,
+      "total_rsvps": 0,
+      "invite_sent_24h": 0,
+      "rsvps_24h": 0
+    },
+    {
+      "id": "f56d06c2-2a41-46a0-a46d-42c1ad55a8e2",
+      "title": "Daytime Realness Season Opener",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "event_end_date": null,
+      "venue_name": null,
+      "city": "San Francisco",
+      "image_url": null,
+      "external_url": "https://19hz.info/eventlisting_BayArea.php",
+      "description": "Tags: $23 pre | 21+ | Imported from 19hz Bay Area listings.",
+      "ticket_url": null,
+      "event_source": "19hz",
+      "move_score": 0,
+      "move_status": null,
+      "move_total_rsvps": 0,
+      "move_recent_rsvps_6h": 0,
+      "recent_rsvps_6h": 0,
+      "total_rsvps": 0,
+      "invite_sent_24h": 0,
+      "rsvps_24h": 0
+    },
+    {
+      "id": "c0709f4e-a6ac-4f08-84a3-f8bd6493423a",
+      "title": "Vintage Culture",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "event_end_date": null,
+      "venue_name": null,
+      "city": "San Francisco",
+      "image_url": null,
+      "external_url": "https://19hz.info/eventlisting_BayArea.php",
+      "description": "Tags: $56-68+ | 21+ | Imported from 19hz Bay Area listings.",
+      "ticket_url": null,
+      "event_source": "19hz",
+      "move_score": 0,
+      "move_status": null,
+      "move_total_rsvps": 0,
+      "move_recent_rsvps_6h": 0,
+      "recent_rsvps_6h": 0,
+      "total_rsvps": 0,
+      "invite_sent_24h": 0,
+      "rsvps_24h": 0
+    }
+  ],
+  "momentum_weak_social": [],
+  "nudge_users": [],
+  "low_quality_events": [
+    {
+      "id": "632e8a27-1e52-4f7e-81d6-55493acf784b",
+      "title": "Coffee & Beats: Chico Chaboya, Clancy Hickinbotham, Phil Spank",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T11:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "4595a2e4-1de3-4513-a025-32d6da8eb75f",
+      "title": "HiBunny Society Monthly Pop-Up: Uzai, Casual Business, Darkstar, DatGai, Sasquatch, CrashoutT, Nikon, HailZ",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "3743a179-4a0c-4dc9-ba5e-05e85f5b7c67",
+      "title": "Open Decks: House Music All Day Long",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "f56d06c2-2a41-46a0-a46d-42c1ad55a8e2",
+      "title": "Daytime Realness Season Opener",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "c0709f4e-a6ac-4f08-84a3-f8bd6493423a",
+      "title": "Vintage Culture",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T14:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "6032935d-d52a-46ea-a202-d75bf92b7be4",
+      "title": "Death Guild Presents Covenant",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T20:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "37827dbb-0bbf-4299-83e7-8f1374fbd41d",
+      "title": "::The Box:: Presents: What's In The Box!? Vendors Market",
+      "city": "Santa Cruz",
+      "event_date": "2026-03-15T21:30:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    },
+    {
+      "id": "046ec4e7-875d-40ce-9a8a-2aad56808caa",
+      "title": "Unofficial Kim Petras After Party: Nile, Seajay, Miami Myway",
+      "city": "San Francisco",
+      "event_date": "2026-03-15T22:00:00+00:00",
+      "missing": [
+        "image",
+        "venue"
+      ]
+    }
+  ]
+}

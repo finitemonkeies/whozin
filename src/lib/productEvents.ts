@@ -14,7 +14,8 @@ type ProductEventName =
   | "invite_link_copied"
   | "invite_link_opened"
   | "invite_signup_completed"
-  | "invite_rsvp_completed";
+  | "invite_rsvp_completed"
+  | "push_opened";
 
 type LogProductEventArgs = {
   eventName: ProductEventName;
