@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { addDays, endOfDay, format, isSameDay, startOfDay } from "date-fns";
-import { Loader2, Sparkles, Users, X } from "lucide-react";
+import { Loader2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { ExploreDatePicker } from "@/app/components/ExploreDatePicker";
@@ -377,19 +377,6 @@ export function Explore() {
     [feedScopedEvents, feedMode, selectedUpcomingDate, tagFilter]
   );
 
-  const friendSpotlightEvents = useMemo(() => {
-    return [...friendEvents]
-      .filter((event) => matchesFeedMode(event, feedMode))
-      .filter((event) => tagFilter === "all" || (Array.isArray(event.tags) ? event.tags : []).includes(tagFilter))
-      .sort((a, b) => {
-        const aFriends = friendCountByEventId[a.id] ?? 0;
-        const bFriends = friendCountByEventId[b.id] ?? 0;
-        if (aFriends !== bFriends) return bFriends - aFriends;
-        return eventTimestamp(a) - eventTimestamp(b);
-      })
-      .slice(0, 3);
-  }, [feedMode, friendCountByEventId, friendEvents, tagFilter]);
-
   const hasFriendSignal = useMemo(
     () => Object.values(friendCountByEventId).some((count) => count > 0),
     [friendCountByEventId]
@@ -419,9 +406,8 @@ export function Explore() {
   const featuredEventIds = useMemo(() => {
     const ids = new Set<string>();
     if (heroEvent?.id) ids.add(heroEvent.id);
-    for (const event of friendSpotlightEvents) ids.add(event.id);
     return ids;
-  }, [friendSpotlightEvents, heroEvent?.id]);
+  }, [heroEvent?.id]);
 
   const rankedFeedEvents = useMemo(() => {
     return [...filteredFeedEvents]
@@ -471,16 +457,17 @@ export function Explore() {
   const primarySectionBody =
     feedMode === "tonight"
       ? heroEvent
-        ? "Friends, attendance, and momentum are quietly shaping this ranking."
+        ? "Friend activity, attendance, and momentum are shaping this ranking."
         : "Signal is still soft, so this is the best stack of options right now."
-      : "Future events start tomorrow and stay ranked Bay-wide, with internal events first.";
+      : selectedUpcomingDate
+        ? "Showing only this date, with friend signal folded into the ranking instead of split into a separate feed."
+        : "Future events start tomorrow and stay ranked Bay-wide, with internal events first.";
 
   const lowDensityGuideEvent = useMemo(() => {
     if (heroEvent) return heroEvent;
-    if (friendSpotlightEvents.length > 0) return friendSpotlightEvents[0];
     if (rankedFeedEvents.length > 0) return rankedFeedEvents[0];
     return null;
-  }, [friendSpotlightEvents, heroEvent, rankedFeedEvents]);
+  }, [heroEvent, rankedFeedEvents]);
 
   const handleQuickRsvp = async (event: Event) => {
     if (featureFlags.killSwitchRsvpWrites) {
@@ -695,43 +682,6 @@ export function Explore() {
               signal={heroSignal}
               source="explore"
             />
-          </div>
-        ) : null}
-
-        {friendSpotlightEvents.length > 0 ? (
-          <div className="space-y-4">
-            <div className="flex items-end justify-between">
-              <div>
-                <h3 className="flex items-center gap-2 text-lg font-semibold">
-                  <Users className="h-4 w-4 text-fuchsia-300" />
-                  Friends Are Going
-                </h3>
-                <div className="mt-0.5 text-xs text-zinc-600">
-                  Friend activity stays visible and also boosts these events in the Bay ranking.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              {friendSpotlightEvents.map((event) => (
-                <EventCard
-                  key={`friend-${event.id}`}
-                  event={event}
-                  surface="explore"
-                  inviteSource="share_link"
-                  quickRsvp={
-                    isUuid(event.id)
-                      ? {
-                          going: rsvpByEventId[event.id]?.going ?? false,
-                          working: rsvpByEventId[event.id]?.working ?? false,
-                          count: rsvpByEventId[event.id]?.count ?? event.attendees,
-                          onToggle: () => void handleQuickRsvp(event),
-                        }
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
           </div>
         ) : null}
 
