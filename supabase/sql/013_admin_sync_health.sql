@@ -9,6 +9,7 @@ declare
   v_job record;
   v_last_run record;
   v_sources jsonb := '[]'::jsonb;
+  v_latest_source_stats jsonb := '[]'::jsonb;
   v_upcoming_total integer := 0;
   v_move_scored_total integer := 0;
 begin
@@ -51,7 +52,19 @@ begin
         'upcoming', upcoming,
         'with_image', with_image,
         'with_ticket', with_ticket,
-        'next_event_at', next_event_at
+        'next_event_at', next_event_at,
+        'coverage_status',
+        case
+          when upcoming = 0 then 'missing'
+          when next_event_at is null then 'stale'
+          when next_event_at > now() + interval '21 days' then 'stale'
+          when with_image = 0 then 'thin'
+          else 'healthy'
+        end,
+        'image_pct',
+        case when total > 0 then round((with_image::numeric / total::numeric) * 100, 1) else 0 end,
+        'ticket_pct',
+        case when total > 0 then round((with_ticket::numeric / total::numeric) * 100, 1) else 0 end
       )
       order by upcoming desc, total desc, source asc
     ),
@@ -69,6 +82,18 @@ begin
     from public.events
     group by 1
   ) source_rollup;
+
+  select coalesce(
+    (
+      select s.source_stats
+      from public.sync_run_summaries s
+      where s.sync_name = 'sync-bay-area-events'
+      order by s.started_at desc
+      limit 1
+    ),
+    '[]'::jsonb
+  )
+    into v_latest_source_stats;
 
   return jsonb_build_object(
     'job',
@@ -93,7 +118,8 @@ begin
     end,
     'upcoming_total', v_upcoming_total,
     'move_scored_upcoming', v_move_scored_total,
-    'sources', v_sources
+    'sources', v_sources,
+    'latest_source_stats', v_latest_source_stats
   );
 end;
 $$;
@@ -102,4 +128,4 @@ revoke all on function public.get_admin_sync_health() from public;
 grant execute on function public.get_admin_sync_health() to authenticated;
 
 comment on function public.get_admin_sync_health() is
-  'Returns scheduler state, latest cron run, and event source coverage for the admin health page.';
+  'Returns scheduler state, latest cron run, and source freshness coverage for the admin health page.';

@@ -23,9 +23,29 @@ type JsonLdSource = {
   city?: string;
 };
 
+type RaFetchDebug = {
+  listing_pages: number;
+  discovered_event_urls: number;
+  deduped_event_urls: number;
+  detail_fetch_success: number;
+  detail_fetch_failed: number;
+  parsed_events: number;
+  filtered_out: number;
+};
+
 type SourceRun<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+type SourceStat = {
+  source: string;
+  fetched: number;
+  upserted: number;
+  inserted: number;
+  updated: number;
+  status: "succeeded" | "failed";
+  error: string | null;
+};
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -39,6 +59,28 @@ const DEFAULT_RA_URLS = [
   "https://ra.co/events/us/oakland",
 ];
 const DEFAULT_19HZ_URL = "https://19hz.info/eventlisting_BayArea.php";
+const DEFAULT_JSON_LD_SOURCES: JsonLdSource[] = [
+  {
+    url: "https://shotgun.live/en/venues/boof",
+    source: "shotgun_boof",
+    city: "San Francisco",
+  },
+  {
+    url: "https://shotgun.live/en/venues/le-club-society",
+    source: "shotgun_le_club",
+    city: "San Francisco",
+  },
+  {
+    url: "https://shotgun.live/en/venues/hard-reset-presents",
+    source: "shotgun_hard_reset",
+    city: "San Francisco",
+  },
+  {
+    url: "https://shotgun.live/en/venues/queen-out",
+    source: "shotgun_queen_out",
+    city: "San Francisco",
+  },
+];
 const DEFAULT_BAY_AREA_CITIES = [
   "San Francisco",
   "Oakland",
@@ -97,6 +139,7 @@ const TRUSTED_TICKET_HOSTS = [
   "axs.com",
   "dice.fm",
 ];
+const DEFAULT_19HZ_ENRICH_LIMIT = 120;
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -192,6 +235,21 @@ function parseJsonArray<T>(raw: string | null, fallback: T[]): T[] {
   } catch {
     return fallback;
   }
+}
+
+function mergeJsonLdSources(primary: JsonLdSource[], fallback: JsonLdSource[]): JsonLdSource[] {
+  const merged = new Map<string, JsonLdSource>();
+  for (const entry of [...fallback, ...primary]) {
+    const url = asString(entry?.url);
+    const source = asString(entry?.source);
+    if (!url || !source) continue;
+    merged.set(url.toLowerCase(), {
+      url,
+      source,
+      city: asString(entry?.city) ?? undefined,
+    });
+  }
+  return Array.from(merged.values());
 }
 
 function normalizeForKey(value: string | null | undefined): string {
@@ -293,74 +351,139 @@ async function runSource<T>(label: string, loader: () => Promise<T>): Promise<So
   }
 }
 
-function pickRaImageUrl(item: Record<string, unknown>): string | null {
-  const direct = firstString(item.image, item.imageUrl, item.img, item.thumbnail);
-  if (direct) return direct;
-
-  const images = item.images;
-  if (!Array.isArray(images)) return null;
-
-  for (const image of images) {
-    if (typeof image === "string") {
-      const url = asString(image);
-      if (url) return url;
-    }
-    if (image && typeof image === "object") {
-      const url = asString((image as Record<string, unknown>).url);
-      if (url) return url;
-    }
+async function fetchHtml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; WhozinBot/1.0; +https://whozin.app)",
+      Accept: "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Fetch failed (${res.status}) for ${url}`);
   }
-
-  return null;
+  return await res.text();
 }
 
-function pickRaVenueName(item: Record<string, unknown>): string | null {
-  const venue = item.venue;
-  if (venue && typeof venue === "object") {
-    const venueObj = venue as Record<string, unknown>;
-    return firstString(venueObj.name, venueObj.title, venueObj.venueName);
-  }
-  return firstString(item.venueName, item.club, item.locationName, item.venue);
+function stripTags(value: string): string {
+  return normalizeWhitespace(
+    value
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  );
 }
 
-function pickRaCity(item: Record<string, unknown>, locationText: string | null): string | null {
-  const city = firstString(item.city, item.town, item.area);
-  if (city) return city;
-  if (!locationText) return null;
-  for (const hint of DEFAULT_BAY_AREA_CITIES) {
-    if (locationText.toLowerCase().includes(hint.toLowerCase())) return hint;
-  }
-  return null;
+function extractHtmlMatch(html: string, pattern: RegExp): string | null {
+  const match = html.match(pattern);
+  return match?.[1] ? stripTags(match[1]) : null;
 }
 
-function pickRaLatLng(item: Record<string, unknown>) {
+function extractHtmlAttr(html: string, pattern: RegExp): string | null {
+  const match = html.match(pattern);
+  return match?.[1] ? normalizeWhitespace(match[1]) : null;
+}
+
+function inferRaCityFromUrl(url: string): string | undefined {
+  const lower = url.toLowerCase();
+  if (lower.includes("/sanfrancisco")) return "San Francisco";
+  if (lower.includes("/oakland")) return "Oakland";
+  return undefined;
+}
+
+function extractRaEventUrls(listingHtml: string): string[] {
+  const matches = listingHtml.matchAll(/href=["'](\/events\/\d+[^"']*)["']/gi);
+  const urls = new Set<string>();
+  for (const match of matches) {
+    const href = canonicalizeUrl(`https://ra.co${match[1] ?? ""}`);
+    if (!href) continue;
+    urls.add(href);
+  }
+  return Array.from(urls).slice(0, 80);
+}
+
+function monthFromLabel(value: string): number | null {
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const idx = months.indexOf(value.trim().slice(0, 3).toLowerCase());
+  return idx >= 0 ? idx : null;
+}
+
+function parseRaDateTime(dateLabel: string | null, timeRangeLabel: string | null): { start: string | null; end: string | null } {
+  if (!dateLabel || !timeRangeLabel) return { start: null, end: null };
+  const dateMatch = dateLabel.match(/[A-Za-z]{3},\s+([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{4})/i);
+  const timeMatch = timeRangeLabel.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+  if (!dateMatch || !timeMatch) return { start: null, end: null };
+
+  const month = monthFromLabel(dateMatch[1]);
+  const day = Number(dateMatch[2]);
+  const year = Number(dateMatch[3]);
+  if (month === null || !Number.isFinite(day) || !Number.isFinite(year)) {
+    return { start: null, end: null };
+  }
+
+  const startHour = Number(timeMatch[1]);
+  const startMinute = Number(timeMatch[2]);
+  const endHour = Number(timeMatch[3]);
+  const endMinute = Number(timeMatch[4]);
+  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) {
+    return { start: null, end: null };
+  }
+
+  const start = new Date(Date.UTC(year, month, day, startHour, startMinute, 0));
+  const end = new Date(Date.UTC(year, month, day, endHour, endMinute, 0));
+  if (end.getTime() <= start.getTime()) {
+    end.setUTCDate(end.getUTCDate() + 1);
+  }
+
   return {
-    lat: parseNumber(item.lat ?? item.latitude),
-    lng: parseNumber(item.lng ?? item.lon ?? item.longitude),
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 }
 
-async function normalizeRaItem(item: Record<string, unknown>): Promise<NormalizedEvent | null> {
-  const title = firstString(item.title, item.name, item.eventTitle);
-  if (!title) return null;
+async function parseResidentAdvisorEventPage(
+  eventUrl: string,
+  html: string,
+  fallbackCity?: string
+): Promise<NormalizedEvent | null> {
+  for (const block of extractJsonLdBlocks(html)) {
+    try {
+      const parsed = JSON.parse(block);
+      const nodes: Array<Record<string, unknown>> = [];
+      collectJsonLdEvents(parsed, nodes);
+      for (const node of nodes) {
+        const normalized = await normalizeJsonLdEvent(node, "ra", fallbackCity);
+        if (!normalized) continue;
+        normalized.externalUrl = eventUrl;
+        normalized.ticketUrl = normalized.ticketUrl ?? eventUrl;
+        return normalized;
+      }
+    } catch {
+      // Ignore malformed blocks and fall back to visible HTML parsing.
+    }
+  }
 
-  const start =
-    parseDate(item.startDateTime) ??
-    parseDate(item.startDate) ??
-    parseDate(item.dateTime) ??
-    parseDate(item.startsAt) ??
-    parseDate(item.date);
-  if (!start) return null;
+  const title =
+    extractHtmlMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i) ??
+    extractHtmlMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i)?.replace(/\s+at\s+.*$/, "").trim() ??
+    null;
+  const venue =
+    extractHtmlMatch(html, /Venue<\/[^>]+>\s*([\s\S]*?)(?:<[^>]+>\s*Date|<\/section>|<\/div>)/i) ??
+    extractHtmlMatch(html, /Location<\/[^>]+>\s*([\s\S]*?)(?:<[^>]+>\s*Calendar|<\/section>|<\/div>)/i);
+  const dateLabel = extractHtmlMatch(html, /Date<\/[^>]+>\s*([\s\S]*?)(?:<[^>]+>\s*\d{1,2}:\d{2}|<\/section>|<\/div>)/i);
+  const timeRangeLabel = extractHtmlMatch(html, /([0-9]{1,2}:[0-9]{2}\s*(?:&nbsp;| )*[-–]\s*(?:&nbsp;| )*[0-9]{1,2}:[0-9]{2})/i);
+  const description =
+    extractHtmlMatch(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlMatch(html, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+  const imageUrl =
+    extractHtmlMatch(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlMatch(html, /<img[^>]+src=["']([^"']+)["'][^>]*alt=["'][^"']*Flyer[^"']*["']/i);
+  const { start, end } = parseRaDateTime(dateLabel, timeRangeLabel);
+  if (!title || !start) return null;
 
-  const end = parseDate(item.endDateTime) ?? parseDate(item.endDate) ?? parseDate(item.endsAt);
-  const venueName = pickRaVenueName(item);
-  const location = firstString(item.location, item.address, item.areaName, venueName);
-  const city = pickRaCity(item, location);
-  const eventUrl = firstString(item.url, item.eventUrl, item.link);
-  const ticketUrl = firstString(item.ticketUrl, item.ticketsUrl, item.ticket_link, eventUrl);
-  const sourceEventId =
-    firstString(item.id, item.eventId, item.raId) ?? (await sha1(`${title}|${start}|${venueName ?? ""}`));
-  const { lat, lng } = pickRaLatLng(item);
+  const city = fallbackCity ?? (venue && looksBayArea(venue) ? DEFAULT_BAY_AREA_CITIES.find((entry) => venue.toLowerCase().includes(entry.toLowerCase())) ?? null : null);
+  const sourceEventId = firstString(eventUrl.match(/\/events\/(\d+)/)?.[1]) ?? await sha1(`${title}|${start}|${venue ?? ""}`);
 
   return {
     title,
@@ -368,77 +491,210 @@ async function normalizeRaItem(item: Record<string, unknown>): Promise<Normalize
     sourceEventId,
     eventDateIso: start,
     eventEndDateIso: end,
-    location,
-    venueName,
-    city,
-    lat,
-    lng,
-    imageUrl: pickRaImageUrl(item),
-    ticketUrl,
+    location: venue,
+    venueName: venue,
+    city: city ?? null,
+    lat: null,
+    lng: null,
+    imageUrl: canonicalizeUrl(imageUrl),
+    ticketUrl: eventUrl,
     externalUrl: eventUrl,
-    description: firstString(item.description, item.summary, item.content),
+    description,
   };
 }
 
-function buildApifyUrl(actorId: string, token: string): string {
-  const params = new URLSearchParams({
-    token,
-    format: "json",
-  });
-  return `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?${params.toString()}`;
+function extractShotgunEventUrls(listingHtml: string): string[] {
+  const matches = listingHtml.matchAll(/href=["'](\/en\/events\/[^"'/?#]+)["']/gi);
+  const urls = new Set<string>();
+  for (const match of matches) {
+    const href = canonicalizeUrl(`https://shotgun.live${match[1] ?? ""}`);
+    if (!href) continue;
+    urls.add(href);
+  }
+  return Array.from(urls).slice(0, 60);
 }
 
-function buildRaApifyInput(startUrls: string[]) {
+function inferShotgunYear(month: number, day: number): number {
   const now = new Date();
-  const plus30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const candidate = new Date(Date.UTC(now.getUTCFullYear(), month, day, 0, 0, 0));
+  if (candidate.getTime() < now.getTime() - 14 * 24 * 60 * 60 * 1000) {
+    return now.getUTCFullYear() + 1;
+  }
+  return now.getUTCFullYear();
+}
+
+function parseShotgunDateRange(label: string | null): { start: string | null; end: string | null } {
+  if (!label) return { start: null, end: null };
+  const match = label.match(
+    /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\s+([A-Za-z]{3})\s+from\s+(\d{1,2}):(\d{2})\s*(AM|PM)\s+to\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i
+  );
+  if (!match) return { start: null, end: null };
+  const day = Number(match[1]);
+  const month = monthFromLabel(match[2]);
+  if (month === null || !Number.isFinite(day)) return { start: null, end: null };
+  const year = inferShotgunYear(month, day);
+  let startHour = Number(match[3]);
+  const startMinute = Number(match[4]);
+  const startMeridiem = match[5].toUpperCase();
+  let endHour = Number(match[6]);
+  const endMinute = Number(match[7]);
+  const endMeridiem = match[8].toUpperCase();
+  if (startMeridiem === "PM" && startHour !== 12) startHour += 12;
+  if (startMeridiem === "AM" && startHour === 12) startHour = 0;
+  if (endMeridiem === "PM" && endHour !== 12) endHour += 12;
+  if (endMeridiem === "AM" && endHour === 12) endHour = 0;
+  const start = new Date(Date.UTC(year, month, day, startHour, startMinute, 0));
+  const end = new Date(Date.UTC(year, month, day, endHour, endMinute, 0));
+  if (end.getTime() <= start.getTime()) {
+    end.setUTCDate(end.getUTCDate() + 1);
+  }
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+async function parseShotgunEventPage(
+  eventUrl: string,
+  html: string,
+  fallbackCity?: string
+): Promise<NormalizedEvent | null> {
+  const title = extractHtmlMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const dateLine = extractHtmlMatch(html, /<h1[^>]*>[\s\S]*?<\/h1>\s*([\s\S]*?)\s*(?:<[^>]+>\s*Interested|<[^>]+>\s*\d+\s+are interested)/i);
+  const location =
+    extractHtmlMatch(html, /(?:AM|PM)\s*(.*?)\s*Interested/i) ??
+    extractHtmlMatch(html, /##\s*Location\s*([\s\S]*?)\s*(?:##|<img|<div)/i);
+  const description =
+    extractHtmlMatch(html, /Description\s*([\s\S]*?)\s*Lineup/i) ??
+    extractHtmlAttr(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+  const imageUrl =
+    extractHtmlAttr(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<img[^>]+src=["']([^"']+)["'][^>]*Cover[^>]*>/i);
+  const { start, end } = parseShotgunDateRange(dateLine);
+  if (!title || !start) return null;
+
+  const sourceEventId = firstString(eventUrl.match(/\/events\/([^/?#]+)/)?.[1]) ?? await sha1(`${title}|${start}|${location ?? ""}`);
+  const city =
+    fallbackCity ??
+    (location && looksBayArea(location)
+      ? DEFAULT_BAY_AREA_CITIES.find((entry) => location.toLowerCase().includes(entry.toLowerCase())) ?? null
+      : null);
 
   return {
-    startUrls: startUrls.map((url) => ({ url })),
-    dateRangeFrom: now.toISOString().slice(0, 10),
-    dateRangeTo: plus30.toISOString().slice(0, 10),
-    maxItems: 120,
-    enforceMaxItems: true,
-    maxErrors: 0,
-    downloadDelay: 1000,
+    title,
+    source: "shotgun",
+    sourceEventId,
+    eventDateIso: start,
+    eventEndDateIso: end,
+    location,
+    venueName: location,
+    city: city ?? null,
+    lat: null,
+    lng: null,
+    imageUrl: canonicalizeUrl(imageUrl),
+    ticketUrl: eventUrl,
+    externalUrl: eventUrl,
+    description,
   };
 }
 
-async function fetchResidentAdvisor(
-  apifyToken: string | null,
-  actorId: string,
-  startUrls: string[]
-): Promise<NormalizedEvent[]> {
-  if (!apifyToken) return [];
+async function fetchShotgunSources(configs: JsonLdSource[]): Promise<NormalizedEvent[]> {
+  const listingPages = await Promise.all(
+    configs.map(async (config) => ({
+      config,
+      html: await fetchHtml(config.url),
+    }))
+  );
 
-  const res = await fetch(buildApifyUrl(actorId, apifyToken), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildRaApifyInput(startUrls)),
-  });
-  if (!res.ok) {
-    throw new Error(`Resident Advisor sync failed (${res.status})`);
-  }
+  const targets = listingPages.flatMap((page) =>
+    extractShotgunEventUrls(page.html).map((eventUrl) => ({
+      eventUrl,
+      city: page.config.city,
+    }))
+  );
 
-  const payload = await res.json();
-  if (!Array.isArray(payload)) {
-    throw new Error("Resident Advisor payload was not an array");
-  }
+  const dedupedTargets = Array.from(new Map(targets.map((entry) => [entry.eventUrl, entry])).values()).slice(0, 80);
+  const parsed = await Promise.all(
+    dedupedTargets.map(async (target) => {
+      try {
+        const html = await fetchHtml(target.eventUrl);
+        const normalized = await parseShotgunEventPage(target.eventUrl, html, target.city);
+        if (!normalized) return null;
+        const haystack = [normalized.city, normalized.location, normalized.venueName].filter(Boolean).join(" ");
+        if (!looksBayArea(haystack)) return null;
+        if (!isValidFutureDate(normalized.eventDateIso)) return null;
+        return normalized;
+      } catch {
+        return null;
+      }
+    })
+  );
 
-  const output: NormalizedEvent[] = [];
-  for (const raw of payload) {
-    if (!raw || typeof raw !== "object") continue;
-    const normalized = await normalizeRaItem(raw as Record<string, unknown>);
-    if (!normalized) continue;
-    if (
-      normalized.city && !looksBayArea(normalized.city) &&
-      normalized.location && !looksBayArea(normalized.location)
-    ) {
-      continue;
-    }
-    output.push(normalized);
-  }
+  return parsed.filter((value): value is NormalizedEvent => !!value);
+}
 
-  return output;
+async function fetchResidentAdvisor(startUrls: string[]): Promise<{ events: NormalizedEvent[]; debug: RaFetchDebug }> {
+  const listingPages = await Promise.all(
+    startUrls.map(async (url) => ({
+      url,
+      city: inferRaCityFromUrl(url),
+      html: await fetchHtml(url),
+    }))
+  );
+
+  const eventTargets = listingPages.flatMap((page) =>
+    extractRaEventUrls(page.html).map((eventUrl) => ({
+      eventUrl,
+      city: page.city,
+    }))
+  );
+
+  const dedupedTargets = Array.from(
+    new Map(eventTargets.map((entry) => [entry.eventUrl, entry])).values()
+  ).slice(0, 60);
+
+  let detailFetchSuccess = 0;
+  let detailFetchFailed = 0;
+  let parsedEvents = 0;
+  let filteredOut = 0;
+  const results = await Promise.all(
+    dedupedTargets.map(async (target) => {
+      try {
+        const html = await fetchHtml(target.eventUrl);
+        detailFetchSuccess += 1;
+        const normalized = await parseResidentAdvisorEventPage(target.eventUrl, html, target.city);
+        if (!normalized) {
+          filteredOut += 1;
+          return null;
+        }
+        const haystack = [normalized.city, normalized.location, normalized.venueName].filter(Boolean).join(" ");
+        if (!looksBayArea(haystack)) {
+          filteredOut += 1;
+          return null;
+        }
+        if (!isValidFutureDate(normalized.eventDateIso)) {
+          filteredOut += 1;
+          return null;
+        }
+        parsedEvents += 1;
+        return normalized;
+      } catch {
+        detailFetchFailed += 1;
+        return null;
+      }
+    })
+  );
+
+  return {
+    events: results.filter((value): value is NormalizedEvent => !!value),
+    debug: {
+      listing_pages: listingPages.length,
+      discovered_event_urls: eventTargets.length,
+      deduped_event_urls: dedupedTargets.length,
+      detail_fetch_success: detailFetchSuccess,
+      detail_fetch_failed: detailFetchFailed,
+      parsed_events: parsedEvents,
+      filtered_out: filteredOut,
+    },
+  };
 }
 
 async function fetchTicketmaster(apiKey: string | null, cities: string[]): Promise<NormalizedEvent[]> {
@@ -647,7 +903,119 @@ function pickPreferred19hzUrl(links: string[]): string | null {
   );
 }
 
-async function normalize19hzRow(cells: string[], pageUrl: string): Promise<NormalizedEvent | null> {
+function extract19hzPrimaryCellParts(raw: string): { titleVenueText: string; inlineTags: string } {
+  const source = raw ?? "";
+  const [titlePart, ...rest] = source.split(/<td[^>]*>/i);
+  return {
+    titleVenueText: cleanCellText(titlePart ?? ""),
+    inlineTags: cleanCellText(rest.join(" ")),
+  };
+}
+
+function extract19hzRowLinks(rowHtml: string): string[] {
+  return Array.from((rowHtml ?? "").matchAll(/href=['"]([^'"]+)['"]/gi))
+    .map((match) => normalizeWhitespace(match[1] ?? ""))
+    .filter(Boolean);
+}
+
+type RemotePageMetadata = {
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  canonicalUrl: string | null;
+};
+
+async function fetchRemotePageMetadata(url: string): Promise<RemotePageMetadata> {
+  const html = await fetchHtml(url);
+  const title =
+    extractHtmlAttr(html, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
+  const description =
+    extractHtmlAttr(html, /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']+)["']/i);
+  const imageUrl =
+    canonicalizeUrl(
+      extractHtmlAttr(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+      extractHtmlAttr(html, /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+    );
+  const canonicalUrl = canonicalizeUrl(
+    extractHtmlAttr(html, /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ??
+    extractHtmlAttr(html, /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i) ??
+    url
+  );
+
+  return {
+    title,
+    description,
+    imageUrl,
+    canonicalUrl,
+  };
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const output = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      output[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return output;
+}
+
+async function enrich19hzEvents(events: NormalizedEvent[]): Promise<NormalizedEvent[]> {
+  const enrichLimitRaw = parseNumber(Deno.env.get("HZ19_ENRICH_LIMIT"));
+  const enrichLimit =
+    enrichLimitRaw && enrichLimitRaw > 0
+      ? Math.min(Math.floor(enrichLimitRaw), events.length)
+      : Math.min(DEFAULT_19HZ_ENRICH_LIMIT, events.length);
+
+  const prioritized = [...events]
+    .filter((event) => !event.imageUrl)
+    .sort((a, b) => a.eventDateIso.localeCompare(b.eventDateIso))
+    .slice(0, enrichLimit);
+
+  const metadataByUrl = new Map<string, Promise<RemotePageMetadata | null>>();
+
+  await mapWithConcurrency(prioritized, 8, async (event) => {
+    const candidateUrl = canonicalizeUrl(event.ticketUrl ?? event.externalUrl);
+    if (!candidateUrl || !hasTrustedTicketHost(candidateUrl)) return null;
+    if (!metadataByUrl.has(candidateUrl)) {
+      metadataByUrl.set(
+        candidateUrl,
+        fetchRemotePageMetadata(candidateUrl).catch(() => null)
+      );
+    }
+    const metadata = await metadataByUrl.get(candidateUrl)!;
+    if (!metadata) return null;
+    if (metadata.imageUrl) {
+      event.imageUrl = metadata.imageUrl;
+    }
+    if (!event.description && metadata.description) {
+      event.description = metadata.description;
+    }
+    if (!event.externalUrl || event.externalUrl === DEFAULT_19HZ_URL) {
+      event.externalUrl = metadata.canonicalUrl ?? candidateUrl;
+    }
+    if (event.ticketUrl && !hasTrustedTicketHost(event.ticketUrl) && hasTrustedTicketHost(candidateUrl)) {
+      event.ticketUrl = candidateUrl;
+    }
+    return null;
+  });
+
+  return events;
+}
+
+async function normalize19hzRow(cells: string[], rowHtml: string, pageUrl: string): Promise<NormalizedEvent | null> {
   if (cells.length < 2) return null;
   const dateTimeText = cells[0]
     .replace(/<br\s*\/?>/gi, "\n")
@@ -660,7 +1028,8 @@ async function normalize19hzRow(cells: string[], pageUrl: string): Promise<Norma
 
   const dateText = dateLines[0];
   const timeText = dateLines[1].replace(/^\(|\)$/g, "");
-  const titleVenueText = cleanCellText(cells[1]);
+  const primaryCell = extract19hzPrimaryCellParts(cells[1] ?? "");
+  const titleVenueText = primaryCell.titleVenueText;
   if (!dateText || !timeText || !titleVenueText) return null;
   if (/^date\/time$/i.test(dateText) || /^event title/i.test(titleVenueText)) return null;
 
@@ -672,13 +1041,10 @@ async function normalize19hzRow(cells: string[], pageUrl: string): Promise<Norma
   if (!title) return null;
 
   const venueCity = splitVenueAndCity(titleVenueText);
-  const tags = cells[2] ? cleanCellText(cells[2]) : "";
+  const tags = primaryCell.inlineTags || (cells[2] ? cleanCellText(cells[2]) : "");
   const priceAge = cells[3] ? cleanCellText(cells[3]) : "";
   const organizers = cells[4] ? cleanCellText(cells[4]) : "";
-  const linkMatches = Array.from((cells[5] ?? "").matchAll(/href=['"]([^'"]+)['"]/gi));
-  const links = linkMatches
-    .map((match) => normalizeWhitespace(match[1] ?? ""))
-    .filter(Boolean);
+  const links = extract19hzRowLinks(rowHtml);
   const primaryUrl = canonicalizeUrl(links[0] ?? pageUrl);
   const ticketUrl = pickPreferred19hzUrl(links);
   if (isLowSignal19hzEvent(title, venueCity, organizers, start)) return null;
@@ -691,7 +1057,7 @@ async function normalize19hzRow(cells: string[], pageUrl: string): Promise<Norma
     .filter(Boolean)
     .join(" | ");
 
-  const sourceEventId = await sha1(`19hz|${title}|${start}|${venueCity.venueName ?? ""}|${venueCity.city ?? ""}`);
+  const sourceEventId = await sha1(`19hz|${title}|${start}|${titleVenueText}`);
 
   return {
     title,
@@ -721,14 +1087,14 @@ async function fetch19hz(url: string): Promise<NormalizedEvent[]> {
   for (const rowMatch of rowMatches) {
     const rowHtml = rowMatch[1] ?? "";
     const cells = Array.from(rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((match) => match[1] ?? "");
-    const normalized = await normalize19hzRow(cells, url);
+    const normalized = await normalize19hzRow(cells, rowHtml, url);
     if (!normalized) continue;
     const haystack = [normalized.city, normalized.location, normalized.venueName].filter(Boolean).join(" ");
     if (!looksBayArea(haystack)) continue;
     events.push(normalized);
   }
 
-  return events;
+  return await enrich19hzEvents(events);
 }
 
 function extractJsonLdBlocks(html: string): string[] {
@@ -933,6 +1299,36 @@ async function upsertEvents(
   };
 }
 
+async function insertSyncRunSummary(
+  service: ReturnType<typeof createClient>,
+  payload: {
+    syncName: string;
+    startedAt: string;
+    completedAt: string;
+    timezone: string;
+    status: string;
+    totals: Record<string, unknown>;
+    upsert: Record<string, unknown>;
+    sourceErrors: string[];
+    sourceStats: SourceStat[];
+    sourceDebug: Record<string, unknown>;
+  }
+): Promise<void> {
+  const { error } = await service.from("sync_run_summaries").insert({
+    sync_name: payload.syncName,
+    started_at: payload.startedAt,
+    completed_at: payload.completedAt,
+    timezone: payload.timezone,
+    status: payload.status,
+    totals: payload.totals,
+    upsert: payload.upsert,
+    source_errors: payload.sourceErrors,
+    source_stats: payload.sourceStats,
+    source_debug: payload.sourceDebug,
+  });
+  if (error) throw error;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -990,38 +1386,85 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const runStartedAt = new Date().toISOString();
     const body = await req.json().catch(() => ({}));
-    const apifyToken = Deno.env.get("APIFY_TOKEN");
-    const raActorId = Deno.env.get("APIFY_RA_ACTOR_ID") ?? "chalkandcheese~ra-events-scraper";
     const raUrls = parseJsonArray<string>(Deno.env.get("APIFY_RA_URLS_JSON"), DEFAULT_RA_URLS);
     const hz19Url = Deno.env.get("BAY_AREA_19HZ_URL") ?? DEFAULT_19HZ_URL;
     const ticketmasterKey = Deno.env.get("TICKETMASTER_API_KEY") ??
       Deno.env.get("VITE_TICKETMASTER_API_KEY");
     const bayAreaCities = parseCityList(Deno.env.get("BAY_AREA_CITIES"));
-    const jsonLdSources = parseJsonArray<JsonLdSource>(
-      Deno.env.get("BAY_AREA_EVENT_URLS_JSON"),
-      []
-    );
+    const configuredShotgunSources = parseJsonArray<JsonLdSource>(Deno.env.get("BAY_AREA_EVENT_URLS_JSON"), []);
+    const shotgunSources = mergeJsonLdSources(configuredShotgunSources, DEFAULT_JSON_LD_SOURCES);
     const tz = typeof body?.tz === "string" && body.tz ? body.tz : "America/Chicago";
 
-    const [raRun, hz19Run, ticketmasterRun, jsonLdRun] = await Promise.all([
-      runSource("ra", () => fetchResidentAdvisor(apifyToken, raActorId, raUrls)),
+    const [raRun, hz19Run, ticketmasterRun, shotgunRun] = await Promise.all([
+      runSource("ra", () => fetchResidentAdvisor(raUrls)),
       runSource("19hz", () => fetch19hz(hz19Url)),
       runSource("ticketmaster", () => fetchTicketmaster(ticketmasterKey, bayAreaCities)),
-      runSource("json_ld", () => fetchJsonLdSources(jsonLdSources)),
+      runSource("shotgun", () => fetchShotgunSources(shotgunSources)),
     ]);
 
-    const sourceErrors = [raRun, hz19Run, ticketmasterRun, jsonLdRun]
+    const sourceErrors = [raRun, hz19Run, ticketmasterRun, shotgunRun]
       .filter((run): run is Extract<typeof run, { ok: false }> => !run.ok)
       .map((run) => run.error);
 
-    const raEvents = raRun.ok ? raRun.data : [];
+    const raEvents = raRun.ok ? raRun.data.events : [];
+    const raDebug = raRun.ok ? raRun.data.debug : null;
     const hz19Events = hz19Run.ok ? hz19Run.data : [];
     const ticketmasterEvents = ticketmasterRun.ok ? ticketmasterRun.data : [];
-    const jsonLdEvents = jsonLdRun.ok ? jsonLdRun.data : [];
+    const shotgunEvents = shotgunRun.ok ? shotgunRun.data : [];
 
-    const deduped = dedupeEvents([...raEvents, ...hz19Events, ...ticketmasterEvents, ...jsonLdEvents]);
+    const deduped = dedupeEvents([...raEvents, ...hz19Events, ...ticketmasterEvents, ...shotgunEvents]);
     const upsertSummary = await upsertEvents(service, deduped);
+    const sourceStats: SourceStat[] = [
+      {
+        source: "ra",
+        fetched: raEvents.length,
+        upserted: deduped.filter((event) => event.source === "ra").length,
+        inserted: 0,
+        updated: 0,
+        status: raRun.ok ? "succeeded" : "failed",
+        error: raRun.ok ? null : raRun.error,
+      },
+      {
+        source: "19hz",
+        fetched: hz19Events.length,
+        upserted: deduped.filter((event) => event.source === "19hz").length,
+        inserted: 0,
+        updated: 0,
+        status: hz19Run.ok ? "succeeded" : "failed",
+        error: hz19Run.ok ? null : hz19Run.error,
+      },
+      {
+        source: "ticketmaster",
+        fetched: ticketmasterEvents.length,
+        upserted: deduped.filter((event) => event.source === "ticketmaster").length,
+        inserted: 0,
+        updated: 0,
+        status: ticketmasterRun.ok ? "succeeded" : "failed",
+        error: ticketmasterRun.ok ? null : ticketmasterRun.error,
+      },
+      {
+        source: "shotgun",
+        fetched: shotgunEvents.length,
+        upserted: deduped.filter((event) => event.source === "shotgun").length,
+        inserted: 0,
+        updated: 0,
+        status: shotgunRun.ok ? "succeeded" : "failed",
+        error: shotgunRun.ok ? null : shotgunRun.error,
+      },
+    ];
+
+    for (const stat of sourceStats) {
+      const fetched = stat.fetched;
+      const totalUpserted = stat.upserted;
+      const insertedEstimate =
+        fetched > 0 && upsertSummary.upserted > 0
+          ? Math.round((totalUpserted / Math.max(deduped.length, 1)) * upsertSummary.inserted)
+          : 0;
+      stat.inserted = Math.min(totalUpserted, insertedEstimate);
+      stat.updated = Math.max(0, totalUpserted - stat.inserted);
+    }
 
     const { data: moveRefreshData, error: moveRefreshErr } = await service.rpc(
       "refresh_event_move_scores",
@@ -1029,24 +1472,46 @@ Deno.serve(async (req) => {
     );
     if (moveRefreshErr) throw moveRefreshErr;
 
+    const totals = {
+      fetched: deduped.length,
+      ra: raEvents.length,
+      hz19: hz19Events.length,
+      ticketmaster: ticketmasterEvents.length,
+      shotgun: shotgunEvents.length,
+    };
+    const sourceDebug = {
+      ra: raDebug,
+    };
+    const runCompletedAt = new Date().toISOString();
+    await insertSyncRunSummary(service, {
+      syncName: "sync-bay-area-events",
+      startedAt: runStartedAt,
+      completedAt: runCompletedAt,
+      timezone: tz,
+      status: "succeeded",
+      totals,
+      upsert: upsertSummary,
+      sourceErrors,
+      sourceStats,
+      sourceDebug,
+    });
+
     return jsonResponse(200, {
       ok: true,
       timezone: tz,
-      totals: {
-        fetched: deduped.length,
-        ra: raEvents.length,
-        hz19: hz19Events.length,
-        ticketmaster: ticketmasterEvents.length,
-        json_ld: jsonLdEvents.length,
-      },
+      totals,
       upsert: upsertSummary,
       move_refresh: moveRefreshData ?? null,
       sources: {
         ra_urls: raUrls,
         hz19_url: hz19Url,
         bay_area_cities: bayAreaCities,
-        json_ld_sources: jsonLdSources.map((entry) => entry.url),
+        shotgun_sources: shotgunSources.map((entry) => entry.url),
       },
+      source_debug: {
+        ra: raDebug,
+      },
+      source_stats: sourceStats,
       source_errors: sourceErrors,
     });
   } catch (err) {

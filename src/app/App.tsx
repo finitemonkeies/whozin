@@ -28,8 +28,10 @@ const TicketDetail = lazy(() =>
 const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 const AddByInvite = lazy(() => import("./pages/AddByInvite"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const EmailUnsubscribe = lazy(() => import("./pages/EmailUnsubscribe"));
 const Friends = lazy(() => import("./pages/Friends"));
 const Admin = lazy(() => import("./pages/Admin"));
+const AdminEvents = lazy(() => import("./pages/AdminEvents"));
 const AdminHealth = lazy(() => import("./pages/AdminHealth"));
 const Setup = lazy(() => import("./pages/Setup"));
 const DesktopLanding = lazy(() =>
@@ -110,6 +112,7 @@ function AppShell() {
     path === "/welcome" ||
     path === "/setup" ||
     path === "/intro" ||
+    path === "/unsubscribe" ||
     path.startsWith("/auth") ||
     path.startsWith("/add");
 
@@ -128,6 +131,7 @@ function AppShell() {
         <Route path="/signup" element={withSuspense(<SignUp />)} />
         <Route path="/login" element={withSuspense(<Login />)} />
         <Route path="/auth/callback" element={withSuspense(<AuthCallback />)} />
+        <Route path="/unsubscribe" element={withSuspense(<EmailUnsubscribe />)} />
         <Route path="/add/:handle" element={withSuspense(<AddByInvite />)} />
 
         <Route path="/setup" element={protectedRoute(<Setup />)} />
@@ -138,6 +142,7 @@ function AppShell() {
         <Route path="/open/event/:id" element={protectedRoute(<EventDetails />)} />
         <Route path="/friends" element={protectedRoute(<Friends />)} />
         <Route path="/admin" element={protectedRoute(<Admin />)} />
+        <Route path="/admin/events" element={protectedRoute(<AdminEvents />)} />
         <Route path="/admin/health" element={protectedRoute(<AdminHealth />)} />
         <Route path="/profile" element={protectedRoute(<Profile />)} />
         <Route path="/profile/edit" element={protectedRoute(<EditProfile />)} />

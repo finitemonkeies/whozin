@@ -147,6 +147,7 @@ export function Home() {
 
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [feedMode, setFeedMode] = useState<"social" | "fallback">("social");
 
   const [viewerId, setViewerId] = useState<string | null>(null);
 
@@ -188,6 +189,166 @@ export function Home() {
     setRecentCountsByEvent({});
   };
 
+  const hydrateFeedState = ({
+    events: nextEvents,
+    attendees,
+    viewerId: uid,
+    friendIds: fset,
+    nowTs,
+  }: {
+    events: EventRow[];
+    attendees: AttendeeRow[];
+    viewerId: string;
+    friendIds: Set<string>;
+    nowTs: number;
+  }) => {
+    setEvents(nextEvents);
+
+    const visibleEventIds = new Set(nextEvents.map((row) => row.id));
+    const filteredAttendees = attendees.filter((row) => visibleEventIds.has(row.event_id));
+
+    const mySet = new Set<string>();
+    for (const attendee of filteredAttendees) {
+      if (attendee.user_id === uid) mySet.add(attendee.event_id);
+    }
+    setMyGoing(mySet);
+
+    const friendCountsMap: Record<string, number> = {};
+    const friendAvatarsMap: Record<string, string[]> = {};
+    const friendNamesMap: Record<string, string[]> = {};
+    const recentFriendMap: Record<string, string> = {};
+    const othersCountsMap: Record<string, number> = {};
+    const othersAvatarsMap: Record<string, string[]> = {};
+    const othersPoolMap: Record<string, string[]> = {};
+    const viewerAvatarMap: Record<string, string> = {};
+    const recentCountsMap: Record<string, number> = {};
+
+    const friendTmp: Record<string, string[]> = {};
+    const friendNameTmp: Record<string, string[]> = {};
+    const friendRecentTmp: Record<string, { name: string; createdAt: string }[]> = {};
+    const othersTmp: Record<string, string[]> = {};
+
+    for (const attendee of filteredAttendees) {
+      const eventId = attendee.event_id;
+      if (!eventId) continue;
+
+      const isViewer = attendee.user_id === uid;
+      const isFriend = fset.has(attendee.user_id);
+      const avatar = attendee.profiles?.avatar_url ?? "";
+      const name = displayName(attendee.profiles);
+
+      if (isFriend) {
+        friendCountsMap[eventId] = (friendCountsMap[eventId] ?? 0) + 1;
+        if (avatar) (friendTmp[eventId] ||= []).push(avatar);
+        (friendNameTmp[eventId] ||= []).push(name);
+        if (attendee.created_at) {
+          (friendRecentTmp[eventId] ||= []).push({ name, createdAt: attendee.created_at });
+        }
+        continue;
+      }
+
+      if (!isViewer) {
+        othersCountsMap[eventId] = (othersCountsMap[eventId] ?? 0) + 1;
+        if (avatar) (othersTmp[eventId] ||= []).push(avatar);
+      } else if (avatar) {
+        viewerAvatarMap[eventId] = avatar;
+      }
+
+      if (attendee.created_at) {
+        const createdAt = new Date(attendee.created_at).getTime();
+        if (!Number.isNaN(createdAt) && nowTs - createdAt <= 6 * 60 * 60 * 1000) {
+          recentCountsMap[eventId] = (recentCountsMap[eventId] ?? 0) + 1;
+        }
+      }
+    }
+
+    for (const eventId of Object.keys(friendCountsMap)) {
+      friendAvatarsMap[eventId] = uniqKeepOrder(friendTmp[eventId] ?? []).slice(0, 5);
+      friendNamesMap[eventId] = uniqKeepOrder(friendNameTmp[eventId] ?? []).slice(0, 8);
+      const recent = (friendRecentTmp[eventId] ?? [])
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (recent) {
+        const rel = relativeRsvp(recent.createdAt);
+        if (rel) recentFriendMap[eventId] = `${recent.name} ${rel}`;
+      }
+    }
+
+    for (const eventId of Object.keys(othersCountsMap)) {
+      const pool = uniqKeepOrder(othersTmp[eventId] ?? []);
+      othersPoolMap[eventId] = pool;
+      if (mySet.has(eventId)) othersAvatarsMap[eventId] = pool.slice(0, 5);
+    }
+
+    setFriendCounts(friendCountsMap);
+    setFriendAvatarsByEvent(friendAvatarsMap);
+    setFriendNamesByEvent(friendNamesMap);
+    setRecentFriendCueByEvent(recentFriendMap);
+    setOthersCounts(othersCountsMap);
+    setViewerAvatarByEvent(viewerAvatarMap);
+    setOthersAvatarPoolByEvent(othersPoolMap);
+    setOthersAvatarsByEvent(othersAvatarsMap);
+    setRecentCountsByEvent(recentCountsMap);
+  };
+
+  const loadFallbackFeed = async (uid: string, fset: Set<string>, nowTs: number) => {
+    const { data: fallbackEvents, error: eventErr } = await supabase
+      .from("events")
+      .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+      .order("event_date", { ascending: true })
+      .limit(24);
+
+    if (eventErr) {
+      console.error(eventErr);
+      toast.error("Failed to load fallback events");
+      setEvents([]);
+      resetSocialState();
+      setFriendIds(fset);
+      setFeedMode("fallback");
+      setLoading(false);
+      return;
+    }
+
+    const rows = ((fallbackEvents ?? []) as EventRow[]).filter(
+      (event) => isEventVisible(event) && isEventUpcomingOrOngoing(event, nowTs)
+    );
+
+    if (rows.length === 0) {
+      setEvents([]);
+      resetSocialState();
+      setFriendIds(fset);
+      setFeedMode("fallback");
+      setLoading(false);
+      return;
+    }
+
+    const eventIds = rows.map((event) => event.id);
+    const { data: fallbackAttendees, error: attendeeErr } = await supabase
+      .from("attendees")
+      .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
+      .in("event_id", eventIds);
+
+    if (attendeeErr) {
+      console.error(attendeeErr);
+      toast.error("Failed to load fallback crowd");
+      setEvents(rows);
+      resetSocialState();
+      setFriendIds(fset);
+      setFeedMode("fallback");
+      setLoading(false);
+      return;
+    }
+
+    hydrateFeedState({
+      events: rows,
+      attendees: (fallbackAttendees ?? []) as AttendeeRow[],
+      viewerId: uid,
+      friendIds: fset,
+      nowTs,
+    });
+    setFeedMode("fallback");
+    setLoading(false);
+  };
+
   const load = async () => {
     setLoading(true);
     const uid = user?.id ?? null;
@@ -196,6 +357,7 @@ export function Home() {
     if (!uid) {
       setEvents([]);
       resetSocialState();
+      setFeedMode("social");
       setLoading(false);
       return;
     }
@@ -217,6 +379,7 @@ export function Home() {
         console.error(error);
         setEvents([]);
         resetSocialState();
+        setFeedMode("social");
         setLoading(false);
         return;
       }
@@ -227,10 +390,7 @@ export function Home() {
       );
 
       if (socialEventIds.length === 0) {
-        setEvents([]);
-        resetSocialState();
-        setFriendIds(fset);
-        setLoading(false);
+        await loadFallbackFeed(uid, fset, nowTs);
         return;
       }
 
@@ -252,6 +412,7 @@ export function Home() {
         toast.error("Failed to load events");
         setEvents([]);
         resetSocialState();
+        setFeedMode("social");
         setLoading(false);
         return;
       }
@@ -260,6 +421,7 @@ export function Home() {
         console.error(eventAttErr);
         setEvents([]);
         resetSocialState();
+        setFeedMode("social");
         setLoading(false);
         return;
       }
@@ -267,102 +429,18 @@ export function Home() {
       const rows = ((eventData ?? []) as EventRow[]).filter(
         (e) => isEventVisible(e) && isEventUpcomingOrOngoing(e, nowTs)
       );
-      const visibleEventIds = new Set(rows.map((row) => row.id));
-      setEvents(rows);
-
-      const attendees = ((eventAttData ?? []) as AttendeeRow[]).filter((row) =>
-        visibleEventIds.has(row.event_id)
-      );
-
-      const mySet = new Set<string>();
-      for (const a of attendees) {
-        if (a.user_id === uid) mySet.add(a.event_id);
-      }
-      setMyGoing(mySet);
-
-      const friendCountsMap: Record<string, number> = {};
-      const friendAvatarsMap: Record<string, string[]> = {};
-      const friendNamesMap: Record<string, string[]> = {};
-      const recentFriendMap: Record<string, string> = {};
-      const othersCountsMap: Record<string, number> = {};
-      const othersAvatarsMap: Record<string, string[]> = {};
-      const othersPoolMap: Record<string, string[]> = {};
-      const viewerAvatarMap: Record<string, string> = {};
-      const recentCountsMap: Record<string, number> = {};
-
-      const friendTmp: Record<string, string[]> = {};
-      const friendNameTmp: Record<string, string[]> = {};
-      const friendRecentTmp: Record<string, { name: string; createdAt: string }[]> = {};
-      const othersTmp: Record<string, string[]> = {};
-
-      for (const a of attendees) {
-        const eid = a.event_id;
-        if (!eid) continue;
-
-        const isViewer = a.user_id === uid;
-        const isFriend = fset.has(a.user_id);
-        const av = a.profiles?.avatar_url ?? "";
-        const name = displayName(a.profiles);
-
-        if (isFriend) {
-          friendCountsMap[eid] = (friendCountsMap[eid] ?? 0) + 1;
-          if (av) (friendTmp[eid] ||= []).push(av);
-          (friendNameTmp[eid] ||= []).push(name);
-          if (a.created_at) {
-            (friendRecentTmp[eid] ||= []).push({ name, createdAt: a.created_at });
-          }
-          continue;
-        }
-
-        if (!isViewer) {
-          othersCountsMap[eid] = (othersCountsMap[eid] ?? 0) + 1;
-          if (av) (othersTmp[eid] ||= []).push(av);
-        } else if (av) {
-          viewerAvatarMap[eid] = av;
-        }
-
-        if (a.created_at) {
-          const createdAt = new Date(a.created_at).getTime();
-          if (!Number.isNaN(createdAt) && nowTs - createdAt <= 6 * 60 * 60 * 1000) {
-            recentCountsMap[eid] = (recentCountsMap[eid] ?? 0) + 1;
-          }
-        }
-      }
-
-      for (const eid of Object.keys(friendCountsMap)) {
-        friendAvatarsMap[eid] = uniqKeepOrder(friendTmp[eid] ?? []).slice(0, 5);
-        friendNamesMap[eid] = uniqKeepOrder(friendNameTmp[eid] ?? []).slice(0, 8);
-        const recent = (friendRecentTmp[eid] ?? [])
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-        if (recent) {
-          const rel = relativeRsvp(recent.createdAt);
-          if (rel) recentFriendMap[eid] = `${recent.name} ${rel}`;
-        }
-      }
-
-      for (const eid of Object.keys(othersCountsMap)) {
-        const pool = uniqKeepOrder(othersTmp[eid] ?? []);
-        othersPoolMap[eid] = pool;
-        if (mySet.has(eid)) othersAvatarsMap[eid] = pool.slice(0, 5);
-      }
-
-      setFriendCounts(friendCountsMap);
-      setFriendAvatarsByEvent(friendAvatarsMap);
-      setFriendNamesByEvent(friendNamesMap);
-      setRecentFriendCueByEvent(recentFriendMap);
-      setOthersCounts(othersCountsMap);
-      setViewerAvatarByEvent(viewerAvatarMap);
-      setOthersAvatarPoolByEvent(othersPoolMap);
-      setOthersAvatarsByEvent(othersAvatarsMap);
-      setRecentCountsByEvent(recentCountsMap);
-
+      hydrateFeedState({
+        events: rows,
+        attendees: (eventAttData ?? []) as AttendeeRow[],
+        viewerId: uid,
+        friendIds: fset,
+        nowTs,
+      });
+      setFeedMode("social");
       setLoading(false);
       return;
     }
-    setEvents([]);
-    resetSocialState();
-    setFriendIds(fset);
-    setLoading(false);
+    await loadFallbackFeed(uid, fset, nowTs);
   };
 
   const moveRanking = useMemo(
@@ -401,6 +479,7 @@ export function Home() {
     });
   }, [events, friendCounts, moveRanking.signalsById, othersCounts]);
   const hasAtLeastOneFriend = friendIds.size > 0;
+  const hasFriendSignal = Object.values(friendCounts).some((count) => count > 0);
   const topMoveSignal = moveRanking.topSignal;
   const topMoveEvent = useMemo(
     () => (topMoveSignal ? events.find((event) => event.id === topMoveSignal.eventId) ?? null : null),
@@ -533,7 +612,9 @@ export function Home() {
             <div className="max-w-[18rem] sm:max-w-none">
               <h1 className="text-[2rem] font-bold tracking-tight sm:text-3xl">Tonight</h1>
               <p className="mt-1 text-sm text-zinc-400 sm:text-base">
-                See where your people are leaning before the night gets crowded.
+                {feedMode === "social"
+                  ? "See where your people are leaning before the night gets crowded."
+                  : "Start with the strongest rooms in the Bay while your circle is still forming."}
               </p>
             </div>
           </div>
@@ -547,7 +628,7 @@ export function Home() {
           <TheMoveHero
             eventId={topMoveEvent.id}
             title={topMoveEvent.title}
-            context="Your circle tonight"
+            context={feedMode === "social" ? "Your circle tonight" : "Best place to start tonight"}
             meta={topMoveEvent.location ?? "Location TBD"}
             signal={topMoveSignal}
             source="home"
@@ -576,6 +657,31 @@ export function Home() {
             </Link>
           </div>
         )}
+
+        {feedMode === "fallback" ? (
+          <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
+            <div className="text-sm font-semibold text-white">
+              {hasFriendSignal ? "Your circle is still thin, so we widened the lens." : "No friend signal yet, so Home is starting Bay-wide."}
+            </div>
+            <div className="mt-1 text-xs text-zinc-300">
+              We are showing the strongest nearby events with real momentum so your first RSVP still feels useful.
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                to="/friends"
+                className="inline-flex items-center rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/15"
+              >
+                Add a friend
+              </Link>
+              <Link
+                to="/explore"
+                className="inline-flex items-center rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+              >
+                See more in Explore
+              </Link>
+            </div>
+          </div>
+        ) : null}
 
         {feedEvents.map((event) => {
           const hasImage = !!event.image_url && event.image_url.trim().length > 0;
@@ -714,9 +820,19 @@ export function Home() {
                     ) : null}
                     {socialLabel ? (
                       <p className="mt-2 text-sm font-medium text-zinc-200">{socialLabel}</p>
+                    ) : feedMode === "fallback" && totalGoing > 0 ? (
+                      <p className="mt-2 text-sm font-medium text-zinc-200">
+                        {totalGoing === 1 ? "Someone is already in" : `${totalGoing} people are already in`}
+                      </p>
                     ) : null}
                     {friendCue ? (
                       <div className="mt-2 text-xs text-zinc-400">{friendCue}</div>
+                    ) : feedMode === "fallback" && (recentCountsByEvent[event.id] ?? 0) > 0 ? (
+                      <div className="mt-2 text-xs text-zinc-400">
+                        {(recentCountsByEvent[event.id] ?? 0) === 1
+                          ? "Momentum just started building here"
+                          : `${recentCountsByEvent[event.id]} recent RSVPs are building momentum`}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -736,7 +852,13 @@ export function Home() {
 
                 <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-1">
                   <div className="text-xs text-zinc-500">
-                    {totalGoing > 0 ? (!going ? "RSVP to join your circle" : "You're in") : "Quiet for now"}
+                    {totalGoing > 0
+                      ? !going
+                        ? feedMode === "social"
+                          ? "RSVP to join your circle"
+                          : "RSVP to join the room early"
+                        : "You're in"
+                      : "Quiet for now"}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -764,9 +886,11 @@ export function Home() {
 
         {feedEvents.length === 0 ? (
           <div className="text-center text-zinc-500 mt-12">
-            <div>Your night is still quiet.</div>
+            <div>{feedMode === "social" ? "Your night is still quiet." : "We could not find a strong starting room yet."}</div>
             <div className="mt-1 text-sm text-zinc-600">
-              Add one friend or lock one plan and this starts feeling alive fast.
+              {feedMode === "social"
+                ? "Add one friend or lock one plan and this starts feeling alive fast."
+                : "Check Explore for the broader Bay stack, or add one friend to personalize Home."}
             </div>
             <Link
               to="/explore"

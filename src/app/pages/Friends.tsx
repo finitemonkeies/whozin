@@ -6,6 +6,7 @@ import { track } from "@/lib/analytics";
 import AddFriend from "../components/AddFriend";
 import { featureFlags } from "@/lib/featureFlags";
 import { shareInviteLink } from "@/lib/inviteSharing";
+import { blockUser, getBlockedUserIds, reportUser } from "@/lib/privacySafety";
 import { Share2 } from "lucide-react";
 import { useAuth } from "@/app/providers/AuthProvider";
 
@@ -86,6 +87,7 @@ export default function Friends() {
   );
   const [friendUnlockMessage, setFriendUnlockMessage] = useState<string | null>(null);
   const [sharingInvite, setSharingInvite] = useState(false);
+  const [safetyWorkingId, setSafetyWorkingId] = useState<string | null>(null);
 
   const loadFriends = async (): Promise<{
     acceptedIds: Set<string>;
@@ -104,6 +106,11 @@ export default function Friends() {
 
     setViewerId(user.id);
 
+    const blockedIds = await getBlockedUserIds().catch((error) => {
+      console.error("Failed to load blocked users:", error);
+      return new Set<string>();
+    });
+
     const { data, error } = await supabase
       .from("friendships")
       .select(
@@ -120,7 +127,7 @@ export default function Friends() {
       return null;
     }
 
-    const allRows = (data ?? []) as FriendRow[];
+    const allRows = ((data ?? []) as FriendRow[]).filter((row) => !blockedIds.has(row.friend_id));
     const accepted = allRows.filter((r) => r.status === "accepted");
     const pendingRows = allRows.filter((r) => r.status !== "accepted");
     setFriends(accepted);
@@ -163,7 +170,8 @@ export default function Friends() {
             if (
               !candidateId ||
               candidateId === user.id ||
-              connectedIds.has(candidateId)
+              connectedIds.has(candidateId) ||
+              blockedIds.has(candidateId)
             ) {
               continue;
             }
@@ -243,7 +251,8 @@ export default function Friends() {
                 if (
                   !candidateId ||
                   candidateId === user.id ||
-                  connectedIds.has(candidateId)
+                  connectedIds.has(candidateId) ||
+                  blockedIds.has(candidateId)
                 ) {
                   continue;
                 }
@@ -310,7 +319,7 @@ export default function Friends() {
           setSuggested([]);
         } else {
           const prioritized = profiles
-          .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id))
+          .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id) && !blockedIds.has(r.id))
           .filter(
             (profile, index, arr) => arr.findIndex((candidate) => candidate.id === profile.id) === index
           )
@@ -449,6 +458,44 @@ export default function Friends() {
     }
   };
 
+  const handleBlockUser = async (userId: string, label: string) => {
+    const ok = window.confirm(`Block ${label}? They will leave your circle and no longer see your attendance.`);
+    if (!ok) return;
+
+    setSafetyWorkingId(userId);
+    try {
+      await blockUser(userId);
+      toast.success(`${label} blocked`);
+      await loadFriends();
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not block user");
+    } finally {
+      setSafetyWorkingId(null);
+    }
+  };
+
+  const handleReportUser = async (userId: string, label: string) => {
+    const confirmed = window.confirm(`Report ${label}? This sends the profile to admin review.`);
+    if (!confirmed) return;
+
+    const details = window.prompt(`What should we know about ${label}?`, "Spam, harassment, fake profile, or something else");
+    if (details === null) return;
+
+    setSafetyWorkingId(userId);
+    try {
+      await reportUser({
+        targetUserId: userId,
+        reason: "user_report",
+        details,
+      });
+      toast.success("Report submitted");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not submit report");
+    } finally {
+      setSafetyWorkingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white px-5 py-8 pb-[calc(13rem+env(safe-area-inset-bottom))] sm:px-6">
       <h1 className="text-3xl font-bold mb-6">Your People</h1>
@@ -501,8 +548,29 @@ export default function Friends() {
               Looking for the strongest people to pull in...
             </div>
           ) : suggested.length === 0 ? (
-            <div className="text-zinc-500">
-              No more suggestions right now. Add one manually and keep it moving.
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+              <div className="text-sm font-semibold text-white">No more strong suggestions right now</div>
+              <div className="mt-1 text-sm text-zinc-400">
+                That is okay. The fastest next move is either to share your invite or add one person you actually go out with.
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleShareInvite("friends_intro")}
+                  disabled={sharingInvite}
+                  className="inline-flex items-center gap-2 rounded-xl border border-pink-400/30 bg-pink-500/15 px-4 py-2 text-sm font-semibold text-pink-50 hover:bg-pink-500/20 disabled:opacity-60"
+                >
+                  <Share2 className="h-4 w-4" />
+                  {sharingInvite ? "Sharing..." : "Share invite"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/explore")}
+                  className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/15"
+                >
+                  Find a night first
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -536,13 +604,31 @@ export default function Friends() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => addSuggestedFriend(p)}
-                      disabled={adding || added || !viewerId || featureFlags.killSwitchFriendAdds}
-                      className="px-4 py-2 rounded-xl text-sm font-semibold bg-pink-600 disabled:opacity-50"
-                    >
-                      {adding ? "Adding..." : added ? "Added" : "Add"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleReportUser(p.id, displayName)}
+                        disabled={safetyWorkingId === p.id}
+                        className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                      >
+                        Report
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBlockUser(p.id, displayName)}
+                        disabled={safetyWorkingId === p.id}
+                        className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                      >
+                        Block
+                      </button>
+                      <button
+                        onClick={() => addSuggestedFriend(p)}
+                        disabled={adding || added || !viewerId || featureFlags.killSwitchFriendAdds}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-pink-600 disabled:opacity-50"
+                      >
+                        {adding ? "Adding..." : added ? "Added" : "Add"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -603,6 +689,24 @@ export default function Friends() {
                     {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
                     <div className="text-xs text-zinc-500">Request sent</div>
                   </div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleReportUser(f.friend_id, displayName)}
+                      disabled={safetyWorkingId === f.friend_id}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Report
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleBlockUser(f.friend_id, displayName)}
+                      disabled={safetyWorkingId === f.friend_id}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Block
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -643,6 +747,24 @@ export default function Friends() {
                   <div className="font-semibold truncate">{displayName}</div>
                   {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
                   <div className="text-xs text-zinc-500">In your circle</div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleReportUser(f.friend_id, displayName)}
+                    disabled={safetyWorkingId === f.friend_id}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                  >
+                    Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleBlockUser(f.friend_id, displayName)}
+                    disabled={safetyWorkingId === f.friend_id}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                  >
+                    Block
+                  </button>
                 </div>
               </div>
             );

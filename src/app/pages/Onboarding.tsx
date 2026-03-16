@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Ticket, Users, ShieldCheck } from "lucide-react";
+import { Share2, Ticket, Users } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { track } from "@/lib/analytics";
@@ -77,7 +77,10 @@ export function Onboarding() {
 
   const handleContinue = () => {
     const next = encodeURIComponent(redirect);
-    track("intro_continue_clicked", { redirect });
+    track("intro_continue_clicked", {
+      redirect,
+      first_session_path: "friend_then_rsvp_then_invite",
+    });
     // Always route through login from intro so first-time users
     // explicitly enter auth before any setup/profile screen.
     navigate(`/login?redirect=${next}`);
@@ -92,10 +95,10 @@ export function Onboarding() {
       </div>
 
       <div className="relative max-w-md mx-auto w-full text-center">
-        <h1 className="text-3xl font-bold tracking-tight mb-4">See The Move Earlier</h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-4">Start With Your Crew</h1>
 
         <p className="text-zinc-400 text-base leading-relaxed mb-10">
-          See where your people are heading before the group chat wakes up.
+          Add one real friend, lock one night, and Whozin starts feeling useful fast.
         </p>
 
         <div className="absolute inset-0 flex justify-center pointer-events-none">
@@ -103,9 +106,9 @@ export function Onboarding() {
         </div>
 
         <div className="grid grid-cols-3 gap-3 relative">
-          <MiniStep icon={<Ticket className="w-4 h-4 text-pink-200" />} title="Lock in" subtitle="1 tap" />
-          <MiniStep icon={<Users className="w-4 h-4 text-purple-200" />} title="See your people" subtitle="friends + FOAF" />
-          <MiniStep icon={<ShieldCheck className="w-4 h-4 text-emerald-200" />} title="Stay private" subtitle="you choose visibility" />
+          <MiniStep icon={<Users className="w-4 h-4 text-pink-200" />} title="Add a friend" subtitle="start with your people" />
+          <MiniStep icon={<Ticket className="w-4 h-4 text-purple-200" />} title="Pick a night" subtitle="lock one plan" />
+          <MiniStep icon={<Share2 className="w-4 h-4 text-emerald-200" />} title="Send it once" subtitle="make it click" />
         </div>
 
         <button
@@ -113,11 +116,11 @@ export function Onboarding() {
           disabled={checking}
           className="mt-10 w-full py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-pink-600 to-purple-600 hover:brightness-110 transition active:scale-[0.98] disabled:opacity-60"
         >
-          {checking ? "Loading..." : "Get in"}
+          {checking ? "Loading..." : "Start the loop"}
         </button>
 
-        <div className="mt-3 text-xs text-white/50">Private by default. No open profile.</div>
-        <div className="mt-1 text-xs text-white/35">Step 1 of 2</div>
+        <div className="mt-3 text-xs text-white/50">Private by default. Made for real plans, not public clout.</div>
+        <div className="mt-1 text-xs text-white/35">Friend -&gt; RSVP -&gt; invite</div>
       </div>
     </div>
   );

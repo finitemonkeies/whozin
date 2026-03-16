@@ -363,6 +363,11 @@ export function Explore() {
       .slice(0, 3);
   }, [feedMode, friendCountByEventId, friendEvents, tagFilter]);
 
+  const hasFriendSignal = useMemo(
+    () => Object.values(friendCountByEventId).some((count) => count > 0),
+    [friendCountByEventId]
+  );
+
   const moveRanking = useMemo(() => {
     return rankMoveCandidates(
       filteredFeedEvents.map((event) => ({
@@ -442,6 +447,13 @@ export function Explore() {
         ? "Friends, attendance, and momentum are quietly shaping this ranking."
         : "Signal is still soft, so this is the best stack of options right now."
       : "Future events start tomorrow and stay ranked Bay-wide, with internal events first.";
+
+  const lowDensityGuideEvent = useMemo(() => {
+    if (heroEvent) return heroEvent;
+    if (friendSpotlightEvents.length > 0) return friendSpotlightEvents[0];
+    if (rankedFeedEvents.length > 0) return rankedFeedEvents[0];
+    return null;
+  }, [friendSpotlightEvents, heroEvent, rankedFeedEvents]);
 
   const handleQuickRsvp = async (event: Event) => {
     if (featureFlags.killSwitchRsvpWrites) {
@@ -601,6 +613,46 @@ export function Explore() {
             Bay Area only for now. Internal events rank first, and friend activity carries the most weight.
           </div>
         </div>
+
+        {!hasFriendSignal && lowDensityGuideEvent ? (
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+            <div className="text-sm font-semibold text-white">Best next move if your graph is still thin</div>
+            <div className="mt-1 text-xs text-zinc-300">
+              Start with one strong room, then send it to one friend. That is the fastest way to make Explore feel alive.
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-emerald-200">Start here</div>
+              <div className="mt-2 text-lg font-semibold text-white">{lowDensityGuideEvent.title}</div>
+              <div className="mt-1 text-sm text-zinc-400">
+                {lowDensityGuideEvent.location || "Bay Area"} · {lowDensityGuideEvent.date}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/event/${lowDensityGuideEvent.id}?src=explore`)}
+                  className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-200"
+                >
+                  Open event
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleQuickRsvp(lowDensityGuideEvent)}
+                  disabled={!isUuid(lowDensityGuideEvent.id) || !!rsvpByEventId[lowDensityGuideEvent.id]?.working}
+                  className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/15 disabled:opacity-60"
+                >
+                  {rsvpByEventId[lowDensityGuideEvent.id]?.going ? "You're in" : "RSVP now"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/friends")}
+                  className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/10"
+                >
+                  Add a friend
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {heroSignal && heroEvent ? (
           <div className="space-y-3">

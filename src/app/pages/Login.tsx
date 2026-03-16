@@ -5,6 +5,12 @@ import { sanitizeRedirectTarget } from "@/lib/redirect";
 import { buildSiteUrl } from "@/lib/site";
 import { track, trackError } from "@/lib/analytics";
 import { toast } from "sonner";
+import {
+  getPendingMarketingEmailOptIn,
+  MARKETING_EMAIL_OPT_IN_LABEL,
+  setPendingMarketingEmailOptIn,
+  syncPendingMarketingEmailPreference,
+} from "@/lib/emailPreferences";
 
 function useQuery() {
   const { search } = useLocation();
@@ -23,6 +29,7 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [phoneCode, setPhoneCode] = useState("");
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(() => getPendingMarketingEmailOptIn(false));
 
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const cooldownTimerRef = useRef<number | null>(null);
@@ -222,6 +229,17 @@ export default function Login() {
         return;
       }
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await syncPendingMarketingEmailPreference({
+          userId: user.id,
+          email: user.email ?? null,
+          source: "login_phone",
+        });
+      }
+
       track("phone_login_success", { redirect });
       toast.success("You're in.");
       navigate(redirect, { replace: true });
@@ -247,6 +265,25 @@ export default function Login() {
         </div>
 
         <div className="space-y-3">
+          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-zinc-950/80 px-4 py-4 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={marketingOptIn}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setMarketingOptIn(checked);
+                setPendingMarketingEmailOptIn(checked);
+              }}
+              className="mt-1 h-4 w-4 rounded border-white/20 bg-zinc-900 text-pink-500 focus:ring-pink-500"
+            />
+            <span>
+              {MARKETING_EMAIL_OPT_IN_LABEL}
+              <span className="mt-1 block text-xs text-zinc-500">
+                Account, security, and service emails can still go out when needed.
+              </span>
+            </span>
+          </label>
+
           <button
             onClick={() => startOAuth("google")}
             disabled={!!loading}

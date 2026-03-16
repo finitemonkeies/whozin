@@ -20,6 +20,7 @@ import { featureFlags } from "@/lib/featureFlags";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
 import { isEventVisible, sourceLabel } from "@/lib/eventVisibility";
+import { reportEvent } from "@/lib/privacySafety";
 
 type EventRow = {
   id: string;
@@ -218,6 +219,7 @@ export function EventDetails() {
   const [inviteLink, setInviteLink] = useState("");
   const [creatingInviteLink, setCreatingInviteLink] = useState(false);
   const [downloadingShareCard, setDownloadingShareCard] = useState(false);
+  const [reportingEvent, setReportingEvent] = useState(false);
   const [heroImageOk, setHeroImageOk] = useState(true);
   const [heroImageLoaded, setHeroImageLoaded] = useState(false);
   const lastTrackedViewKeyRef = useRef<string>("");
@@ -356,28 +358,21 @@ export function EventDetails() {
     });
   }, [id, moveSignal, rsvpSource]);
 
-  const loadFriendMap = async (userId: string, attendeeUserIds: string[]) => {
+  const loadFriendMap = async () => {
     setLoadingFriendMap(true);
 
-    const map = new Set<string>();
-
-    for (const otherId of attendeeUserIds) {
-      if (otherId === userId) continue;
-
-      const { data, error } = await supabase.rpc("are_friends", {
-        p_user_id: userId,
-        p_other_id: otherId,
-      });
-
-      if (error) {
-        console.error("are_friends rpc error:", error);
-        continue;
-      }
-
-      if (data === true) map.add(otherId);
+    const { data, error } = await supabase.rpc("get_friend_ids");
+    if (error) {
+      console.error("get_friend_ids rpc error:", error);
+      setFriendIds(new Set());
+      setLoadingFriendMap(false);
+      return;
     }
 
-    setFriendIds(map);
+    const ids = Array.isArray(data)
+      ? data.map((value) => String(value)).filter(Boolean)
+      : [];
+    setFriendIds(new Set(ids));
     setLoadingFriendMap(false);
   };
 
@@ -469,9 +464,7 @@ export function EventDetails() {
       if (uid) {
         const mine = rows.some((r) => r.user_id === uid);
         setIsGoing(mine);
-
-        const attendeeIds = rows.map((r) => r.user_id);
-        await loadFriendMap(uid, attendeeIds);
+        await loadFriendMap();
       } else {
         setIsGoing(false);
         setLoadingFriendMap(false);
@@ -741,6 +734,33 @@ export function EventDetails() {
     setShowInvitePrompt(false);
   };
 
+  const handleReportEvent = async () => {
+    if (!id || !isUuid(id) || reportingEvent) return;
+
+    const confirmed = window.confirm(`Report ${event?.title ?? "this event"}? This sends it to admin review.`);
+    if (!confirmed) return;
+
+    const details = window.prompt(
+      "What should we know about this event?",
+      "Wrong info, unsafe listing, spam, duplicate, or something else"
+    );
+    if (details === null) return;
+
+    setReportingEvent(true);
+    try {
+      await reportEvent({
+        targetEventId: id,
+        reason: "event_report",
+        details,
+      });
+      toast.success("Event report submitted");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not report event");
+    } finally {
+      setReportingEvent(false);
+    }
+  };
+
   return (
     <div className="bg-black min-h-screen pb-40 text-white">
       <div className="relative h-72">
@@ -977,6 +997,15 @@ export function EventDetails() {
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handleReportEvent()}
+                  disabled={reportingEvent}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5 disabled:opacity-60"
+                >
+                  {reportingEvent ? "Reporting..." : "Report event"}
+                  <ShieldCheck className="h-4 w-4" />
+                </button>
               </div>
             ) : null}
           </div>

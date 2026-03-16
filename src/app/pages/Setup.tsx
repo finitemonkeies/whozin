@@ -262,7 +262,8 @@ export default function Setup() {
           <div className="text-sm text-white/60">Whozin</div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Claim your profile</h1>
           <p className="mt-2 text-sm text-white/70">
-            Pick your @ and avatar. Then go find the move.
+            Pick your @, then we will send you into the fastest first-session loop:
+            add a friend, lock a night, and bring one person in.
           </p>
         </div>
 
@@ -323,7 +324,7 @@ export default function Setup() {
                 disabled={saving}
                 className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold tracking-wide disabled:opacity-60"
               >
-                {saving ? "Saving..." : "Find the move"}
+                {saving ? "Saving..." : "Claim profile and keep going"}
               </button>
             </form>
           )}

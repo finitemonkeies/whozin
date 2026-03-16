@@ -6,3 +6,12 @@ verify_jwt = false
 
 [functions.sync-bay-area-events]
 verify_jwt = false
+
+[functions.email-retention-send]
+verify_jwt = false
+
+[functions.email-webhook]
+verify_jwt = false
+
+[functions.email-unsubscribe]
+verify_jwt = false

@@ -7,6 +7,7 @@ import { featureFlags } from "@/lib/featureFlags";
 import { syncSpotifyTasteFromSession } from "@/lib/spotify";
 import { toast } from "sonner";
 import { resolveFirstSessionRoute } from "@/lib/firstSessionRoute";
+import { syncPendingMarketingEmailPreference } from "@/lib/emailPreferences";
 
 /**
  * Central OAuth landing page.
@@ -42,6 +43,12 @@ export default function AuthCallback() {
         while (Date.now() - start < timeoutMs) {
           const { data } = await supabase.auth.getSession();
           if (data.session?.user && isMounted) {
+            await syncPendingMarketingEmailPreference({
+              userId: data.session.user.id,
+              email: data.session.user.email ?? null,
+              source: "auth_callback",
+            }).catch(() => null);
+
             if (featureFlags.spotifyRecommendationsEnabled) {
               // Capture Spotify taste after OAuth callback while provider token is fresh.
               await syncSpotifyTasteFromSession().catch(() => null);

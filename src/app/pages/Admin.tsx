@@ -60,14 +60,27 @@ type DailyKpiRow = {
   metric_date: string;
   new_users: number;
   active_users: number;
+  wau_7d?: number;
   rsvps: number;
   friend_adds: number;
   events_happening: number;
   activated_new_users: number;
   activation_rate_pct: number;
+  new_users_with_friend_24h?: number;
+  friend_24h_rate_pct?: number;
+  new_users_with_rsvp_24h?: number;
+  rsvp_24h_rate_pct?: number;
+  new_users_with_invite_72h?: number;
+  invite_72h_rate_pct?: number;
   d1_retained_users: number;
   d1_eligible_users: number;
   d1_retention_pct: number;
+  d7_retained_users?: number;
+  d7_eligible_users?: number;
+  d7_retention_pct?: number;
+  d30_retained_users?: number;
+  d30_eligible_users?: number;
+  d30_retention_pct?: number;
   event_detail_views: number;
   invite_sent: number;
   invite_opened: number;
@@ -80,6 +93,46 @@ type DailyRsvpSourceRow = {
   source: string;
   rsvp_count: number;
   pct_of_day: number;
+};
+
+type EmailEventRow = {
+  id: string;
+  trigger_key: string | null;
+  status: string | null;
+  sent_at: string | null;
+  delivered_at?: string | null;
+  opened_at?: string | null;
+  clicked_at?: string | null;
+  bounced_at?: string | null;
+  complained_at?: string | null;
+};
+
+type RetentionEmailSummary = {
+  triggerKey: string;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  complained: number;
+  failed: number;
+  openRate: number;
+  clickRate: number;
+  latestSentAt: string | null;
+};
+
+type SafetyReportRow = {
+  id: number;
+  target_type: string;
+  reason: string;
+  details: string | null;
+  status: string;
+  created_at: string;
+  reporter_user_id: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  target_user_id?: string | null;
+  target_event_id?: string | null;
 };
 
 function toDatetimeLocal(value: string | null) {
@@ -115,8 +168,6 @@ export default function Admin() {
 
   const [working, setWorking] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [syncingRa, setSyncingRa] = useState(false);
-  const [raSyncSummary, setRaSyncSummary] = useState<Record<string, unknown> | null>(null);
   const [loadingGrowth, setLoadingGrowth] = useState(false);
   const [growthStats, setGrowthStats] = useState<GrowthStats | null>(null);
   const [growthBySource, setGrowthBySource] = useState<SourceStat[]>([]);
@@ -125,6 +176,14 @@ export default function Admin() {
   const [refreshingDailyKpis, setRefreshingDailyKpis] = useState(false);
   const [dailyKpis, setDailyKpis] = useState<DailyKpiRow[]>([]);
   const [latestRsvpSources, setLatestRsvpSources] = useState<DailyRsvpSourceRow[]>([]);
+  const [loadingRetentionEmails, setLoadingRetentionEmails] = useState(false);
+  const [retentionEmailSummary, setRetentionEmailSummary] = useState<RetentionEmailSummary[]>([]);
+  const [loadingSafetyReports, setLoadingSafetyReports] = useState(false);
+  const [safetyReports, setSafetyReports] = useState<SafetyReportRow[]>([]);
+  const [safetyUserNames, setSafetyUserNames] = useState<Record<string, string>>({});
+  const [safetyEventTitles, setSafetyEventTitles] = useState<Record<string, string>>({});
+  const [updatingSafetyReportId, setUpdatingSafetyReportId] = useState<number | null>(null);
+  const [safetyStatusFilter, setSafetyStatusFilter] = useState<"all" | "open" | "reviewed" | "resolved" | "dismissed">("all");
   const [showUpcomingEvents, setShowUpcomingEvents] = useState(false);
   const [showPastEvents, setShowPastEvents] = useState(false);
 
@@ -156,6 +215,53 @@ export default function Admin() {
 
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
   const latestDailyKpi = dailyKpis[0] ?? null;
+  const totalRetentionEmailSent = retentionEmailSummary.reduce((sum, row) => sum + row.sent, 0);
+  const totalRetentionEmailOpened = retentionEmailSummary.reduce((sum, row) => sum + row.opened, 0);
+  const totalRetentionEmailClicked = retentionEmailSummary.reduce((sum, row) => sum + row.clicked, 0);
+  const latestInviteOpenRate = latestDailyKpi?.invite_sent
+    ? (Number(latestDailyKpi.invite_opened ?? 0) / Number(latestDailyKpi.invite_sent ?? 0)) * 100
+    : 0;
+  const latestSignupRate = latestDailyKpi?.invite_opened
+    ? (Number(latestDailyKpi.invite_signup_completed ?? 0) / Number(latestDailyKpi.invite_opened ?? 0)) * 100
+    : 0;
+  const latestInviteRsvpRate = latestDailyKpi?.invite_signup_completed
+    ? (Number(latestDailyKpi.invite_rsvp_completed ?? 0) / Number(latestDailyKpi.invite_signup_completed ?? 0)) * 100
+    : 0;
+  const safetySummary = useMemo(() => {
+    const last7dThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const open = safetyReports.filter((row) => row.status === "open").length;
+    const reviewed = safetyReports.filter((row) => row.status === "reviewed").length;
+    const resolved = safetyReports.filter((row) => row.status === "resolved").length;
+    const dismissed = safetyReports.filter((row) => row.status === "dismissed").length;
+    const userReports = safetyReports.filter((row) => row.target_type === "user").length;
+    const eventReports = safetyReports.filter((row) => row.target_type === "event").length;
+    const last7d = safetyReports.filter((row) => new Date(row.created_at).getTime() >= last7dThreshold).length;
+    const topReasons = [...safetyReports.reduce((map, row) => {
+      const key = row.reason.trim() || "unspecified";
+      map.set(key, (map.get(key) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>()).entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    return { open, reviewed, resolved, dismissed, userReports, eventReports, last7d, topReasons };
+  }, [safetyReports]);
+  const filteredSafetyReports = useMemo(() => {
+    if (safetyStatusFilter === "all") return safetyReports;
+    return safetyReports.filter((row) => row.status === safetyStatusFilter);
+  }, [safetyReports, safetyStatusFilter]);
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "N/A";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "N/A";
+    return parsed.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
 
   const resetForm = () => {
     setForm({
@@ -341,7 +447,7 @@ export default function Admin() {
         supabase
           .from("daily_kpi_metrics")
           .select(
-            "metric_date,new_users,active_users,rsvps,friend_adds,events_happening,activated_new_users,activation_rate_pct,d1_retained_users,d1_eligible_users,d1_retention_pct,event_detail_views,invite_sent,invite_opened,invite_signup_completed,invite_rsvp_completed"
+            "metric_date,new_users,active_users,wau_7d,rsvps,friend_adds,events_happening,activated_new_users,activation_rate_pct,new_users_with_friend_24h,friend_24h_rate_pct,new_users_with_rsvp_24h,rsvp_24h_rate_pct,new_users_with_invite_72h,invite_72h_rate_pct,d1_retained_users,d1_eligible_users,d1_retention_pct,d7_retained_users,d7_eligible_users,d7_retention_pct,d30_retained_users,d30_eligible_users,d30_retention_pct,event_detail_views,invite_sent,invite_opened,invite_signup_completed,invite_rsvp_completed"
           )
           .order("metric_date", { ascending: false })
           .limit(14),
@@ -374,6 +480,173 @@ export default function Admin() {
       setLatestRsvpSources([]);
     } finally {
       setLoadingDailyKpis(false);
+    }
+  };
+
+  const loadRetentionEmailMetrics = async () => {
+    setLoadingRetentionEmails(true);
+    try {
+      const sinceIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("email_events")
+        .select("id,trigger_key,status,sent_at,delivered_at,opened_at,clicked_at,bounced_at,complained_at")
+        .in("trigger_key", ["signup_no_friend", "signup_no_rsvp", "rsvp_no_invite"])
+        .or(`sent_at.gte.${sinceIso},and(sent_at.is.null,status.eq.failed)`)
+        .limit(500);
+
+      if (error) throw error;
+
+      const rows = (data ?? []) as EmailEventRow[];
+      const triggerKeys = ["signup_no_friend", "signup_no_rsvp", "rsvp_no_invite"];
+      const summary = triggerKeys.map((triggerKey) => {
+        const matches = rows.filter((row) => row.trigger_key === triggerKey);
+        const sent = matches.filter(
+          (row) =>
+            !!row.sent_at ||
+            !!row.delivered_at ||
+            !!row.opened_at ||
+            !!row.clicked_at ||
+            !!row.bounced_at ||
+            !!row.complained_at
+        ).length;
+        const delivered = matches.filter((row) => !!row.delivered_at).length;
+        const opened = matches.filter((row) => !!row.opened_at).length;
+        const clicked = matches.filter((row) => !!row.clicked_at).length;
+        const bounced = matches.filter((row) => !!row.bounced_at).length;
+        const complained = matches.filter((row) => !!row.complained_at).length;
+        const failed = matches.filter((row) => row.status === "failed").length;
+        const latestSentAt = matches
+          .map((row) => row.sent_at)
+          .filter((value): value is string => !!value)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+
+        return {
+          triggerKey,
+          sent,
+          delivered,
+          opened,
+          clicked,
+          bounced,
+          complained,
+          failed,
+          openRate: sent > 0 ? opened / sent : 0,
+          clickRate: sent > 0 ? clicked / sent : 0,
+          latestSentAt,
+        };
+      });
+
+      setRetentionEmailSummary(summary);
+    } catch (err: any) {
+      console.error("Failed loading retention email metrics:", err);
+      toast.error(err?.message ?? "Failed to load retention email metrics");
+      setRetentionEmailSummary([]);
+    } finally {
+      setLoadingRetentionEmails(false);
+    }
+  };
+
+  const loadSafetyReports = async () => {
+    setLoadingSafetyReports(true);
+    try {
+      const { data, error } = await supabase
+        .from("safety_reports")
+        .select("id,target_type,reason,details,status,created_at,reporter_user_id,reviewed_at,reviewed_by,target_user_id,target_event_id")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      const rows = (data ?? []) as SafetyReportRow[];
+      setSafetyReports(rows);
+
+      const userIds = [...new Set(
+        rows
+          .flatMap((row) => [row.reporter_user_id, row.reviewed_by ?? null, row.target_user_id ?? null])
+          .filter((value): value is string => !!value)
+      )];
+      const eventIds = [...new Set(rows.map((row) => row.target_event_id).filter((value): value is string => !!value))];
+
+      if (userIds.length > 0) {
+        const { data: userRows, error: userError } = await supabase
+          .from("profiles")
+          .select("id,username,display_name")
+          .in("id", userIds);
+        if (userError) throw userError;
+
+        const nextUserNames: Record<string, string> = {};
+        for (const row of (userRows ?? []) as Array<{ id: string; username: string | null; display_name: string | null }>) {
+          nextUserNames[row.id] = row.username?.trim() || row.display_name?.trim() || row.id.slice(0, 8);
+        }
+        setSafetyUserNames(nextUserNames);
+      } else {
+        setSafetyUserNames({});
+      }
+
+      if (eventIds.length > 0) {
+        const { data: eventRows, error: eventError } = await supabase
+          .from("events")
+          .select("id,title")
+          .in("id", eventIds);
+        if (eventError) throw eventError;
+
+        const nextEventTitles: Record<string, string> = {};
+        for (const row of (eventRows ?? []) as Array<{ id: string; title: string | null }>) {
+          nextEventTitles[row.id] = row.title?.trim() || row.id.slice(0, 8);
+        }
+        setSafetyEventTitles(nextEventTitles);
+      } else {
+        setSafetyEventTitles({});
+      }
+    } catch (err: any) {
+      console.error("Failed loading safety reports:", err);
+      toast.error(err?.message ?? "Failed to load safety reports");
+      setSafetyReports([]);
+      setSafetyUserNames({});
+      setSafetyEventTitles({});
+    } finally {
+      setLoadingSafetyReports(false);
+    }
+  };
+
+  const updateSafetyReportStatus = async (
+    reportId: number,
+    nextStatus: "reviewed" | "resolved" | "dismissed" | "open"
+  ) => {
+    setUpdatingSafetyReportId(reportId);
+    try {
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+      if (userErr || !user?.id) {
+        throw new Error(userErr?.message ?? "Please sign in again.");
+      }
+
+      const patch =
+        nextStatus === "open"
+          ? { status: nextStatus, reviewed_at: null, reviewed_by: null }
+          : { status: nextStatus, reviewed_at: new Date().toISOString(), reviewed_by: user.id };
+
+      const { error } = await supabase.from("safety_reports").update(patch).eq("id", reportId);
+      if (error) throw error;
+
+      setSafetyReports((prev) =>
+        prev.map((row) =>
+          row.id === reportId
+            ? {
+                ...row,
+                status: nextStatus,
+                reviewed_at: nextStatus === "open" ? null : patch.reviewed_at,
+                reviewed_by: nextStatus === "open" ? null : user.id,
+              }
+            : row
+        )
+      );
+      toast.success(`Safety report marked ${nextStatus}`);
+    } catch (err: any) {
+      console.error("Failed updating safety report status:", err);
+      toast.error(err?.message ?? "Failed to update safety report");
+    } finally {
+      setUpdatingSafetyReportId(null);
     }
   };
 
@@ -461,7 +734,13 @@ export default function Admin() {
       setLoading(false);
 
       if (ok) {
-        await Promise.all([loadEvents(), loadGrowthMetrics(), loadDailyKpis()]);
+        await Promise.all([
+          loadEvents(),
+          loadGrowthMetrics(),
+          loadDailyKpis(),
+          loadRetentionEmailMetrics(),
+          loadSafetyReports(),
+        ]);
       }
     };
 
@@ -612,66 +891,6 @@ export default function Admin() {
     }
   };
 
-  const syncRaSf = async () => {
-    if (!isAllowed || syncingRa) return;
-    setSyncingRa(true);
-    setRaSyncSummary(null);
-    try {
-      const { data: refreshedSessionData } = await supabase.auth.refreshSession();
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      const accessToken = refreshedSessionData?.session?.access_token ?? session?.access_token;
-      if (!accessToken) {
-        throw new Error("Missing auth session. Please sign in again.");
-      }
-
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-ra-sf`;
-      const res = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
-
-      const rawText = await res.text();
-      let payload: Record<string, unknown> = {};
-      if (rawText) {
-        try {
-          payload = JSON.parse(rawText) as Record<string, unknown>;
-        } catch {
-          payload = {};
-        }
-      }
-      if (!res.ok) {
-        throw new Error(
-          [
-            `RA sync failed (HTTP ${res.status})`,
-            typeof payload?.error === "string" ? payload.error : null,
-            rawText && !payload?.error ? rawText.slice(0, 400) : null,
-          ]
-            .filter(Boolean)
-            .join(" - ")
-        );
-      }
-
-      setRaSyncSummary(payload);
-      toast.success("RA sync completed");
-      await loadEvents();
-    } catch (err: any) {
-      console.error("RA sync failed:", err);
-      const message = err?.message ?? "RA sync failed";
-      setRaSyncSummary({ error: message });
-      toast.error(message);
-    } finally {
-      setSyncingRa(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white px-6 py-8">
@@ -694,22 +913,21 @@ export default function Admin() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Admin</h1>
-          <p className="text-zinc-400">Create, edit, and seed events.</p>
+          <p className="text-zinc-400">Growth, ops, and retention tools for the current market.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            to="/admin/events"
+            className="px-4 py-2 rounded-xl bg-pink-500/15 border border-pink-400/30 text-pink-100 hover:bg-pink-500/20"
+          >
+            Manage Events
+          </Link>
           <Link
             to="/admin/health"
             className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
           >
             Health
           </Link>
-          <button
-            onClick={syncRaSf}
-            disabled={syncingRa}
-            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
-          >
-            {syncingRa ? "Syncing RA..." : "Sync RA (SF/Oakland)"}
-          </button>
           <button
             onClick={() => void loadGrowthMetrics()}
             disabled={loadingGrowth}
@@ -724,23 +942,30 @@ export default function Admin() {
           >
             {refreshingDailyKpis ? "Refreshing KPIs..." : "Refresh Daily KPIs"}
           </button>
-          <button
-            onClick={resetForm}
-            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15"
-          >
-            + New
-          </button>
         </div>
       </div>
 
-      {raSyncSummary && (
-        <div className="mb-6 bg-zinc-900/40 border border-white/10 rounded-2xl p-4">
-          <div className="text-sm text-zinc-300 mb-2">RA Sync Summary</div>
-          <pre className="text-xs text-zinc-400 whitespace-pre-wrap break-words">
-            {JSON.stringify(raSyncSummary, null, 2)}
-          </pre>
+      <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-semibold">Event Operations</div>
+            <div className="text-xs text-zinc-500">
+              Manual creation, editing, and moderation have moved into a dedicated events workspace. Multi-source sync and freshness checks live in Admin Health.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/admin/events"
+              className="px-4 py-2 rounded-xl bg-white text-black font-medium hover:bg-zinc-200"
+            >
+              Open Event Manager
+            </Link>
+            <div className="px-4 py-2 rounded-xl border border-white/10 bg-black/20 text-sm text-zinc-300">
+              {loadingEvents ? "Loading event counts..." : `${upcomingEvents.length} upcoming, ${pastEvents.length} past`}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
       <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
         <div className="text-sm font-semibold mb-3">Growth Funnel (Last 7 Days)</div>
@@ -829,6 +1054,72 @@ export default function Admin() {
 
         {latestDailyKpi ? (
           <>
+            <div className="mb-4 rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
+              <div className="text-sm font-semibold text-white mb-3">MVP Scorecard</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">Friend in 24h</div>
+                  <div className="text-xl font-semibold">
+                    {Number(latestDailyKpi.friend_24h_rate_pct ?? 0).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.new_users_with_friend_24h ?? 0} of {latestDailyKpi.new_users}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">RSVP in 24h</div>
+                  <div className="text-xl font-semibold">
+                    {Number(latestDailyKpi.rsvp_24h_rate_pct ?? 0).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.new_users_with_rsvp_24h ?? 0} of {latestDailyKpi.new_users}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">Invite in 72h</div>
+                  <div className="text-xl font-semibold">
+                    {Number(latestDailyKpi.invite_72h_rate_pct ?? 0).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.new_users_with_invite_72h ?? 0} of {latestDailyKpi.new_users}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">WAU (7d)</div>
+                  <div className="text-xl font-semibold">{latestDailyKpi.wau_7d ?? 0}</div>
+                  <div className="text-xs text-zinc-500 mt-1">Trailing 7 full days</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">D1 retention</div>
+                  <div className="text-xl font-semibold">{Number(latestDailyKpi.d1_retention_pct ?? 0).toFixed(1)}%</div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.d1_retained_users} of {latestDailyKpi.d1_eligible_users}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">D7 retention</div>
+                  <div className="text-xl font-semibold">{Number(latestDailyKpi.d7_retention_pct ?? 0).toFixed(1)}%</div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.d7_retained_users ?? 0} of {latestDailyKpi.d7_eligible_users ?? 0}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">D30 retention</div>
+                  <div className="text-xl font-semibold">{Number(latestDailyKpi.d30_retention_pct ?? 0).toFixed(1)}%</div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    {latestDailyKpi.d30_retained_users ?? 0} of {latestDailyKpi.d30_eligible_users ?? 0}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-xs text-zinc-400">Invite funnel</div>
+                  <div className="text-xl font-semibold">{latestInviteOpenRate.toFixed(1)}%</div>
+                  <div className="text-xs text-zinc-500 mt-1">
+                    open {latestSignupRate.toFixed(1)}% signup, {latestInviteRsvpRate.toFixed(1)}% RSVP
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="text-xs text-zinc-400">Latest day</div>
@@ -855,20 +1146,26 @@ export default function Admin() {
                   <thead className="text-zinc-500">
                     <tr>
                       <th className="text-left pb-2 pr-3">Day</th>
-                      <th className="text-right pb-2 pr-3">Active</th>
-                      <th className="text-right pb-2 pr-3">RSVPs</th>
-                      <th className="text-right pb-2 pr-3">Friends</th>
-                      <th className="text-right pb-2">Activation</th>
+                      <th className="text-right pb-2 pr-3">WAU</th>
+                      <th className="text-right pb-2 pr-3">Friend 24h</th>
+                      <th className="text-right pb-2 pr-3">RSVP 24h</th>
+                      <th className="text-right pb-2 pr-3">Invite 72h</th>
+                      <th className="text-right pb-2 pr-3">D1</th>
+                      <th className="text-right pb-2 pr-3">D7</th>
+                      <th className="text-right pb-2">D30</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dailyKpis.map((row) => (
                       <tr key={row.metric_date} className="border-t border-white/5">
                         <td className="py-2 pr-3 text-zinc-300">{row.metric_date}</td>
-                        <td className="py-2 pr-3 text-right">{row.active_users}</td>
-                        <td className="py-2 pr-3 text-right">{row.rsvps}</td>
-                        <td className="py-2 pr-3 text-right">{row.friend_adds}</td>
-                        <td className="py-2 text-right">{Number(row.activation_rate_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right">{row.wau_7d ?? 0}</td>
+                        <td className="py-2 pr-3 text-right">{Number(row.friend_24h_rate_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right">{Number(row.rsvp_24h_rate_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right">{Number(row.invite_72h_rate_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right">{Number(row.d1_retention_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right">{Number(row.d7_retention_pct ?? 0).toFixed(1)}%</td>
+                        <td className="py-2 text-right">{Number(row.d30_retention_pct ?? 0).toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -905,8 +1202,259 @@ export default function Admin() {
         )}
       </div>
 
+      <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-sm font-semibold">Safety Reports</div>
+            <div className="text-xs text-zinc-500">Triage queue for user and event reports from the community.</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={safetyStatusFilter}
+              onChange={(event) => setSafetyStatusFilter(event.target.value as typeof safetyStatusFilter)}
+              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200"
+            >
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="resolved">Resolved</option>
+              <option value="dismissed">Dismissed</option>
+            </select>
+            <button
+              onClick={() => void loadSafetyReports()}
+              disabled={loadingSafetyReports}
+              className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+            >
+              {loadingSafetyReports ? "Loading..." : "Reload"}
+            </button>
+          </div>
+        </div>
+
+        {safetyReports.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Open queue</div>
+                <div className="text-xl font-semibold">{safetySummary.open}</div>
+                <div className="text-xs text-zinc-500 mt-1">{safetySummary.last7d} reported in last 7 days</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Reviewed</div>
+                <div className="text-xl font-semibold">{safetySummary.reviewed}</div>
+                <div className="text-xs text-zinc-500 mt-1">{safetySummary.resolved} resolved, {safetySummary.dismissed} dismissed</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Target mix</div>
+                <div className="text-xl font-semibold">{safetySummary.userReports}</div>
+                <div className="text-xs text-zinc-500 mt-1">{safetySummary.eventReports} event reports</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Top reasons</div>
+                <div className="text-sm font-medium text-zinc-200 mt-1">
+                  {safetySummary.topReasons.length > 0
+                    ? safetySummary.topReasons.map(([reason, count]) => `${reason} (${count})`).join(", ")
+                    : "No reports yet"}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-zinc-500">
+                  <tr>
+                    <th className="text-left pb-2 pr-3">When</th>
+                    <th className="text-left pb-2 pr-3">Status</th>
+                    <th className="text-left pb-2 pr-3">Type</th>
+                    <th className="text-left pb-2 pr-3">Reason</th>
+                    <th className="text-left pb-2 pr-3">Target</th>
+                    <th className="text-left pb-2 pr-3">Reporter</th>
+                    <th className="text-left pb-2 pr-3">Details</th>
+                    <th className="text-left pb-2">Triage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSafetyReports.map((row) => (
+                    <tr key={row.id} className="border-t border-white/5 align-top">
+                      <td className="py-2 pr-3 text-zinc-300">{formatDateTime(row.created_at)}</td>
+                      <td className="py-2 pr-3">
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-zinc-300">
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-300">{row.target_type}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{row.reason}</td>
+                      <td className="py-2 pr-3 text-zinc-400">
+                        {row.target_type === "user" ? (
+                          <div>
+                            <div className="text-zinc-300">
+                              {row.target_user_id ? safetyUserNames[row.target_user_id] ?? row.target_user_id.slice(0, 8) : "Unknown user"}
+                            </div>
+                            {row.target_user_id ? (
+                              <div className="text-[11px] text-zinc-500">{row.target_user_id.slice(0, 8)}</div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-zinc-300">
+                              {row.target_event_id ? safetyEventTitles[row.target_event_id] ?? row.target_event_id.slice(0, 8) : "Unknown event"}
+                            </div>
+                            {row.target_event_id ? (
+                              <div className="text-[11px] text-zinc-500">{row.target_event_id.slice(0, 8)}</div>
+                            ) : null}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-400">
+                        <div className="text-zinc-300">
+                          {safetyUserNames[row.reporter_user_id] ?? row.reporter_user_id.slice(0, 8)}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">{row.reporter_user_id.slice(0, 8)}</div>
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-400">
+                        <div>{row.details || "No extra detail"}</div>
+                        {row.reviewed_at ? (
+                          <div className="text-[11px] text-zinc-500 mt-1">
+                            Reviewed {formatDateTime(row.reviewed_at)}
+                            {row.reviewed_by ? ` by ${safetyUserNames[row.reviewed_by] ?? row.reviewed_by.slice(0, 8)}` : ""}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => void updateSafetyReportStatus(row.id, "reviewed")}
+                            disabled={updatingSafetyReportId === row.id || row.status === "reviewed"}
+                            className="px-2 py-1 rounded-lg bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                          >
+                            Review
+                          </button>
+                          <button
+                            onClick={() => void updateSafetyReportStatus(row.id, "resolved")}
+                            disabled={updatingSafetyReportId === row.id || row.status === "resolved"}
+                            className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-400/20 text-emerald-200 hover:bg-emerald-500/15 disabled:opacity-50"
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            onClick={() => void updateSafetyReportStatus(row.id, "dismissed")}
+                            disabled={updatingSafetyReportId === row.id || row.status === "dismissed"}
+                            className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-400/20 text-amber-200 hover:bg-amber-500/15 disabled:opacity-50"
+                          >
+                            Dismiss
+                          </button>
+                          {row.status !== "open" ? (
+                            <button
+                              onClick={() => void updateSafetyReportStatus(row.id, "open")}
+                              disabled={updatingSafetyReportId === row.id}
+                              className="px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-zinc-300 hover:bg-black/40 disabled:opacity-50"
+                            >
+                              Reopen
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredSafetyReports.length === 0 ? (
+              <div className="text-xs text-zinc-500 mt-3">No safety reports match the current filter.</div>
+            ) : null}
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingSafetyReports ? "Loading safety reports..." : "No safety reports yet."}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-sm font-semibold">Retention Email Performance</div>
+            <div className="text-xs text-zinc-500">Last 30 days from `email_events`, grouped by trigger.</div>
+          </div>
+          <button
+            onClick={() => void loadRetentionEmailMetrics()}
+            disabled={loadingRetentionEmails}
+            className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+          >
+            {loadingRetentionEmails ? "Loading..." : "Reload"}
+          </button>
+        </div>
+
+        {retentionEmailSummary.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Emails sent</div>
+                <div className="text-xl font-semibold">{totalRetentionEmailSent}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Opened</div>
+                <div className="text-xl font-semibold">{totalRetentionEmailOpened}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Clicked</div>
+                <div className="text-xl font-semibold">{totalRetentionEmailClicked}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Open rate</div>
+                <div className="text-xl font-semibold">
+                  {totalRetentionEmailSent > 0
+                    ? `${((totalRetentionEmailOpened / totalRetentionEmailSent) * 100).toFixed(1)}%`
+                    : "0.0%"}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto">
+              <div className="text-xs text-zinc-400 mb-2">By Trigger</div>
+              <table className="w-full text-sm">
+                <thead className="text-zinc-500">
+                  <tr>
+                    <th className="text-left pb-2 pr-3">Trigger</th>
+                    <th className="text-right pb-2 pr-3">Sent</th>
+                    <th className="text-right pb-2 pr-3">Delivered</th>
+                    <th className="text-right pb-2 pr-3">Opened</th>
+                    <th className="text-right pb-2 pr-3">Clicked</th>
+                    <th className="text-right pb-2 pr-3">Bounced</th>
+                    <th className="text-right pb-2 pr-3">Failed</th>
+                    <th className="text-right pb-2 pr-3">Open rate</th>
+                    <th className="text-right pb-2">Last sent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {retentionEmailSummary.map((row) => (
+                    <tr key={row.triggerKey} className="border-t border-white/5">
+                      <td className="py-2 pr-3 text-zinc-300">{row.triggerKey}</td>
+                      <td className="py-2 pr-3 text-right">{row.sent}</td>
+                      <td className="py-2 pr-3 text-right">{row.delivered}</td>
+                      <td className="py-2 pr-3 text-right">{row.opened}</td>
+                      <td className="py-2 pr-3 text-right">{row.clicked}</td>
+                      <td className="py-2 pr-3 text-right">{row.bounced}</td>
+                      <td className="py-2 pr-3 text-right">{row.failed}</td>
+                      <td className="py-2 pr-3 text-right">{(row.openRate * 100).toFixed(1)}%</td>
+                      <td className="py-2 text-right text-zinc-400">{formatDateTime(row.latestSentAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingRetentionEmails
+              ? "Loading retention email metrics..."
+              : "No retention email data yet, or the current admin role cannot read `email_events`."}
+          </div>
+        )}
+      </div>
+
       {/* Event lists */}
-      <div className="mb-8">
+      <div className="hidden mb-8">
         <button
           type="button"
           onClick={() => setShowUpcomingEvents((v) => !v)}
@@ -1017,7 +1565,7 @@ export default function Admin() {
       </div>
 
       {/* Create/Edit form */}
-      <div className="bg-zinc-900/40 border border-white/10 rounded-2xl p-5">
+      <div className="hidden bg-zinc-900/40 border border-white/10 rounded-2xl p-5">
         <h2 className="text-xl font-bold mb-1">
           {form.id ? "Edit Event" : "Create Event"}
         </h2>

@@ -1,452 +1,566 @@
-# Whozin 30-Day Growth Playbook
+# Whozin 30-Day Founder Playbook
 
 Start date: Monday, March 16, 2026
 
-Goal: get the first 100 users in 30 days
+Primary objective: create the first dense nightlife graph in SF/Oakland
 
-Real goal: create the first 10 to 20 active social clusters so the product feels alive
+Target by Day 30:
 
-## Success Criteria
+- 150 to 250 total users in one overlapping scene
+- 50+ weekly active users
+- 40+ activated users
+- 15+ users who invited at least one friend
+- 10+ events with visible social proof
+- 5+ repeat social clusters that use Whozin before going out
 
-By Day 30, aim for:
+If you only hit 100 users but they are dense, that is still a win.
+If you hit 300 users with weak overlap, that is not.
 
-- 100 total signed-up users
-- 40 activated users
-- 15 users who invited at least 3 friends
-- 10 active friend clusters
-- 25 users who RSVP'd or viewed at least 1 event after signup
+## What You Are Actually Building
 
-## What Counts As A Good User
+Whozin is not trying to win "event discovery."
 
-For this phase, a good user is not just a signup.
+Whozin is trying to become the fastest answer to:
 
-Use this working definition:
+- What's the move tonight?
+- Are my people going?
+- Will I know anyone there?
 
-- signed up
-- added or invited at least 1 friend
-- viewed or RSVP'd to at least 1 event
+That means the first 30 days are not about scale. They are about:
 
-This is the behavior that creates density.
-
-## Core Strategy
-
-Do not start with broad awareness.
-
-Start with:
-
-- friends
-- mutuals
-- group chats
-- local nightlife connectors
-- one city
-- one or two scenes
-
-Whozin is strongest when multiple users know each other. Your acquisition strategy should optimize for overlap, not reach.
-
-## Weekly Targets
-
-### Week 1: Seed The First Circle
-
-- 25 direct invites sent
-- 15 signups
-- 8 activated users
-- 3 users who invite friends
-
-### Week 2: Build Cluster Density
-
-- 30 more direct invites
-- 20 more signups
-- 10 activated users
-- 5 active friend clusters
-
-### Week 3: Add Social Proof In Public
-
-- 20 to 30 public-facing outreach touches
-- 20 more signups
-- 10 activated users
-- 3 new connectors onboarded
-
-### Week 4: Double Down On What Works
-
-- 25 more direct invites
-- 45 cumulative activated users target
-- 100 total users target
-- strongest city/scene identified
-
-## Daily KPI Dashboard
-
-Track these every day in one sheet:
-
-- direct invites sent
-- replies
-- signups
-- activated users
-- invites sent by users
-- events viewed
-- RSVPs
-- top referrers
-- top friend clusters
-
-## Messaging Rules
-
-Lead with:
-
+- concentration
 - social proof
-- usefulness
-- privacy
+- event seeding
+- founder-led distribution
+- operational consistency
 
-Do not lead with:
+## The Wedge
 
-- technical features
-- ticket syncing details
-- generic startup language
+Primary wedge:
 
-Best hooks:
+- SF / Oakland nightlife
+- ravers
+- electronic music fans
+- underground and adjacent club crowd
 
-- "See who's going before you go."
-- "Trying something new for seeing which friends are actually going out."
-- "Built a private app for figuring out if a night is really the move."
+Sub-wedge to prioritize first:
 
-## Outreach Templates
+- Oakland warehouse / underground electronic
+- plus SF club crossover
 
-### 1. Direct Message To Friends
+Do not optimize for every nightlife segment at once.
+Own one lane where "who's going?" already matters.
 
-Use for close friends and mutuals:
+## Critical Mass Definition
 
-> Built something I want your help testing. It lets you see which friends are going before you commit to a show or night out. Want early access?
+Critical mass for Whozin is not raw signup count.
 
-### 2. Direct Message To Scene Connectors
+You have real early density when:
 
-Use for promoters, DJs, nightlife organizers, social anchors:
+- users recognize names on event pages
+- multiple friends RSVP to the same event
+- invite links create overlapping attendance, not isolated users
+- people start checking Whozin before posting in group chat
 
-> Built a private social app for live events that makes it easier to see who is actually going. I’m looking for a few well-connected early users to help shape it. Want me to send you the link?
+The Day 30 threshold to aim for:
 
-### 3. Group Chat Drop
+- 8 to 15 connectors
+- 20 to 30 seeded events per week
+- 3 to 5 active nights each week
+- 10+ events with 5 or more visible attendees
+- 30%+ of active users seeing at least one familiar face on an event page
 
-Use only after a few people in the chat are already on it:
+## Founder Rules
 
-> Testing a new app that makes it easier to see who’s going before you go. If a few of us get on it, it’ll actually be useful. Link: [your URL]
+1. Never chase broad awareness before the app looks alive.
+2. Recruit crews, not isolated users.
+3. Push people toward the same events.
+4. Use direct outreach before public posting.
+5. Use public posting to start DMs, not to spray traffic.
+6. Manually seed momentum every Thursday, Friday, and Saturday.
+7. Review metrics every Sunday and cut channels that create lonely signups.
 
-### 4. Follow-Up If Someone Signs Up
+## User Tiers
 
-> You’re in. Best way to make it useful: invite 3 friends you actually go out with.
+### Tier 1: Connectors
 
-### 5. Follow-Up If Someone Ghosts
+These are DJs, promoters, photographers, dancers, extroverts, group chat starters, afters people, and nightlife regulars.
 
-> Re-upping this in case you missed it. I’m keeping the first rollout tight with people who actually go out and give feedback.
+Goal:
 
-## Operating Rules
+- onboard 3 to 5 per week
+- get each one to invite 3 to 10 relevant friends
 
-- Focus on one geography first
-- Prioritize users with real social overlap
-- Push every good user to invite 3 friends
-- Use real upcoming events as activation moments
-- Ask for lightweight feedback after first use
-- Post publicly only after the app has social proof
+### Tier 2: Crew Anchors
 
-## 30-Day Calendar
+These are normal users with one strong friend group.
 
-## Week 1: March 16 To March 22
+Goal:
 
-Theme: seed the first real network
+- get them to RSVP to one event
+- get them to send one invite into one real group chat
 
-### Day 1: Monday, March 16
+### Tier 3: General Users
 
-- Define your launch city and target scene
-- Make a list of 40 people across friends, mutuals, group chat anchors, and connectors
-- Rank them Tier 1, Tier 2, Tier 3
-- Send 10 personal invites
-- Set up a simple tracking sheet
+These matter later.
+For the first 30 days, they matter only if they overlap with Tiers 1 and 2.
 
-Success target:
+## Daily Founder Cadence
 
-- 10 invites sent
+Every day:
+
+- add or clean up events for the next 7 days
+- send 10 to 15 direct messages
+- follow up with all warm replies
+- check invite opens, signups, and RSVPs
+- push active users toward 1 to 3 shared events
+
+Every Thursday to Saturday:
+
+- operate live
+- watch which events are building
+- nudge users toward those events
+- capture screenshots that prove social density
+
+Every Sunday:
+
+- review best signup source
+- review best event cluster
+- review best inviter
+- identify one friction point to fix next week
+
+## Week 1: Seed The First Real Graph
+
+Theme: seed the first 30 to 40 users and make the app feel alive
+
+Targets:
+
+- 30 to 40 users
+- 10 activated users
+- 5 users who add a friend
+- 10 to 15 events with early social proof
+
+### Day 1
+
+- Finalize the exact wedge: Oakland underground electronic plus adjacent SF ravers.
+- Build a spreadsheet with 60 names:
+  - 20 friends and mutuals
+  - 20 nightlife connectors
+  - 20 probable second-degree intros
+- Label each `friend`, `connector`, or `crew anchor`.
+- Seed 20 to 30 relevant events for the next 10 days.
+- Send 10 direct outreach messages.
+
+Success checkpoint:
+
 - 3 replies
 - 2 signups
 
-### Day 2: Tuesday, March 17
+### Day 2
 
-- Send 8 more personal invites
-- Follow up with Day 1 non-responders
-- Personally onboard anyone who signed up
-- Ask each new user to invite 3 friends
+- Follow up with every Day 1 warm lead.
+- Personally onboard new signups.
+- Ask each signup to RSVP to one real event this week.
+- Ask your 2 warmest users who else should be on it.
+- Add any missing events they mention.
 
-Success target:
+Success checkpoint:
 
-- 8 invites sent
-- 3 signups total by end of day
+- 5 cumulative signups
+- 3 users complete at least one RSVP
 
-### Day 3: Wednesday, March 18
+### Day 3
 
-- Send 7 more invites
-- Identify the first 2 users most likely to refer others
-- Text them directly and ask them to bring in friends
-- Note any confusion points in signup or onboarding
+- Reach out to 5 connectors and 5 crew anchors.
+- Ask one warm user for one intro.
+- Create a shortlist of 5 "anchor events" for the week.
+- Push all active users toward those anchor events.
 
-Success target:
+Success checkpoint:
 
-- 5 total signups
-- 2 users invite others
+- first cluster of 3+ connected users on one event
 
-### Day 4: Thursday, March 19
+### Day 4
 
-- Send 5 invites to nightlife connectors
-- Send 5 invites to social friends who attend events often
-- Start collecting screenshots that show social value
+- DM users with a Thursday-specific hook: "what's the move tonight?"
+- Seed late-weekend events and afters-type events.
+- Capture screenshots where recognizable people are showing.
+- Note any onboarding friction in signup, friend adds, or RSVP.
 
-Success target:
+Success checkpoint:
 
-- 8 total signups
-- 1 early cluster forming
+- 8 cumulative signups
+- 1 event page with recognizable social proof
 
-### Day 5: Friday, March 20
+### Day 5
 
-- Use live weekend energy
-- Send "using this for tonight/this weekend" messages
-- Re-engage every signer who has not invited friends
-- Ask 2 people for a short reaction after use
+- Use live Friday urgency.
+- Send short, high-context messages only.
+- Personally nudge every activated user toward one event.
+- Ask top users to share one invite link, not a generic app link.
 
-Success target:
+Success checkpoint:
 
-- 10 total signups
+- 12 cumulative signups
 - 5 activated users
 
-### Day 6: Saturday, March 21
+### Day 6
 
-- Light-touch day
-- Post one private story or close-friends story if the app already has real screenshots
-- DM anyone who viewed the story and seems relevant
-- Watch for real event-based usage
+- Go out in person.
+- Talk only to socially central people, not randoms in line.
+- Ask how they currently decide where to go after.
+- Show Whozin only when the conversation is naturally about plans.
 
-Success target:
+Success checkpoint:
 
-- 12 total signups
+- 3 live demos
+- 2 high-intent follow-ups
 
-### Day 7: Sunday, March 22
+### Day 7
 
-- Review what worked
-- Count signups by source
-- Identify top 5 most valuable users
-- Write down the 3 best message angles based on replies
+- Review the week.
+- Rank signup sources by quality, not volume.
+- Identify your top 5 connectors and top 3 event clusters.
+- Rewrite your main outreach line using what people actually said back.
 
-Success target:
+Success checkpoint:
 
-- 15 total signups
-- 8 activated users
+- 30 to 40 cumulative users
+- 10 activated users
 
-## Week 2: March 23 To March 29
+## Week 2: Turn Users Into Clusters
 
-Theme: turn signups into clusters
+Theme: deepen overlap and make event pages feel socially credible
 
-### Day 8: Monday, March 23
+Targets:
 
-- Send 8 invites to friends of already-active users
-- Ask your top 3 users for one intro each
-- Refine onboarding message based on Week 1 objections
+- 70 to 90 cumulative users
+- 20 to 25 activated users
+- 5 dense clusters
+- 5 events with visible social proof
 
-### Day 9: Tuesday, March 24
+### Day 8
 
-- Follow up on all open conversations
-- Send 5 new invites to adjacent social circles
-- Push users to add friends before the weekend
+- Ask your top 5 users for one intro each.
+- Reach out to intros within 24 hours.
+- Seed the next weekend's anchor events now.
 
-### Day 10: Wednesday, March 25
+### Day 9
 
-- Reach out to 3 scene connectors again if they showed interest
-- Offer a quick 10-minute feedback call or voice note exchange
-- Collect language users naturally use to describe the product
+- Push users to add at least one friend before the weekend.
+- Check which event pages are still empty and backfill attendance by recruiting around them.
 
-### Day 11: Thursday, March 26
+### Day 10
 
-- Prepare a social-proof screenshot set
-- Draft 2 story posts and 1 tweet/post
-- Keep direct invites going with 5 more sends
+- Reach out to 3 micro-promoters or DJs.
+- Offer free event setup and curation inside Whozin.
+- Ask only for a Story mention or one link drop into a private chat.
 
-### Day 12: Friday, March 27
+### Day 11
 
-- Send weekend-specific messages
-- Ask users: "What are you going to this weekend?"
-- Trigger app usage around real events
+- Prepare 2 or 3 screenshots that show social proof.
+- Do not post them publicly yet unless they are real.
+- Use them in DMs to warm leads.
 
-### Day 13: Saturday, March 28
+### Day 12
 
-- Soft public social post if density exists
-- Reply manually to everyone who engages
-- DM warm respondents instead of sending them to the site cold
+- Friday push:
+  - ask active users what they are leaning toward
+  - reply with the direct event link
+  - ask them to bring one friend into the app
 
-### Day 14: Sunday, March 29
+### Day 13
 
-- Review source quality
-- Which users became active?
-- Which source produced overlap?
-- Kill channels that produce low-quality solo signups
+- Work in the field again.
+- Capture real phrases people use:
+  - "who's actually going?"
+  - "is anyone pulling up?"
+  - "where's everyone ending up?"
+- Feed this language back into copy and DMs.
 
-Week 2 target:
+### Day 14
 
-- 35 cumulative signups
-- 18 cumulative activated users
-- 5 clusters
+- Review:
+  - which events concentrated attention
+  - which users generated invites
+  - which outreach style converted fastest
+- Kill low-overlap channels.
 
-## Week 3: March 30 To April 5
+## Week 3: Public Signal, Private Density
 
-Theme: add selective public visibility
+Theme: use selective visibility to pull in the right people without looking broad or corporate
 
-### Day 15: Monday, March 30
+Targets:
 
-- Choose your best-performing message
-- Turn it into your default outreach line
-- Send 5 invites and 5 follow-ups
+- 110 to 140 cumulative users
+- 30 to 35 activated users
+- 8 dense events
+- 10+ users who invited at least one friend
 
-### Day 16: Tuesday, March 31
+### Day 15
 
-- Post 1 public social proof asset
-- Include clear CTA to DM or sign up
-- Personally respond to every message
+- Choose one default outreach angle and standardize it.
+- Good angle:
+  - "Built something for seeing which friends are actually going before you commit."
 
-### Day 17: Wednesday, April 1
+### Day 16
 
-- Ask 3 active users what made the app click for them
-- Turn their wording into future copy
-- Send 5 more warm invites
+- Post one public asset:
+  - screenshot
+  - screen recording
+  - event page with names blurred if needed
+- CTA should be "DM me if you want in" or "Want the link?"
+- Do not send cold traffic straight into the app without context.
 
-### Day 18: Thursday, April 2
+### Day 17
 
-- Reach out to 3 niche connectors in your scene
-- Offer priority access or direct input into product direction
+- Interview 3 activated users.
+- Ask:
+  - what made it click?
+  - when did it first feel useful?
+  - what almost stopped you?
 
-### Day 19: Friday, April 3
+### Day 18
 
-- Run a "who's going this weekend?" push
-- Ask active users to invite 2 more people before events start
+- Reach out to 3 more niche connectors:
+  - queer nightlife
+  - burner-adjacent art party crowd
+  - college-adjacent Bay crews
 
-### Day 20: Saturday, April 4
+### Day 19
 
-- Share a story or short screen recording
-- Show social proof, not feature explanation
+- Friday founder operator mode:
+  - check the hottest 5 events
+  - prompt active users toward the same 2 or 3
+  - capture where density is emerging
 
-### Day 21: Sunday, April 5
+### Day 20
 
-- Review public vs direct performance
-- Double down on the better source
+- Soft public push again if, and only if, screenshots show real signal.
+- Use proof of people, not proof of features.
 
-Week 3 target:
+### Day 21
 
-- 55 cumulative signups
-- 28 cumulative activated users
+- Review public post quality:
+  - how many DMs started
+  - how many became signups
+  - how many became activated users
 
-## Week 4: April 6 To April 12
+## Week 4: Force The Flywheel
 
-Theme: scale what is already working
+Theme: compound what is working and remove dependence on founder nudges where possible
 
-### Day 22: Monday, April 6
+Targets:
 
-- Pull a list of your strongest users and strongest clusters
-- Ask 5 of them for direct friend intros
+- 150 to 250 cumulative users
+- 50+ weekly active users
+- 15+ inviters
+- 10+ dense event pages
 
-### Day 23: Tuesday, April 7
+### Day 22
 
-- Send 8 direct invites sourced from intros
-- Track intro-to-signup conversion separately
+- Pull your top inviters and top clusters.
+- Ask each for one more direct intro.
+- Personalize every message.
 
-### Day 24: Wednesday, April 8
+### Day 23
 
-- Post second public social proof piece
-- Use your sharpest hook
+- Re-engage warm signups who never activated.
+- Message:
+  - "App is more useful now. Want me to point you to the right event for this weekend?"
 
-### Day 25: Thursday, April 9
+### Day 24
 
-- Re-engage all inactive signups with one short message
-- Example: "App is getting more useful now that more people are on. Want me to show you how to make it click?"
+- Run a promoter or connector collaboration.
+- Goal is not sponsorship.
+- Goal is getting one high-overlap scene to show up in the same event graph.
 
-### Day 26: Friday, April 10
+### Day 25
 
-- Weekend push
-- Ask active users to invite friends they might actually see out
+- Use your best users as mini-distribution nodes.
+- Ask each active user to invite 1 friend they may actually see this weekend.
 
-### Day 27: Saturday, April 11
+### Day 26
 
-- Live usage observation day
-- Capture what people actually do
-- Note friction and what made them stay
+- Friday push:
+  - choose 3 anchor events
+  - get as many active users as possible onto those pages
+  - steer away from long-tail dilution
 
-### Day 28: Sunday, April 12
+### Day 27
 
-- Review which cluster has the most overlap
-- Decide whether to stay narrow or expand into one adjacent scene
+- Observe live usage.
+- Track where users hesitate:
+  - signup
+  - add friend
+  - RSVP
+  - share
 
-Week 4 target:
+### Day 28
 
-- 80 cumulative signups
-- 38 cumulative activated users
+- Review which micro-scene is densest.
+- Decide whether to stay in the same wedge or expand by one adjacent sub-scene.
 
-## Final Stretch: April 13 To April 14
+### Day 29
 
-Theme: finish with direct momentum, not vanity marketing
+- Final outreach sweep to highest-probability leads.
+- Prioritize:
+  - connectors who said maybe
+  - intros you never followed up
+  - users who signed up but did not RSVP
 
-### Day 29: Monday, April 13
+### Day 30
 
-- Send 10 final direct invites to the highest-probability users left on your list
-- Follow up with every warm lead who never converted
+- Review:
+  - strongest inviter
+  - strongest event cluster
+  - strongest message
+  - biggest friction point
+- Write the next 30-day plan around what already proved itself.
 
-### Day 30: Tuesday, April 14
+## DM Script Pack
 
-- Run one final social proof push
-- Ask your best users to each invite 1 more person
-- Review final numbers
-- Document what message, source, and cluster performed best
+Use these as templates, not copy-paste spam.
+Personalize with event context whenever possible.
 
-Final target:
+### 1. Close Friend
 
-- 100 total users
-- 40+ activated users
-- 10 active clusters
+Built something I want your help testing. It shows which friends are actually going before you commit to a night. Feels especially useful for raves and last-minute plans. Want the link?
 
-## What To Avoid
+### 2. Warm Mutual
 
-- broad paid ads
-- mass posting before the app has social proof
-- treating all signups as equal
-- launching in too many cities at once
-- relying on random strangers before friend-density exists
+Working on a nightlife app called Whozin. The whole point is seeing who is actually in before deciding. Feels made for SF/Oakland rave plans. Thought of you because you actually go out. Want early access?
 
-## Decision Rules
+### 3. Connector / Scene Regular
 
-If direct invites convert well:
+Building a private app around one question: who's actually going tonight? Not a ticketing thing, more social signal for events. I want a small set of plugged-in early users who will tell me what's missing. Want me to send it over?
 
-- keep leaning into hand-to-hand growth
+### 4. Promoter / DJ
 
-If a specific group chat converts:
+Hey, building a nightlife app called Whozin focused on social attendance, not generic event listings. People decide because their friends are going, so I'm trying to make that visible. Happy to seed your upcoming event pages myself and send them over. If it feels right, all I'd ask is a Story mention or a drop in your chat.
 
-- replicate that group-chat pattern
+### 5. Post-Signup Activation
 
-If public posts get attention but low activation:
+You're in. Fastest way for it to become useful: RSVP to one real event this week and add one friend you actually go out with. If you want, I can point you to the best page to start with.
 
-- use them only to create DMs, not direct traffic
+### 6. Ask For One Invite
 
-If one scene is clearly working:
+Can you send your Whozin link to one friend you'd realistically see this weekend? One real friend is way better than blasting it.
 
-- focus there until it feels dense
+### 7. Group Chat Drop
+
+Only use this if at least 2 people in the chat are already on Whozin.
+
+Trying a new app for seeing who's actually going before committing. If a few of us get on it, it gets very useful very fast. Dropping the event link here.
+
+### 8. Ghosted Lead Follow-Up
+
+Bumping this once because I'm keeping the first rollout tight around people who actually go out in SF/Oakland. Totally fine if not your thing, but if you want in I can send the link.
+
+### 9. Re-Engage Inactive Signup
+
+Whozin is starting to feel more alive now that more people are on it. If you want, I'll send you the best event page to start with for this weekend.
+
+### 10. Post-Event Loop
+
+You all ended up at the same thing anyway. Next time, get your crew on Whozin first so you can see the move forming earlier.
+
+## Street-Level Founder Script
+
+Do not pitch like a startup founder.
+Ask a real nightlife question first.
+
+Use:
+
+- How do you usually figure out where everyone's ending up?
+- Do your friends decide off the flyer or off who's actually going?
+- Are you mostly using group chats for this right now?
+
+Then, if the conversation opens:
+
+"I'm building the thing I wanted for that. It's basically social signal for nightlife instead of generic listings."
+
+## Event Seeding Operating System
+
+Your event feed should never feel empty for the next 7 days.
+
+Every Monday:
+
+- seed the full upcoming weekend
+- choose 5 anchor events
+- choose 10 secondary events
+
+Every Thursday:
+
+- add any late-announced events
+- update art and descriptions for anything weak
+- remove or quarantine junk that makes the app look mainstream or stale
+
+Every Friday and Saturday:
+
+- keep the hottest pages fresh
+- manually check if the right events are surfaced
+- bias toward events where your connectors are actually going
+
+Event feed rules:
+
+- better 25 strong events than 200 weak ones
+- imported events are helpful, but curation is the brand
+- if a page has no image, weak copy, and no social proof, it hurts trust
+
+## Solo Founder Automation Plan
+
+Automate anything repetitive, measurable, and non-creative.
+Keep founder energy for outreach, relationship-building, and reading the scene.
+
+### Automate Daily
+
+- Bay Area event sync
+- daily KPI refresh
+- KPI export snapshot
+- move-score refresh
+- event data quality audit
+
+### Automate Weekly
+
+- Monday morning KPI summary
+- stale event cleanup review list
+- top inviters and top clusters snapshot
+- reactivation target list:
+  - signed up but never RSVP'd
+  - RSVP'd but never invited
+  - invited but no accepted signup
+
+### Automate From Product Data
+
+- identify new activated users each morning
+- identify users who added a friend but never RSVP'd
+- identify users who RSVP'd but did not share
+- identify events with rising momentum but low social proof
+- identify invite links with high open rate but low signup rate
+
+### Keep Manual
+
+- connector outreach
+- promoter relationships
+- in-person recruiting
+- deciding the weekly wedge
+- writing public-facing social content
 
 ## Weekly Review Questions
 
-Every Sunday, answer:
+Every Sunday, answer these in one page:
 
-1. Which users became active fastest?
-2. Which source produced the best users?
-3. Which message got the best reply rate?
-4. Where did users get confused?
-5. Which cluster should I deepen next week?
+1. Which source produced the highest-quality users?
+2. Which event pages felt most alive?
+3. Which users became inviters?
+4. Where did the funnel feel fragile?
+5. Which cluster should you deepen next week?
+6. Which manual task can be automated next?
 
-## Simple Summary
+## Final Reminder
 
-Your first 100 users should come from:
+Do not try to make Whozin look big.
+Make it feel alive in one real social graph.
 
-- direct outreach first
-- clustered friend groups second
-- selective public social third
-
-The play is not "go viral."
-
-The play is:
-
-**make Whozin feel useful to one real social graph, then expand from there.**
+If people in one Bay Area nightlife pocket start checking Whozin before asking the group chat, the product is working.
