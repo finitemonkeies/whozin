@@ -34,6 +34,11 @@ type ExploreCacheEnvelope = {
   data: Recommendation[];
 };
 
+type AsyncCacheEnvelope<T> = {
+  savedAt: number;
+  promise: Promise<T>;
+};
+
 const DEFAULT_TASTE: TasteProfile = {
   artists: ["Tale of Us", "Charlotte de Witte", "Gareth Emery", "Eric Prydz", "Amelie Lens"],
   genres: ["techno", "melodic techno", "trance", "house"],
@@ -42,6 +47,7 @@ const DEFAULT_TASTE: TasteProfile = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPLORE_CACHE_TTL_MS = 3 * 60 * 1000;
+const QUERY_CACHE_TTL_MS = 60 * 1000;
 const LOW_SIGNAL_TAGS = new Set([
   "internal",
   "trending",
@@ -136,6 +142,27 @@ function sanitizeTags(tags: string[]): string[] {
 }
 
 const exploreCache = new Map<string, ExploreCacheEnvelope>();
+const queryCache = new Map<string, AsyncCacheEnvelope<unknown>>();
+
+function withQueryCache<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const cached = queryCache.get(key) as AsyncCacheEnvelope<T> | undefined;
+  if (cached && now - cached.savedAt <= QUERY_CACHE_TTL_MS) {
+    return cached.promise;
+  }
+
+  const promise = loader().catch((error) => {
+    queryCache.delete(key);
+    throw error;
+  });
+
+  queryCache.set(key, {
+    savedAt: now,
+    promise,
+  });
+
+  return promise;
+}
 
 function getExploreCacheKey(kind: "trending" | "personalized", cityHint: string, taste?: TasteProfile) {
   const base = `${kind}:${normalize(cityHint) || "nearby"}`;
@@ -265,35 +292,38 @@ function rowMatchesCity(row: Pick<InternalEventRow, "city" | "location">, cityHi
 }
 
 async function fetchUpcomingEventRows(limit: number, cityHint: string): Promise<InternalEventRow[]> {
-  const nowIso = new Date().toISOString();
-  const selectClause =
-    "id,title,location,city,event_date,event_end_date,image_url,description,event_source,moderation_status,ticket_url";
+  const cacheKey = `upcoming:${limit}:${normalize(cityHint) || "nearby"}`;
+  return withQueryCache(cacheKey, async () => {
+    const nowIso = new Date().toISOString();
+    const selectClause =
+      "id,title,location,city,event_date,event_end_date,image_url,description,event_source,moderation_status,ticket_url";
 
-  const normalizedCity = cityHint.trim();
-  if (normalizedCity) {
-    const { data: cityRows, error: cityError } = await supabase
+    const normalizedCity = cityHint.trim();
+    if (normalizedCity) {
+      const { data: cityRows, error: cityError } = await supabase
+        .from("events")
+        .select(selectClause)
+        .ilike("city", `%${normalizedCity}%`)
+        .or(`event_end_date.gte.${nowIso},and(event_end_date.is.null,event_date.gte.${nowIso})`)
+        .order("event_date", { ascending: true })
+        .limit(limit);
+
+      if (cityError) throw cityError;
+      if ((cityRows ?? []).length > 0) {
+        return cityRows as InternalEventRow[];
+      }
+    }
+
+    const { data, error } = await supabase
       .from("events")
       .select(selectClause)
-      .ilike("city", `%${normalizedCity}%`)
       .or(`event_end_date.gte.${nowIso},and(event_end_date.is.null,event_date.gte.${nowIso})`)
       .order("event_date", { ascending: true })
       .limit(limit);
 
-    if (cityError) throw cityError;
-    if ((cityRows ?? []).length > 0) {
-      return cityRows as InternalEventRow[];
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("events")
-    .select(selectClause)
-    .or(`event_end_date.gte.${nowIso},and(event_end_date.is.null,event_date.gte.${nowIso})`)
-    .order("event_date", { ascending: true })
-    .limit(limit);
-
-  if (error) throw error;
-  return (data ?? []) as InternalEventRow[];
+    if (error) throw error;
+    return (data ?? []) as InternalEventRow[];
+  });
 }
 
 function affinityScore(
@@ -366,19 +396,22 @@ async function getSpotifyTasteProfile(): Promise<TasteProfile> {
 }
 
 async function fetchInternalEvents(cityHint: string): Promise<InternalEventRow[]> {
-  const rows = await fetchUpcomingEventRows(800, cityHint);
+  const cacheKey = `internal:${normalize(cityHint) || "nearby"}`;
+  return withQueryCache(cacheKey, async () => {
+    const rows = await fetchUpcomingEventRows(800, cityHint);
 
-  const nowTs = Date.now();
-  return dedupeEventRows(rows.filter((r) => {
-    if (!isEventVisible(r)) return false;
-    if (!isQualityEventRow(r)) return false;
-    if (!rowMatchesCity(r, cityHint)) return false;
-    const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
-    const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
-    if (Number.isNaN(startTs)) return true;
-    if (Number.isNaN(endTs)) return startTs >= nowTs;
-    return endTs >= nowTs;
-  }));
+    const nowTs = Date.now();
+    return dedupeEventRows(rows.filter((r) => {
+      if (!isEventVisible(r)) return false;
+      if (!isQualityEventRow(r)) return false;
+      if (!rowMatchesCity(r, cityHint)) return false;
+      const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
+      const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
+      if (Number.isNaN(startTs)) return true;
+      if (Number.isNaN(endTs)) return startTs >= nowTs;
+      return endTs >= nowTs;
+    }));
+  });
 }
 
 async function fetchTicketmasterKeywordEvents(

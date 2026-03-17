@@ -1,7 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { queueAnalyticsEvent } from "@/lib/monitoring";
-
-type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
+import { queueAnalyticsEvent, type AnalyticsProps } from "@/lib/analyticsQueue";
 type AnalyticsUser = {
   id: string;
   email?: string | null;
@@ -13,7 +11,11 @@ export function track(event: string, props: AnalyticsProps = {}) {
   const payload = { event, ...props };
 
   try {
-    const w = window as any;
+    const w = window as Window & {
+      dataLayer?: Array<Record<string, unknown>>;
+      gtag?: (command: string, event: string, props?: AnalyticsProps) => void;
+      plausible?: (event: string, options?: { props?: AnalyticsProps }) => void;
+    };
 
     if (Array.isArray(w.dataLayer)) {
       w.dataLayer.push(payload);
@@ -44,7 +46,7 @@ export function track(event: string, props: AnalyticsProps = {}) {
 
 export function identifyAnalyticsUser(user: AnalyticsUser) {
   try {
-    const w = window as any;
+    const w = window;
     const props = Object.fromEntries(
       Object.entries({
         email: user.email ?? undefined,
@@ -66,7 +68,7 @@ export function identifyAnalyticsUser(user: AnalyticsUser) {
 
 export function resetAnalyticsUser() {
   try {
-    const w = window as any;
+    const w = window;
     if (w.posthog?.reset) {
       w.posthog.reset();
       return;

@@ -4,7 +4,6 @@ import { Toaster } from "sonner";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { RequireAuth } from "./components/RequireAuth";
 import { BottomNav } from "./components/BottomNav";
-import { logProductEvent } from "@/lib/productEvents";
 
 const Home = lazy(() => import("./pages/Home").then((m) => ({ default: m.Home })));
 const EventDetails = lazy(() =>
@@ -122,16 +121,18 @@ function AppShell() {
       window.sessionStorage.setItem(storageKey, "1");
     }
 
-    void logProductEvent({
-      eventName: "push_opened",
-      eventId: eventId || null,
-      source: "push",
-      metadata: {
-        notification_id: notificationId || null,
-        push_type: pushType || null,
-        path: location.pathname,
-      },
-    });
+    void import("@/lib/productEvents").then(({ logProductEvent }) =>
+      logProductEvent({
+        eventName: "push_opened",
+        eventId: eventId || null,
+        source: "push",
+        metadata: {
+          notification_id: notificationId || null,
+          push_type: pushType || null,
+          path: location.pathname,
+        },
+      })
+    );
   }, [location.pathname, location.search]);
 
   const hideBottomNav =

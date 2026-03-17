@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, startTransition } from "react";
 import { addDays, endOfDay, format, isSameDay, startOfDay } from "date-fns";
 import { Loader2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { ExploreDatePicker } from "@/app/components/ExploreDatePicker";
-import { Event } from "../../data/mock";
+import type { Event } from "../../data/mock";
 import { supabase } from "@/lib/supabase";
 import { useLocation, useNavigate } from "react-router-dom";
-import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 import { featureFlags } from "@/lib/featureFlags";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
@@ -19,6 +18,35 @@ const exploreCoverStyle = {
   background:
     "radial-gradient(1200px 520px at 20% 20%, rgba(168,85,247,0.55), transparent 55%), radial-gradient(900px 520px at 80% 10%, rgba(236,72,153,0.55), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0))",
 } as const;
+
+function scheduleNonCritical(task: () => void) {
+  if (typeof window === "undefined") {
+    task();
+    return;
+  }
+
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  };
+
+  if (typeof idleWindow.requestIdleCallback === "function") {
+    idleWindow.requestIdleCallback(task, { timeout: 1500 });
+    return;
+  }
+
+  window.setTimeout(task, 0);
+}
+
+function logProductEventLazy(args: {
+  eventName:
+    | "explore_feed_loaded"
+    | "explore_rsvp_click";
+  eventId?: string | null;
+  source?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  return import("@/lib/productEvents").then(({ logProductEvent }) => logProductEvent(args));
+}
 
 type RsvpState = {
   going: boolean;
@@ -205,32 +233,40 @@ export function Explore() {
 
       const merged = mergeEventCollections(friends, personalized, trending, regional);
 
-      setEvents(merged);
-      setFriendEvents(friends);
-      setTrendingEvents(trending);
-      void hydrateExploreRsvpState([...merged, ...friends, ...trending]);
+      startTransition(() => {
+        setEvents(merged);
+        setFriendEvents(friends);
+        setTrendingEvents(trending);
+      });
+      scheduleNonCritical(() => {
+        void hydrateExploreRsvpState(merged);
+      });
 
       if (merged.length === 0 && failedSources.length > 0) {
         toast.error("Some Explore sources failed. Showing what we could recover.");
       }
 
-      void logProductEvent({
-        eventName: "explore_feed_loaded",
-        source: "explore",
-        metadata: {
-          bay_scope: true,
-          feed_mode: feedMode,
-          result_count: merged.length,
-          friend_count: friends.length,
-          trending_count: trending.length,
-          internal_count: merged.filter((event) => sourcePriority(event.eventSource) === 3).length,
-        },
+      scheduleNonCritical(() => {
+        void logProductEventLazy({
+          eventName: "explore_feed_loaded",
+          source: "explore",
+          metadata: {
+            bay_scope: true,
+            feed_mode: feedMode,
+            result_count: merged.length,
+            friend_count: friends.length,
+            trending_count: trending.length,
+            internal_count: merged.filter((event) => sourcePriority(event.eventSource) === 3).length,
+          },
+        });
       });
     } catch (error: any) {
       console.error("Explore load failed:", error);
-      setEvents([]);
-      setFriendEvents([]);
-      setTrendingEvents([]);
+      startTransition(() => {
+        setEvents([]);
+        setFriendEvents([]);
+        setTrendingEvents([]);
+      });
       toast.error("Could not refresh Explore right now.");
     } finally {
       setLoadingEvents(false);
@@ -240,7 +276,9 @@ export function Explore() {
   const hydrateExploreRsvpState = async (items: Event[]) => {
     const internalEventIds = Array.from(new Set(items.map((event) => event.id).filter(isUuid)));
     if (internalEventIds.length === 0) {
-      setRsvpByEventId({});
+      startTransition(() => {
+        setRsvpByEventId({});
+      });
       return;
     }
 
@@ -282,7 +320,9 @@ export function Explore() {
       }
     }
 
-    setRsvpByEventId(next);
+    startTransition(() => {
+      setRsvpByEventId(next);
+    });
   };
 
   useEffect(() => {
@@ -505,7 +545,7 @@ export function Explore() {
       [event.id]: { going: nextGoing, working: true, count: nextCount },
     }));
 
-    void logProductEvent({
+    void logProductEventLazy({
       eventName: "explore_rsvp_click",
       eventId: event.id,
       source: "explore",

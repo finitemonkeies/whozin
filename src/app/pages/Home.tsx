@@ -1,20 +1,24 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Suspense, lazy } from "react";
+import { startTransition } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Calendar, MapPin, Share2, Ticket, Users } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
-import { logProductEvent } from "@/lib/productEvents";
 import { isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { featureFlags } from "@/lib/featureFlags";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
 import { MakeTheMoveHero, TheMoveHero } from "@/app/components/TheMoveHero";
-import { ActivationChecklist } from "@/app/components/ActivationChecklist";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { isEventVisible } from "@/lib/eventVisibility";
 import { useAuth } from "@/app/providers/AuthProvider";
+
+const ActivationChecklist = lazy(() =>
+  import("@/app/components/ActivationChecklist").then((m) => ({ default: m.ActivationChecklist }))
+);
 
 type EventRow = {
   id: string;
@@ -36,6 +40,10 @@ type AttendeeRow = {
     username: string | null;
     avatar_url: string | null;
   } | null;
+};
+
+type SocialEventIdRow = {
+  event_id: string;
 };
 
 const coverStyle = {
@@ -176,17 +184,19 @@ export function Home() {
   }, [authLoading, user?.id]);
 
   const resetSocialState = () => {
-    setFriendIds(new Set());
-    setMyGoing(new Set());
-    setFriendAvatarsByEvent({});
-    setFriendNamesByEvent({});
-    setRecentFriendCueByEvent({});
-    setFriendCounts({});
-    setOthersCounts({});
-    setOthersAvatarsByEvent({});
-    setViewerAvatarByEvent({});
-    setOthersAvatarPoolByEvent({});
-    setRecentCountsByEvent({});
+    startTransition(() => {
+      setFriendIds(new Set());
+      setMyGoing(new Set());
+      setFriendAvatarsByEvent({});
+      setFriendNamesByEvent({});
+      setRecentFriendCueByEvent({});
+      setFriendCounts({});
+      setOthersCounts({});
+      setOthersAvatarsByEvent({});
+      setViewerAvatarByEvent({});
+      setOthersAvatarPoolByEvent({});
+      setRecentCountsByEvent({});
+    });
   };
 
   const hydrateFeedState = ({
@@ -202,8 +212,6 @@ export function Home() {
     friendIds: Set<string>;
     nowTs: number;
   }) => {
-    setEvents(nextEvents);
-
     const visibleEventIds = new Set(nextEvents.map((row) => row.id));
     const filteredAttendees = attendees.filter((row) => visibleEventIds.has(row.event_id));
 
@@ -279,15 +287,26 @@ export function Home() {
       if (mySet.has(eventId)) othersAvatarsMap[eventId] = pool.slice(0, 5);
     }
 
-    setFriendCounts(friendCountsMap);
-    setFriendAvatarsByEvent(friendAvatarsMap);
-    setFriendNamesByEvent(friendNamesMap);
-    setRecentFriendCueByEvent(recentFriendMap);
-    setOthersCounts(othersCountsMap);
-    setViewerAvatarByEvent(viewerAvatarMap);
-    setOthersAvatarPoolByEvent(othersPoolMap);
-    setOthersAvatarsByEvent(othersAvatarsMap);
-    setRecentCountsByEvent(recentCountsMap);
+    startTransition(() => {
+      setEvents(nextEvents);
+      setFriendCounts(friendCountsMap);
+      setFriendAvatarsByEvent(friendAvatarsMap);
+      setFriendNamesByEvent(friendNamesMap);
+      setRecentFriendCueByEvent(recentFriendMap);
+      setOthersCounts(othersCountsMap);
+      setViewerAvatarByEvent(viewerAvatarMap);
+      setOthersAvatarPoolByEvent(othersPoolMap);
+      setOthersAvatarsByEvent(othersAvatarsMap);
+      setRecentCountsByEvent(recentCountsMap);
+    });
+  };
+
+  const commitFeedRows = (nextEvents: EventRow[], nextFeedMode: "social" | "fallback") => {
+    startTransition(() => {
+      setEvents(nextEvents);
+      setFeedMode(nextFeedMode);
+      setLoading(false);
+    });
   };
 
   const loadFallbackFeed = async (uid: string, fset: Set<string>, nowTs: number) => {
@@ -321,6 +340,8 @@ export function Home() {
       return;
     }
 
+    commitFeedRows(rows, "fallback");
+
     const eventIds = rows.map((event) => event.id);
     const { data: fallbackAttendees, error: attendeeErr } = await supabase
       .from("attendees")
@@ -330,11 +351,8 @@ export function Home() {
     if (attendeeErr) {
       console.error(attendeeErr);
       toast.error("Failed to load fallback crowd");
-      setEvents(rows);
       resetSocialState();
       setFriendIds(fset);
-      setFeedMode("fallback");
-      setLoading(false);
       return;
     }
 
@@ -345,8 +363,6 @@ export function Home() {
       friendIds: fset,
       nowTs,
     });
-    setFeedMode("fallback");
-    setLoading(false);
   };
 
   const load = async () => {
@@ -372,7 +388,7 @@ export function Home() {
     if (socialUserIds.length > 0) {
       const { data, error } = await supabase
         .from("attendees")
-        .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
+        .select("event_id")
         .in("user_id", socialUserIds);
 
       if (error) {
@@ -384,7 +400,7 @@ export function Home() {
         return;
       }
 
-      const socialAttendees = (data ?? []) as AttendeeRow[];
+      const socialAttendees = (data ?? []) as SocialEventIdRow[];
       const socialEventIds = uniqKeepOrder(
         socialAttendees.map((row) => row.event_id).filter(Boolean)
       );
@@ -394,18 +410,17 @@ export function Home() {
         return;
       }
 
-      const [{ data: eventData, error: eventErr }, { data: eventAttData, error: eventAttErr }] =
-        await Promise.all([
-          supabase
-            .from("events")
-            .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
-            .in("id", socialEventIds)
-            .order("event_date", { ascending: true }),
-          supabase
-            .from("attendees")
-            .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
-            .in("event_id", socialEventIds),
-        ]);
+      const eventRowsPromise = supabase
+        .from("events")
+        .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+        .in("id", socialEventIds)
+        .order("event_date", { ascending: true });
+      const eventAttendeesPromise = supabase
+        .from("attendees")
+        .select("event_id,user_id,created_at, profiles(display_name,username,avatar_url)")
+        .in("event_id", socialEventIds);
+
+      const { data: eventData, error: eventErr } = await eventRowsPromise;
 
       if (eventErr) {
         console.error(eventErr);
@@ -417,18 +432,19 @@ export function Home() {
         return;
       }
 
-      if (eventAttErr) {
-        console.error(eventAttErr);
-        setEvents([]);
-        resetSocialState();
-        setFeedMode("social");
-        setLoading(false);
-        return;
-      }
-
       const rows = ((eventData ?? []) as EventRow[]).filter(
         (e) => isEventVisible(e) && isEventUpcomingOrOngoing(e, nowTs)
       );
+      commitFeedRows(rows, "social");
+
+      const { data: eventAttData, error: eventAttErr } = await eventAttendeesPromise;
+
+      if (eventAttErr) {
+        console.error(eventAttErr);
+        resetSocialState();
+        return;
+      }
+
       hydrateFeedState({
         events: rows,
         attendees: (eventAttData ?? []) as AttendeeRow[],
@@ -436,8 +452,6 @@ export function Home() {
         friendIds: fset,
         nowTs,
       });
-      setFeedMode("social");
-      setLoading(false);
       return;
     }
     await loadFallbackFeed(uid, fset, nowTs);
@@ -622,7 +636,11 @@ export function Home() {
       </div>
 
       <div className="space-y-4 px-4 pt-4 sm:px-5 sm:pt-5">
-        {viewerId ? <ActivationChecklist /> : null}
+        {viewerId ? (
+          <Suspense fallback={null}>
+            <ActivationChecklist />
+          </Suspense>
+        ) : null}
 
         {topMoveSignal && topMoveEvent ? (
           <TheMoveHero
@@ -718,15 +736,17 @@ export function Home() {
                     eventId: event.id,
                     label: moveRanking.signalsById[event.id].label,
                   });
-                  void logProductEvent({
-                    eventName: "the_move_click",
-                    eventId: event.id,
-                    source: "home",
-                    metadata: {
-                      placement: "home_feed_card",
-                      label: moveRanking.signalsById[event.id].label,
-                    },
-                  });
+                  void import("@/lib/productEvents").then(({ logProductEvent }) =>
+                    logProductEvent({
+                      eventName: "the_move_click",
+                      eventId: event.id,
+                      source: "home",
+                      metadata: {
+                        placement: "home_feed_card",
+                        label: moveRanking.signalsById[event.id].label,
+                      },
+                    })
+                  );
                 }
               }}
               className="group block overflow-hidden rounded-[26px] border border-white/10 bg-zinc-900/70 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition duration-200 hover:border-white/20 hover:-translate-y-0.5"

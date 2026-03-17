@@ -11,6 +11,20 @@ export function BottomNav() {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | null = null;
+
+    const schedule = (task: () => void) => {
+      const idleWindow = window as Window & {
+        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      };
+
+      if (typeof idleWindow.requestIdleCallback === "function") {
+        idleWindow.requestIdleCallback(task, { timeout: 1500 });
+        return;
+      }
+
+      timeoutId = window.setTimeout(task, 250);
+    };
 
     const load = async () => {
       try {
@@ -25,10 +39,13 @@ export function BottomNav() {
       void load();
     };
 
-    void load();
+    schedule(() => {
+      void load();
+    });
     window.addEventListener("whozin:notifications-updated", onUpdated);
     return () => {
       cancelled = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
       window.removeEventListener("whozin:notifications-updated", onUpdated);
     };
   }, []);

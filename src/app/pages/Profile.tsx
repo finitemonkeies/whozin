@@ -1,16 +1,16 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { Suspense, lazy } from "react";
 import { Settings, Share2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
 import { createReferralInviteLink } from "@/lib/referrals";
-import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 import { isEventVisible } from "@/lib/eventVisibility";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { featureFlags } from "@/lib/featureFlags";
-import { NotificationsPanel } from "@/app/components/NotificationsPanel";
+import { useAuth } from "@/app/providers/AuthProvider";
 import {
   Drawer,
   DrawerContent,
@@ -19,6 +19,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/app/components/ui/drawer";
+
+const NotificationsPanel = lazy(() =>
+  import("@/app/components/NotificationsPanel").then((m) => ({ default: m.NotificationsPanel }))
+);
 
 type ProfileRow = {
   id: string;
@@ -94,6 +98,7 @@ function Stat({
 
 export function Profile() {
   const location = useLocation();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [inviteDrawerOpen, setInviteDrawerOpen] = useState(false);
   const [profileInviteUrl, setProfileInviteUrl] = useState("");
@@ -126,65 +131,41 @@ export function Profile() {
 
   const load = async () => {
     setLoading(true);
-
-    const {
-      data: { session },
-      error: sessErr,
-    } = await supabase.auth.getSession();
-
-    if (sessErr) console.error(sessErr);
-
-    const userId = session?.user?.id;
+    const userId = user?.id ?? null;
     if (!userId) {
       toast.error("Not signed in");
       setLoading(false);
       return;
     }
 
-    // Profile row
-    const { data: p, error: pErr } = await supabase
-      .from("profiles")
-      .select("id,username,avatar_url")
-      .eq("id", userId)
-      .single();
+    const [profileRes, friendIdsRes, countRes, attendeeRowsRes] = await Promise.all([
+      supabase.from("profiles").select("id,username,avatar_url").eq("id", userId).single(),
+      supabase.rpc("get_friend_ids"),
+      supabase.from("attendees").select("user_id", { head: true, count: "exact" }).eq("user_id", userId),
+      supabase.from("attendees").select("event_id").eq("user_id", userId),
+    ]);
 
-    if (pErr) {
-      console.error(pErr);
-      toast.error("Failed to load profile", { description: pErr.message });
+    if (profileRes.error) {
+      console.error(profileRes.error);
+      toast.error("Failed to load profile", { description: profileRes.error.message });
       setLoading(false);
       return;
     }
 
-    setProfile(p as ProfileRow);
+    setProfile(profileRes.data as ProfileRow);
+    if (friendIdsRes.error) console.error(friendIdsRes.error);
+    setFriendsCount(Array.isArray(friendIdsRes.data) ? friendIdsRes.data.length : 0);
+    setEventsCount(countRes.count ?? 0);
 
-    // Friends count
-    const { data: friendIds, error: fErr } = await supabase.rpc("get_friend_ids");
-    if (fErr) console.error(fErr);
-    setFriendsCount(Array.isArray(friendIds) ? friendIds.length : 0);
-
-    // Events count (total RSVPs)
-    const { count } = await supabase
-      .from("attendees")
-      .select("*", { head: true, count: "exact" })
-      .eq("user_id", userId);
-
-    setEventsCount(count ?? 0);
-
-    // Upcoming events
-    const { data: attendeeRows, error: aErr } = await supabase
-      .from("attendees")
-      .select("event_id")
-      .eq("user_id", userId);
-
-    if (aErr) {
-      console.error(aErr);
+    if (attendeeRowsRes.error) {
+      console.error(attendeeRowsRes.error);
       setUpcoming([]);
       setPastEvents([]);
       setLoading(false);
       return;
     }
 
-    const eventIds = (attendeeRows ?? []).map((r: any) => r.event_id).filter(Boolean);
+    const eventIds = (attendeeRowsRes.data ?? []).map((r: any) => r.event_id).filter(Boolean);
 
     if (eventIds.length === 0) {
       setUpcoming([]);
@@ -223,8 +204,9 @@ export function Profile() {
   };
 
   useEffect(() => {
+    if (!user?.id) return;
     void load();
-  }, []);
+  }, [user?.id]);
 
   const ensureProfileInviteUrl = async () => {
     if (profileInviteUrl) return profileInviteUrl;
@@ -298,11 +280,13 @@ export function Profile() {
             text: "See who is going and figure out the move on Whozin.",
             url,
           });
-          await logProductEvent({
-            eventName: "invite_sent",
-            source: "profile_share",
-            metadata: { channel: "native_share" },
-          });
+          await import("@/lib/productEvents").then(({ logProductEvent }) =>
+            logProductEvent({
+              eventName: "invite_sent",
+              source: "profile_share",
+              metadata: { channel: "native_share" },
+            })
+          );
           track("invite_share", { source: "profile_share", channel: "native_share" });
           toast.success("Invite shared");
           return;
@@ -312,11 +296,13 @@ export function Profile() {
       }
 
       await copyInviteUrl(url);
-      await logProductEvent({
-        eventName: "invite_link_copied",
-        source: "profile_share",
-        metadata: { channel: "copy_fallback" },
-      });
+      await import("@/lib/productEvents").then(({ logProductEvent }) =>
+        logProductEvent({
+          eventName: "invite_link_copied",
+          source: "profile_share",
+          metadata: { channel: "copy_fallback" },
+        })
+      );
       track("invite_copy", { source: "profile_share", channel: "copy_fallback" });
       toast.success("Link copied");
     } catch (err: any) {
@@ -331,17 +317,21 @@ export function Profile() {
     try {
       const url = await ensureProfileInviteUrl();
       await copyInviteUrl(url);
-      await logProductEvent({
-        eventName: "invite_link_copied",
-        source: "profile_share",
-        metadata: { channel: "copy" },
-      });
+      await import("@/lib/productEvents").then(({ logProductEvent }) =>
+        logProductEvent({
+          eventName: "invite_link_copied",
+          source: "profile_share",
+          metadata: { channel: "copy" },
+        })
+      );
       track("invite_copy", { source: "profile_share", channel: "copy" });
-      await logProductEvent({
-        eventName: "invite_sent",
-        source: "profile_share",
-        metadata: { channel: "copy" },
-      });
+      await import("@/lib/productEvents").then(({ logProductEvent }) =>
+        logProductEvent({
+          eventName: "invite_sent",
+          source: "profile_share",
+          metadata: { channel: "copy" },
+        })
+      );
       track("invite_share", { source: "profile_share", channel: "copy" });
       toast.success("Link copied");
     } catch (err: any) {
@@ -481,12 +471,14 @@ export function Profile() {
         <div className="mt-10 h-px bg-white/10" />
 
         <div className="mt-8">
-          <NotificationsPanel
-            compact
-            title="The Loop"
-            subtitle="Your inbox for friend movement, momentum, and one-friend nudges."
-            limit={6}
-          />
+          <Suspense fallback={null}>
+            <NotificationsPanel
+              compact
+              title="The Loop"
+              subtitle="Your inbox for friend movement, momentum, and one-friend nudges."
+              limit={6}
+            />
+          </Suspense>
         </div>
 
         <div className="mt-10 h-px bg-white/10" />

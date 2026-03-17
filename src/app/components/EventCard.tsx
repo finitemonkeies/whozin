@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, MapPin, Share2, Ticket, Users } from "lucide-react";
 import type { Event } from "../../data/mock";
-import { logProductEvent } from "@/lib/productEvents";
 import { track } from "@/lib/analytics";
 import type { MoveSignal } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
@@ -48,6 +47,15 @@ const FALLBACK_ART_STYLES = [
     accentClass: "text-rose-100",
   },
 ];
+
+function logProductEventLazy(
+  ...args: Parameters<typeof import("@/lib/productEvents")["then"] extends never ? never : never>
+) {
+  return import("@/lib/productEvents").then(({ logProductEvent }) =>
+    // @ts-expect-error typed through call sites below
+    logProductEvent(...args)
+  );
+}
 
 function pickFallbackArt(seed: string) {
   const value = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -109,7 +117,7 @@ export function EventCard({
     if (didTrackImpression.current) return;
     didTrackImpression.current = true;
 
-    void logProductEvent({
+    void logProductEventLazy({
       eventName: "explore_event_impression",
       eventId: canOpenDetails ? event.id : null,
       source: "explore",
@@ -132,7 +140,7 @@ export function EventCard({
       score: moveSignal.score,
     });
 
-    void logProductEvent({
+    void logProductEventLazy({
       eventName: "the_move_impression",
       eventId: canOpenDetails ? event.id : null,
       source: surface,
@@ -152,7 +160,7 @@ export function EventCard({
 
   const handleDetailClick = () =>
     void Promise.all([
-      logProductEvent({
+      logProductEventLazy({
         eventName: "explore_event_click",
         eventId: canOpenDetails ? event.id : null,
         source: "explore",
@@ -178,7 +186,7 @@ export function EventCard({
           : null
       ),
       moveSignal
-        ? logProductEvent({
+        ? logProductEventLazy({
             eventName: "the_move_click",
             eventId: canOpenDetails ? event.id : null,
             source: surface,
@@ -204,7 +212,7 @@ export function EventCard({
   };
 
   const handleBuyClick = () =>
-    void logProductEvent({
+    void logProductEventLazy({
       eventName: "explore_buy_ticket_click",
       eventId: canOpenDetails ? event.id : null,
       source: "explore",
