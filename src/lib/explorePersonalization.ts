@@ -1,6 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import type { Event } from "@/data/mock";
-import { canSurfaceSource, isEventVisible } from "@/lib/eventVisibility";
+import {
+  canSurfaceSource,
+  getSurfacePriority,
+  shouldSurfaceOnPrimaryFeeds,
+} from "@/lib/eventVisibility";
 
 type InternalEventRow = {
   id: string;
@@ -263,11 +267,7 @@ function locationMatchesCity(eventLocation: string | null | undefined, cityHint:
 }
 
 function sourcePriority(source: string | null | undefined): number {
-  const normalized = normalize(source);
-  if (!normalized || normalized === "internal") return 3;
-  if (normalized === "19hz") return 2;
-  if (normalized.startsWith("ticketmaster")) return 1;
-  return 1;
+  return getSurfacePriority(source);
 }
 
 function formatEventLocation(location: string | null | undefined, city: string | null | undefined): string {
@@ -401,10 +401,10 @@ async function fetchInternalEvents(cityHint: string): Promise<InternalEventRow[]
     const rows = await fetchUpcomingEventRows(800, cityHint);
 
     const nowTs = Date.now();
-    return dedupeEventRows(rows.filter((r) => {
-      if (!isEventVisible(r)) return false;
-      if (!isQualityEventRow(r)) return false;
-      if (!rowMatchesCity(r, cityHint)) return false;
+  return dedupeEventRows(rows.filter((r) => {
+    if (!shouldSurfaceOnPrimaryFeeds(r)) return false;
+    if (!isQualityEventRow(r)) return false;
+    if (!rowMatchesCity(r, cityHint)) return false;
       const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
       const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;
       if (Number.isNaN(startTs)) return true;
@@ -685,7 +685,7 @@ export async function loadTrendingExplore(cityHint: string): Promise<Recommendat
   const nowTs = Date.now();
   const internalRows = await fetchUpcomingEventRows(800, cityHint);
   const upcoming = internalRows.filter((r) => {
-    if (!isEventVisible(r)) return false;
+    if (!shouldSurfaceOnPrimaryFeeds(r)) return false;
     if (!isQualityEventRow(r)) return false;
     const startTs = r.event_date ? new Date(r.event_date).getTime() : NaN;
     const endTs = r.event_end_date ? new Date(r.event_end_date).getTime() : startTs;

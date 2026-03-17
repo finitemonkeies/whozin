@@ -13,6 +13,7 @@ import { formatRetrySeconds, getRateLimitStatus } from "@/lib/rateLimit";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveHero } from "@/app/components/TheMoveHero";
 import { useAuth } from "@/app/providers/AuthProvider";
+import { getSurfacePriority } from "@/lib/eventVisibility";
 
 const exploreCoverStyle = {
   background:
@@ -69,10 +70,7 @@ function eventTimestamp(event: Event): number {
 }
 
 function sourcePriority(source?: string) {
-  const normalized = (source ?? "").trim().toLowerCase();
-  if (!normalized || normalized === "internal") return 3;
-  if (normalized === "19hz" || normalized === "ra") return 2;
-  return 1;
+  return getSurfacePriority(source);
 }
 
 function mergeEventCollections(...collections: Event[][]): Event[] {

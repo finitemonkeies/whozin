@@ -13,7 +13,7 @@ import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
 import { MakeTheMoveHero, TheMoveHero } from "@/app/components/TheMoveHero";
 import { shareInviteLink } from "@/lib/inviteSharing";
-import { isEventVisible } from "@/lib/eventVisibility";
+import { getSurfacePriority, isEventVisible, shouldSurfaceOnPrimaryFeeds } from "@/lib/eventVisibility";
 import { useAuth } from "@/app/providers/AuthProvider";
 
 const ActivationChecklist = lazy(() =>
@@ -27,6 +27,7 @@ type EventRow = {
   event_date: string | null;
   event_end_date: string | null;
   image_url: string | null;
+  ticket_url?: string | null;
   event_source?: string | null;
   moderation_status?: string | null;
 };
@@ -312,7 +313,7 @@ export function Home() {
   const loadFallbackFeed = async (uid: string, fset: Set<string>, nowTs: number) => {
     const { data: fallbackEvents, error: eventErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+      .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status")
       .order("event_date", { ascending: true })
       .limit(24);
 
@@ -328,7 +329,7 @@ export function Home() {
     }
 
     const rows = ((fallbackEvents ?? []) as EventRow[]).filter(
-      (event) => isEventVisible(event) && isEventUpcomingOrOngoing(event, nowTs)
+      (event) => shouldSurfaceOnPrimaryFeeds(event) && isEventUpcomingOrOngoing(event, nowTs)
     );
 
     if (rows.length === 0) {
@@ -412,7 +413,7 @@ export function Home() {
 
       const eventRowsPromise = supabase
         .from("events")
-        .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+        .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status")
         .in("id", socialEventIds)
         .order("event_date", { ascending: true });
       const eventAttendeesPromise = supabase
@@ -488,6 +489,9 @@ export function Home() {
       const bTs = new Date(b.event_date ?? 0).getTime();
       if (aMove !== bMove) return bMove - aMove;
       if (aFriends !== bFriends) return bFriends - aFriends;
+      const aSource = getSurfacePriority(a.event_source);
+      const bSource = getSurfacePriority(b.event_source);
+      if (aSource !== bSource) return bSource - aSource;
       if (aTs !== bTs) return aTs - bTs;
       return (othersCounts[b.id] ?? 0) - (othersCounts[a.id] ?? 0);
     });
