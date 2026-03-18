@@ -38,10 +38,10 @@ function isUuid(value: string | null | undefined): value is string {
 }
 
 function displayName(profile: InviteProfile | null, fallbackHandle: string) {
-  const name = profile?.display_name?.trim();
-  if (name) return name;
   const username = profile?.username?.trim();
   if (username) return `@${username}`;
+  const name = profile?.display_name?.trim();
+  if (name) return name;
   return `@${fallbackHandle}`;
 }
 

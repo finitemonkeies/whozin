@@ -307,7 +307,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const inviterLabel = profile?.display_name?.trim() || username;
+  const inviterLabel = `@${username}`;
   const source = (referral?.source ?? "").trim() || "share_link";
   const redirectUrl = new URL(`/add/@${username}`, `${origin}/`);
   redirectUrl.searchParams.set("ref", token);
