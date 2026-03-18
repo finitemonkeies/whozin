@@ -37,52 +37,6 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
-function buildShareText(eventTitle?: string | null) {
-  const title = (eventTitle ?? "").trim();
-  if (!title) {
-    return {
-      title: "Join me on Whozin",
-      text: "Get on Whozin so we can see who is actually going before we commit.",
-    };
-  }
-
-  return {
-    title: `${title} might be the move`,
-    text: `I am thinking ${title} might be the move. Check who is in on Whozin:`,
-  };
-}
-
-function buildShareTextForSource(source: InviteShareArgs["source"], eventTitle?: string | null) {
-  const title = (eventTitle ?? "").trim();
-
-  if (!title) {
-    if (source === "profile_share") {
-      return {
-        title: "Get on Whozin",
-        text: "Join my circle on Whozin so we can figure out the move faster.",
-      };
-    }
-
-    return buildShareText(eventTitle);
-  }
-
-  if (source === "rsvp_share") {
-    return {
-      title: `${title} might be the move`,
-      text: `I locked into ${title}. Get on Whozin and see who else is going:`,
-    };
-  }
-
-  if (source === "event_detail_share" || source === "share_link") {
-    return {
-      title: `${title} might be the move`,
-      text: `This looks like the move tonight. See who is actually in on Whozin:`,
-    };
-  }
-
-  return buildShareText(eventTitle);
-}
-
 export async function copyInviteLink({
   eventId,
   eventTitle,
@@ -116,14 +70,11 @@ export async function shareInviteLink({
   source,
 }: InviteShareArgs): Promise<"native_share" | "copy_fallback" | "share_canceled"> {
   const created = await createReferralInviteLink({ eventId, source });
-  const sharePayload = buildShareTextForSource(source, eventTitle);
   let channel: "native_share" | "copy_fallback" | "share_canceled" = "share_canceled";
 
   if (navigator.share) {
     try {
       await navigator.share({
-        title: sharePayload.title,
-        text: sharePayload.text,
         url: created.url,
       });
       channel = "native_share";

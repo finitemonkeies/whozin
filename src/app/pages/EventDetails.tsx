@@ -662,8 +662,6 @@ export function EventDetails() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join me at ${event.title}`,
-          text: `I'm going to ${event.title} on Whozin. Join me here:`,
           url,
         });
         channel = "native_share";

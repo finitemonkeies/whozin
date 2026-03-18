@@ -142,10 +142,7 @@ export async function createReferralInviteLink(args: {
   });
   if (error) throw error;
 
-  const url = new URL(buildSiteUrl(`/share/@${username}`));
-  url.searchParams.set("ref", token);
-  url.searchParams.set("src", args.source);
-  if (cleanEventId) url.searchParams.set("event", cleanEventId);
+  const url = new URL(buildSiteUrl(`/i/${token}`));
 
   return { token, url: url.toString() };
 }

@@ -276,8 +276,6 @@ export function Profile() {
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "Join me on Whozin",
-            text: "See who is going and figure out the move on Whozin.",
             url,
           });
           await import("@/lib/productEvents").then(({ logProductEvent }) =>
