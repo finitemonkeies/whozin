@@ -39,6 +39,11 @@ function toNullableTrimmed(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function isIgnorableClaimReferralError(error: unknown): boolean {
+  const message = (error as { message?: string } | null)?.message?.toLowerCase() ?? "";
+  return message.includes("event_id is ambiguous");
+}
+
 export function storePendingReferral(params: {
   token: string;
   eventId?: string | null;
@@ -166,7 +171,13 @@ export async function claimPendingReferral(
     p_event_id: cleanEventId,
     p_source: source,
   });
-  if (error) throw error;
+  if (error) {
+    if (isIgnorableClaimReferralError(error)) {
+      clearPendingReferral();
+      return null;
+    }
+    throw error;
+  }
 
   const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
   if (!row) {
@@ -224,5 +235,8 @@ export async function registerReferralOpen(params: {
     p_source: source,
   });
 
-  if (error) throw error;
+  if (error) {
+    if (isIgnorableClaimReferralError(error)) return;
+    throw error;
+  }
 }
