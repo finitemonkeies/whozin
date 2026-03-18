@@ -9,6 +9,33 @@ import { toast } from "sonner";
 import { resolveFirstSessionRoute } from "@/lib/firstSessionRoute";
 import { syncPendingMarketingEmailPreference } from "@/lib/emailPreferences";
 
+type ProfileGate = {
+  username: string | null;
+  avatar_url: string | null;
+  onboarding_complete: boolean;
+};
+
+async function resolvePostAuthRoute(redirect: string, userId: string): Promise<string> {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("username,avatar_url,onboarding_complete")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const needsSetup =
+    !!error ||
+    !profile ||
+    !((profile as ProfileGate).username?.trim()) ||
+    !((profile as ProfileGate).avatar_url?.trim()) ||
+    (profile as ProfileGate).onboarding_complete !== true;
+
+  if (needsSetup) {
+    return `/setup?redirect=${encodeURIComponent(redirect)}`;
+  }
+
+  return resolveFirstSessionRoute(redirect);
+}
+
 /**
  * Central OAuth landing page.
  * Supabase parses the URL and exchanges the code automatically (detectSessionInUrl: true).
@@ -54,11 +81,9 @@ export default function AuthCallback() {
               await syncSpotifyTasteFromSession().catch(() => null);
             }
 
-            const redirect = sanitizeRedirectTarget(
-              localStorage.getItem("whozin_post_auth_redirect")
-            );
+            const redirect = sanitizeRedirectTarget(localStorage.getItem("whozin_post_auth_redirect"));
             localStorage.removeItem("whozin_post_auth_redirect");
-            const nextRoute = await resolveFirstSessionRoute(redirect);
+            const nextRoute = await resolvePostAuthRoute(redirect, data.session.user.id);
             track("auth_callback_success", { redirect: nextRoute });
             navigate(nextRoute, { replace: true });
             return;
