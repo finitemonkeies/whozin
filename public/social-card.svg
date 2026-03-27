@@ -1,86 +1,51 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="140" y1="90" x2="1080" y2="560" gradientUnits="userSpaceOnUse">
+    <linearGradient id="whozinBg" x1="140" y1="84" x2="1074" y2="568" gradientUnits="userSpaceOnUse">
       <stop stop-color="#09090B"/>
       <stop offset="1" stop-color="#000000"/>
     </linearGradient>
-    <radialGradient id="pinkGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(245 145) rotate(35) scale(350 260)">
-      <stop stop-color="#DB2777" stop-opacity="0.85"/>
+    <radialGradient id="pinkGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(890 160) rotate(140) scale(410 290)">
+      <stop stop-color="#DB2777" stop-opacity="0.75"/>
       <stop offset="1" stop-color="#DB2777" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="purpleGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(965 135) rotate(145) scale(380 260)">
-      <stop stop-color="#9333EA" stop-opacity="0.82"/>
-      <stop offset="1" stop-color="#9333EA" stop-opacity="0"/>
+    <radialGradient id="violetGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(280 500) rotate(20) scale(360 260)">
+      <stop stop-color="#A855F7" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#A855F7" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="tile" x1="0" y1="0" x2="132" y2="132" gradientUnits="userSpaceOnUse">
+    <linearGradient id="whozinTile" x1="0" y1="0" x2="132" y2="132" gradientUnits="userSpaceOnUse">
       <stop stop-color="#EC4899"/>
+      <stop offset="0.5" stop-color="#A855F7"/>
       <stop offset="1" stop-color="#9333EA"/>
     </linearGradient>
-    <filter id="blurLarge" x="-120" y="-120" width="1440" height="870" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feGaussianBlur stdDeviation="60"/>
-    </filter>
-    <filter id="shadow" x="96" y="136" width="184" height="184" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feOffset dy="18"/>
-      <feGaussianBlur stdDeviation="16"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0.862745 0 0 0 0 0.152941 0 0 0 0 0.466667 0 0 0 0.32 0"/>
-      <feBlend in2="SourceGraphic" mode="normal"/>
-    </filter>
   </defs>
 
-  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#whozinBg)"/>
+  <circle cx="890" cy="160" r="230" fill="url(#pinkGlow)"/>
+  <circle cx="280" cy="500" r="190" fill="url(#violetGlow)"/>
 
-  <g filter="url(#blurLarge)">
-    <circle cx="245" cy="145" r="190" fill="url(#pinkGlow)"/>
-    <circle cx="965" cy="135" r="220" fill="url(#purpleGlow)"/>
+  <g opacity="0.6">
+    <rect x="724" y="112" width="96" height="96" rx="48" fill="url(#whozinTile)"/>
+    <rect x="788" y="124" width="96" height="96" rx="48" fill="url(#whozinTile)"/>
+    <rect x="852" y="136" width="96" height="96" rx="48" fill="url(#whozinTile)"/>
+    <rect x="916" y="148" width="96" height="96" rx="48" fill="url(#whozinTile)"/>
+    <text x="760" y="172" fill="#FFFFFF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">S</text>
+    <text x="824" y="184" fill="#FFFFFF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">M</text>
+    <text x="888" y="196" fill="#FFFFFF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">A</text>
+    <text x="953" y="208" fill="#FFFFFF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">J</text>
   </g>
 
-  <circle cx="1030" cy="510" r="150" fill="#3B82F6" fill-opacity="0.12"/>
-  <circle cx="160" cy="548" r="170" fill="#A855F7" fill-opacity="0.08"/>
+  <rect x="86" y="84" width="1028" height="462" rx="36" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="134" y="138" width="132" height="132" rx="30" fill="url(#whozinTile)"/>
+  <path d="M154 162H182L198 241L214 162H240L256 241L272 162H300L277 289H249L224 193L199 289H171L154 162Z" fill="#FFFFFF"/>
 
-  <rect x="68" y="68" width="1064" height="494" rx="36" fill="white" fill-opacity="0.03" stroke="white" stroke-opacity="0.08"/>
-  <rect x="104" y="104" width="992" height="422" rx="30" fill="#18181B" fill-opacity="0.64" stroke="white" stroke-opacity="0.08"/>
-
-  <g opacity="0.18">
-    <path d="M104 222H1096" stroke="white" stroke-opacity="0.32"/>
-    <path d="M104 304H1096" stroke="white" stroke-opacity="0.22"/>
-    <path d="M104 386H1096" stroke="white" stroke-opacity="0.16"/>
-    <path d="M272 104V526" stroke="white" stroke-opacity="0.12"/>
-  </g>
-
-  <g filter="url(#shadow)">
-    <rect x="122" y="162" width="132" height="132" rx="32" fill="url(#tile)"/>
-    <path d="M196.193 188L160.339 229.274H184.66L176.201 268L214.942 222.226H189.937L196.193 188Z" fill="white"/>
-  </g>
-
-  <text x="306" y="226" fill="white" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-0.03em">
-    Whozin
+  <text x="134" y="344" fill="#71717A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="0.26em">PRIVATE BY DEFAULT</text>
+  <text x="134" y="416" fill="#FFFFFF" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-0.04em">
+    12 friends are going
   </text>
-  <text x="308" y="302" fill="#D4D4D8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="500">
-    See who's going before you go.
+  <text x="134" y="492" fill="#D4D4D8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="500">
+    Your crew is going to Subtronics tonight.
   </text>
-
-  <g>
-    <rect x="308" y="352" width="252" height="52" rx="26" fill="url(#tile)"/>
-    <text x="346" y="386" fill="white" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">
-      Private by default
-    </text>
-  </g>
-
-  <g>
-    <rect x="578" y="352" width="210" height="52" rx="26" fill="white" fill-opacity="0.06" stroke="white" stroke-opacity="0.12"/>
-    <text x="613" y="386" fill="#F4F4F5" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="600">
-      Social proof
-    </text>
-  </g>
-
-  <g>
-    <rect x="806" y="352" width="192" height="52" rx="26" fill="white" fill-opacity="0.06" stroke="white" stroke-opacity="0.12"/>
-    <text x="850" y="386" fill="#F4F4F5" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="600">
-      Nights out
-    </text>
-  </g>
-
-  <text x="308" y="458" fill="#A1A1AA" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="500">
-    The private social layer for live events.
+  <text x="134" y="536" fill="#A1A1AA" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" font-weight="500">
+    See who&apos;s going before you go.
   </text>
 </svg>

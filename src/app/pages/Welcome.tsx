@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { supabase } from "../../lib/supabase";
 import { sanitizeRedirectTarget } from "@/lib/redirect";
-import { WhozinLogo } from "../components/WhozinLogo";
+import { WhozinLockup, WhozinLogo } from "../components/WhozinLogo";
 
 function useQuery() {
   const { search } = useLocation();
@@ -104,42 +104,60 @@ export function Welcome() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="whozin-brand-shell min-h-screen text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
       {/* Background Gradients */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/20 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-pink-600/20 rounded-full blur-[100px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-violet-500/20 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-pink-500/20 rounded-full blur-[120px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(10,10,10,0.16),rgba(0,0,0,0.68))]" />
       </div>
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-sm z-10 flex flex-col items-center"
+        className="whozin-brand-card w-full max-w-sm z-10 flex flex-col items-center rounded-[32px] px-6 py-8"
       >
-        {/* Logo */}
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+          Private by default
+        </div>
         <div className="mb-8">
           <WhozinLogo />
         </div>
 
-        {/* Headlines */}
-        <h1 className="text-4xl font-bold text-center mb-3 tracking-tight">
+        <h1 className="text-4xl font-bold text-center mb-3 tracking-[-0.03em]">
           See who's going.
         </h1>
 
-        <p className="text-zinc-500 text-center mb-12 text-lg">
+        <p className="text-zinc-400 text-center mb-10 text-lg">
           {authed
             ? "You're almost in. One quick setup."
             : "Start with the social loop, then sign in when it clicks."}
         </p>
 
-        {/* Buttons */}
+        <div className="whozin-brand-pill mb-8 flex items-center gap-3 rounded-full px-4 py-2 text-xs text-zinc-300">
+          <div className="flex -space-x-2">
+            {["S", "M", "A", "J"].map((letter, index) => (
+              <span
+                key={letter}
+                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-zinc-950 text-[11px] font-bold text-white"
+                style={{
+                  background: `linear-gradient(${120 + index * 15}deg, #EC4899, #9333EA)`,
+                }}
+              >
+                {letter}
+              </span>
+            ))}
+          </div>
+          <span>12 friends are going tonight</span>
+        </div>
+
         <div className="w-full space-y-4">
           {authed ? (
             <button
               onClick={onContinue}
               disabled={checking || !needsSetup}
-              className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-2xl font-bold text-lg shadow-[0_0_20px_rgba(219,39,119,0.4)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)] transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center"
+              className="whozin-brand-button flex w-full items-center justify-center rounded-2xl py-4 text-lg font-bold transition-all active:scale-95 disabled:opacity-60"
             >
               Continue
             </button>
@@ -150,7 +168,7 @@ export function Welcome() {
                   const next = encodeURIComponent(redirect);
                   navigate(`/intro?redirect=${next}`, { replace: true });
                 }}
-                className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-2xl font-bold text-lg shadow-[0_0_20px_rgba(219,39,119,0.4)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)] transition-all active:scale-95 flex items-center justify-center"
+                className="whozin-brand-button flex w-full items-center justify-center rounded-2xl py-4 text-lg font-bold transition-all active:scale-95"
               >
                 See How It Works
               </button>
@@ -167,6 +185,16 @@ export function Welcome() {
             </>
           )}
         </div>
+
+        {!authed ? (
+          <div className="mt-8">
+            <WhozinLockup
+              iconClassName="w-9 h-9 rounded-[10px]"
+              glyphClassName="w-5 h-5"
+              wordmarkClassName="text-sm font-bold tracking-[-0.02em] text-zinc-300"
+            />
+          </div>
+        ) : null}
       </motion.div>
     </div>
   );

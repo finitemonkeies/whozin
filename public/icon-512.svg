@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="whozinGradient512" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ec4899"/>
-      <stop offset="0.55" stop-color="#d946ef"/>
-      <stop offset="1" stop-color="#9333ea"/>
+      <stop stop-color="#EC4899"/>
+      <stop offset="0.5" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#9333EA"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="128" fill="url(#whozinGradient512)"/>
-  <path d="M102 128l61 256h72l37-131 37 131h72l61-256h-77l-31 155-38-155H233l-38 155-31-155h-62z" fill="#ffffff"/>
+  <rect width="512" height="512" rx="112" fill="url(#whozinGradient512)"/>
+  <path d="M75 94H155L200 313L245 94H320L365 313L410 94H490L426 418H352L283 155L214 418H140L75 94Z" fill="#ffffff"/>
 </svg>

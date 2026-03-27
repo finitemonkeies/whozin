@@ -77,7 +77,7 @@ export default function EmailUnsubscribe() {
           <div className="mt-6 flex flex-col gap-3">
             <Link
               to="/login"
-              className="rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-center text-sm font-semibold"
+              className="whozin-brand-button rounded-2xl px-4 py-3 text-center text-sm font-semibold text-white"
             >
               Open Whozin
             </Link>

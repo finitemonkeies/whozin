@@ -11,6 +11,7 @@ import {
   setPendingMarketingEmailOptIn,
   syncPendingMarketingEmailPreference,
 } from "@/lib/emailPreferences";
+import { WhozinLockup } from "@/app/components/WhozinLogo";
 
 function useQuery() {
   const { search } = useLocation();
@@ -256,9 +257,15 @@ export default function Login() {
   const canVerifyPhoneCode = !!phone.trim() && !!phoneCode.trim() && !loading;
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
+    <div className="whozin-brand-shell min-h-screen text-white px-5 pt-10 pb-24">
       <div className="max-w-md mx-auto">
         <div className="mb-8">
+          <WhozinLockup
+            className="mb-5"
+            iconClassName="w-10 h-10 rounded-[12px]"
+            glyphClassName="w-6 h-6"
+            wordmarkClassName="text-base font-bold tracking-[-0.02em] text-white"
+          />
           <h1 className="text-4xl font-bold tracking-tight">Get Back In</h1>
           <p className="text-zinc-400 mt-2">
             {phoneAuthEnabled ? "Use Google, text, or a magic link." : "Use Google or a magic link."}
@@ -387,7 +394,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={!canSendMagic}
-            className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+            className="whozin-brand-button w-full rounded-2xl px-4 py-4 font-semibold disabled:opacity-60"
           >
             {loading === "magic"
               ? "Sending link..."

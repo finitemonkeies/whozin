@@ -2,6 +2,18 @@
 
 :root {
   --font-size: 16px;
+  --whozin-app-bg: #0a0a0a;
+  --whozin-surface: #18181b;
+  --whozin-border: #27272a;
+  --whozin-border-strong: #3f3f46;
+  --whozin-text-secondary: #a1a1aa;
+  --whozin-text-tertiary: #71717a;
+  --whozin-brand-pink: #db2777;
+  --whozin-brand-hot-pink: #ec4899;
+  --whozin-brand-violet: #a855f7;
+  --whozin-brand-purple: #9333ea;
+  --whozin-icon-gradient: linear-gradient(135deg, #ec4899 0%, #a855f7 50%, #9333ea 100%);
+  --whozin-cta-gradient: linear-gradient(90deg, #db2777 0%, #9333ea 100%);
   --background: #ffffff;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
@@ -128,6 +140,10 @@
     @apply bg-background text-foreground;
   }
 
+  body {
+    background-color: var(--whozin-app-bg);
+  }
+
   /**
   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
   * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
@@ -177,5 +193,42 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+}
+
+@layer components {
+  .whozin-logo-tile {
+    box-shadow:
+      0 24px 48px rgba(219, 39, 119, 0.45),
+      0 0 96px rgba(147, 51, 234, 0.18);
+  }
+
+  .whozin-brand-button {
+    background: var(--whozin-cta-gradient);
+    box-shadow: 0 18px 36px rgba(219, 39, 119, 0.28);
+  }
+
+  .whozin-brand-button:hover {
+    filter: brightness(1.05);
+    box-shadow: 0 22px 44px rgba(219, 39, 119, 0.34);
+  }
+
+  .whozin-brand-shell {
+    background:
+      radial-gradient(circle at top left, rgba(236, 72, 153, 0.18), transparent 32%),
+      radial-gradient(circle at top right, rgba(168, 85, 247, 0.18), transparent 28%),
+      #000;
+  }
+
+  .whozin-brand-card {
+    background: linear-gradient(180deg, rgba(24, 24, 27, 0.92), rgba(10, 10, 10, 0.95));
+    border: 1px solid rgba(63, 63, 70, 0.65);
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.35);
+  }
+
+  .whozin-brand-pill {
+    background: rgba(39, 39, 42, 0.85);
+    border: 1px solid rgba(63, 63, 70, 0.9);
+    backdrop-filter: blur(12px);
   }
 }

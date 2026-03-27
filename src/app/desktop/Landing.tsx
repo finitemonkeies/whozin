@@ -1,24 +1,32 @@
 import { Link } from "react-router-dom";
 import { Lock } from "lucide-react";
 import { motion } from "motion/react";
+import { WhozinLockup } from "@/app/components/WhozinLogo";
 
 export function DesktopLanding() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center relative overflow-hidden font-sans selection:bg-blue-500/30">
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center relative overflow-hidden font-sans selection:bg-pink-500/30">
       {/* Background Ambience */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[800px] h-[800px] bg-purple-600/10 rounded-full blur-[120px]" />
+        <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-pink-600/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[800px] h-[800px] bg-violet-600/10 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative z-10 max-w-[720px] w-full text-center px-6">
+        <div className="mb-10 flex justify-center">
+          <WhozinLockup
+            iconClassName="w-12 h-12 rounded-[14px]"
+            glyphClassName="w-7 h-7"
+            wordmarkClassName="text-lg font-bold tracking-[-0.02em] text-white"
+          />
+        </div>
         <motion.h1 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           className="text-5xl md:text-7xl font-bold tracking-tight mb-4 leading-[1.1]"
         >
-          4 friends are going to <span className="text-blue-500">Subtronics.</span>
+          4 friends are going to <span className="text-pink-400">Subtronics.</span>
         </motion.h1>
 
         <motion.p 
@@ -38,7 +46,7 @@ export function DesktopLanding() {
         >
           <Link 
             to="/web/auth" 
-            className="px-8 py-4 bg-white text-black rounded-full text-lg font-bold hover:bg-zinc-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-95"
+            className="whozin-brand-button rounded-full px-8 py-4 text-lg font-bold text-white transition-colors active:scale-95"
           >
             Join to See the List
           </Link>

@@ -10,6 +10,7 @@ import {
   setPendingMarketingEmailOptIn,
   syncPendingMarketingEmailPreference,
 } from "@/lib/emailPreferences";
+import { WhozinLockup } from "@/app/components/WhozinLogo";
 
 function useQuery() {
   const { search } = useLocation();
@@ -106,9 +107,15 @@ export function SignUp() {
 
   if (!phoneAuthEnabled) {
     return (
-      <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
+      <div className="whozin-brand-shell min-h-screen text-white px-5 pt-10 pb-24">
         <div className="max-w-md mx-auto">
           <div className="mb-8">
+            <WhozinLockup
+              className="mb-5"
+              iconClassName="w-10 h-10 rounded-[12px]"
+              glyphClassName="w-6 h-6"
+              wordmarkClassName="text-base font-bold tracking-[-0.02em] text-white"
+            />
             <h1 className="text-4xl font-bold tracking-tight">Sign up</h1>
             <p className="text-zinc-400 mt-2">
               Phone signup is paused for now. Use Google or a magic link.
@@ -118,7 +125,7 @@ export function SignUp() {
           <button
             type="button"
             onClick={() => navigate(`/login?redirect=${encodeURIComponent(redirect)}`, { replace: true })}
-            className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600"
+            className="whozin-brand-button w-full rounded-2xl px-4 py-4 font-semibold"
           >
             Go to login
           </button>
@@ -128,9 +135,15 @@ export function SignUp() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 pt-10 pb-24">
+    <div className="whozin-brand-shell min-h-screen text-white px-5 pt-10 pb-24">
       <div className="max-w-md mx-auto">
         <div className="mb-8">
+          <WhozinLockup
+            className="mb-5"
+            iconClassName="w-10 h-10 rounded-[12px]"
+            glyphClassName="w-6 h-6"
+            wordmarkClassName="text-base font-bold tracking-[-0.02em] text-white"
+          />
           <h1 className="text-4xl font-bold tracking-tight">Create your account</h1>
           <p className="text-zinc-400 mt-2">Get in with your number in under 10 seconds.</p>
         </div>
@@ -191,7 +204,7 @@ export function SignUp() {
           <button
             type="submit"
             disabled={!!loading}
-            className="w-full px-4 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+            className="whozin-brand-button w-full rounded-2xl px-4 py-4 font-semibold disabled:opacity-60"
           >
             {loading === "send"
               ? "Sending code..."

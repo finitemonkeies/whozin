@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Smartphone, Mail, Command } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { WhozinLockup } from "@/app/components/WhozinLogo";
 
 export function DesktopAuth() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -16,7 +17,7 @@ export function DesktopAuth() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center font-sans">
+    <div className="whozin-brand-shell min-h-screen text-white flex items-center justify-center font-sans">
       <div className="w-full max-w-[480px] px-6">
         <AnimatePresence mode="wait">
           {step === "phone" ? (
@@ -25,8 +26,15 @@ export function DesktopAuth() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl"
+              className="whozin-brand-card rounded-[28px] p-8"
             >
+              <div className="mb-6 flex justify-center">
+                <WhozinLockup
+                  iconClassName="w-10 h-10 rounded-[12px]"
+                  glyphClassName="w-6 h-6"
+                  wordmarkClassName="text-base font-bold tracking-[-0.02em] text-white"
+                />
+              </div>
               <h1 className="text-2xl font-bold mb-6 text-center">Join Whozin</h1>
               
               <div className="mb-4">
@@ -36,14 +44,14 @@ export function DesktopAuth() {
                   <input 
                     type="tel" 
                     placeholder="(555) 123-4567" 
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-pink-500 transition-colors"
                   />
                 </div>
               </div>
 
               <button 
                 onClick={handleSendCode}
-                className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors mb-6 active:scale-[0.98]"
+                className="whozin-brand-button mb-6 w-full rounded-xl py-3 font-bold text-white transition-colors active:scale-[0.98]"
               >
                 Send Code
               </button>
@@ -64,7 +72,7 @@ export function DesktopAuth() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl text-center"
+              className="whozin-brand-card rounded-[28px] p-8 text-center"
             >
               <h1 className="text-2xl font-bold mb-2">Enter Code</h1>
               <p className="text-zinc-500 text-sm mb-8">We sent a code to (555) 123-4567</p>
@@ -75,14 +83,14 @@ export function DesktopAuth() {
                     key={i}
                     type="text" 
                     maxLength={1}
-                    className="w-12 h-14 bg-zinc-950 border border-zinc-800 rounded-xl text-center text-xl font-bold focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-12 h-14 bg-zinc-950 border border-zinc-800 rounded-xl text-center text-xl font-bold focus:outline-none focus:border-pink-500 transition-colors"
                   />
                 ))}
               </div>
 
               <button 
                 onClick={handleVerify}
-                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-500 transition-colors mb-4 active:scale-[0.98] shadow-[0_0_20px_rgba(37,99,235,0.3)]"
+                className="whozin-brand-button mb-4 w-full rounded-xl py-3 font-bold text-white transition-colors active:scale-[0.98]"
               >
                 Verify
               </button>
