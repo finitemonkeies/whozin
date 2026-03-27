@@ -1,0 +1,33 @@
+
+> @figma/my-make-file@0.0.1 dev
+> vite --host 127.0.0.1 --port 4173
+
+
+  [32m[1mVITE[22m v6.3.5[39m  [2mready in [0m[1m730[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m4173[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m1:56:58 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Onboarding.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m2:19:55 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Settings.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m2:20:37 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review/index.html[22m
+[2m2:21:11 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review/dist/index.html[22m
+[2m2:37:44 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review_v2/index.html[22m
+[2m2:49:05 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review_v3/index.html[22m
+[2m2:58:00 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review_v4/index.html[22m
+[2m11:14:01 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2moutput/brand_assets_review_v5/index.html[22m
+[2m11:16:37 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/app/components/WhozinLogo.tsx[22m
+[2m11:16:48 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/theme.css, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:17:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Onboarding.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:17:55 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Login.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:18:52 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/components/BottomNav.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:19:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/components/AppErrorBoundary.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:19:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/@fs/C:\Users\jvinc\Desktop\Whozin\src\app\components\EventCard.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:19:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Profile.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:19:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Login.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:19:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/pages/Onboarding.tsx, /src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:20:09 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:20:19 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:20:19 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:20:39 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/tailwind.css, /src/styles/index.css[22m
+[2m11:20:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mindex.html[22m
+[2m11:20:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mpublic/manifest.webmanifest[22m

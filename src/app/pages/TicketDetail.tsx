@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Calendar, Share2, Users, MapPin, ArrowLeft, MessageCircle, Check } from "lucide-react";
+import { ArrowLeft, MessageCircle, Check } from "lucide-react";
 import { EVENTS } from "../../data/mock";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
+import { FriendsGoingIcon, LocationIcon, ShareIcon, TimeIcon } from "@/app/components/WhozinIcons";
 
 export function TicketDetail() {
   const { id } = useParams();
@@ -38,7 +39,7 @@ export function TicketDetail() {
 
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <Calendar className="w-5 h-5 text-zinc-500 mt-0.5" />
+                <TimeIcon color="currentColor" className="w-5 h-5 text-zinc-500 mt-0.5" />
                 <div>
                   <div className="font-bold">{event.date}</div>
                   <div className="text-sm text-zinc-500">Doors 9:00 PM</div>
@@ -46,7 +47,7 @@ export function TicketDetail() {
               </div>
 
               <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-zinc-500 mt-0.5" />
+                <LocationIcon color="currentColor" className="w-5 h-5 text-zinc-500 mt-0.5" />
                 <div>
                   <div className="font-bold">{event.location}</div>
                   <div className="text-sm text-zinc-500">123 Main St, Brooklyn, NY</div>
@@ -68,15 +69,15 @@ export function TicketDetail() {
               onClick={() => setNotifyOpen(true)}
               className="col-span-2 py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-zinc-200 transition-colors"
             >
-              <Users className="w-4 h-4" />
+              <FriendsGoingIcon color="currentColor" className="w-4 h-4" />
               Notify Friends
             </button>
             <button className="py-3 bg-zinc-800 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-zinc-700 transition-colors">
-              <Calendar className="w-4 h-4" />
+              <TimeIcon color="currentColor" className="w-4 h-4" />
               Add to Cal
             </button>
             <button className="py-3 bg-zinc-800 text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-zinc-700 transition-colors">
-              <Share2 className="w-4 h-4" />
+              <ShareIcon color="currentColor" className="w-4 h-4" />
               Share
             </button>
           </div>
@@ -84,7 +85,7 @@ export function TicketDetail() {
 
         <div className="mt-8">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-pink-500" />
+            <FriendsGoingIcon color="currentColor" className="w-5 h-5 text-pink-500" />
             Who&apos;s In (12)
           </h3>
           <div className="flex -space-x-3 overflow-hidden p-2">
@@ -160,7 +161,7 @@ function NotifyModal({
                   <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl border border-white/5">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-pink-500/20 rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-pink-500" />
+                        <FriendsGoingIcon color="currentColor" className="w-5 h-5 text-pink-500" />
                       </div>
                       <div>
                         <div className="font-bold">Whozin Friends</div>

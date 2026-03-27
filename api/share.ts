@@ -288,9 +288,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     loadEvent(eventId),
   ]);
 
-  const inviterLabel = profile?.username?.trim()
-    ? `@${profile.username.trim()}`
-    : profile?.display_name?.trim() || normalizedHandle;
+  const inviterLabel =
+    profile?.display_name?.trim() ||
+    (profile?.username?.trim() ? `@${profile.username.trim()}` : normalizedHandle);
   const pageTitle = event?.title?.trim()
     ? `${event.title} | Whozin`
     : `${inviterLabel} invited you to Whozin`;

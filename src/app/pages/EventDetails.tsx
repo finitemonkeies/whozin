@@ -1,11 +1,9 @@
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
-  Calendar,
+  ArrowUpRight,
   ExternalLink,
-  MapPin,
   Ticket,
-  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,8 +17,10 @@ import { createReferralInviteLink } from "@/lib/referrals";
 import { featureFlags } from "@/lib/featureFlags";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
+import { EventArtwork } from "@/app/components/EventArtwork";
 import { isEventVisible, sourceLabel } from "@/lib/eventVisibility";
 import { reportEvent } from "@/lib/privacySafety";
+import { LocationIcon, PrivateIcon, TimeIcon } from "@/app/components/WhozinIcons";
 
 type EventRow = {
   id: string;
@@ -36,6 +36,7 @@ type EventRow = {
   ticket_url?: string | null;
   external_url?: string | null;
   moderation_status?: string | null;
+  organizer_profile_id?: string | null;
 };
 
 type AttendeeRow = {
@@ -47,6 +48,19 @@ type AttendeeRow = {
     avatar_url: string | null;
   } | null;
 };
+
+type OrganizerRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  partner_badge_label?: string | null;
+  partner_type?: string | null;
+  partner_bio_short?: string | null;
+  partner_instagram_url?: string | null;
+  partner_website_url?: string | null;
+  partner_slug?: string | null;
+} | null;
 
 function isUuid(value: string) {
   const uuidRegex =
@@ -76,10 +90,10 @@ function relativeRsvp(ts?: string | null): string {
   if (Number.isNaN(t)) return "";
   const mins = Math.floor((Date.now() - t) / 60000);
   if (mins < 0) return "";
-  if (mins < 10) return "just locked in";
-  if (mins < 60) return `locked in ${mins}m ago`;
+  if (mins < 10) return "just in";
+  if (mins < 60) return `in ${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `locked in ${hrs}h ago`;
+  if (hrs < 24) return `in ${hrs}h ago`;
   return "";
 }
 
@@ -111,17 +125,6 @@ function AvatarStack({ urls, total }: { urls: string[]; total: number }) {
       ) : null}
     </div>
   );
-}
-
-function importedEventAccent(source?: string | null) {
-  const normalized = (source ?? "").trim().toLowerCase();
-  if (normalized === "19hz") {
-    return "linear-gradient(135deg, rgba(236,72,153,0.88), rgba(124,58,237,0.84) 52%, rgba(9,9,11,0.98))";
-  }
-  if (normalized === "ra") {
-    return "linear-gradient(135deg, rgba(59,130,246,0.9), rgba(124,58,237,0.82) 52%, rgba(9,9,11,0.98))";
-  }
-  return "linear-gradient(135deg, rgba(34,197,94,0.85), rgba(59,130,246,0.8) 52%, rgba(9,9,11,0.98))";
 }
 
 async function downloadShareCardPng(args: {
@@ -205,6 +208,7 @@ export function EventDetails() {
 
   const [event, setEvent] = useState<EventRow | null>(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
+  const [organizer, setOrganizer] = useState<OrganizerRow>(null);
 
   const [attendees, setAttendees] = useState<AttendeeRow[]>([]);
   const [loadingAttendees, setLoadingAttendees] = useState(true);
@@ -220,17 +224,13 @@ export function EventDetails() {
   const [creatingInviteLink, setCreatingInviteLink] = useState(false);
   const [downloadingShareCard, setDownloadingShareCard] = useState(false);
   const [reportingEvent, setReportingEvent] = useState(false);
-  const [heroImageOk, setHeroImageOk] = useState(true);
-  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
   const lastTrackedViewKeyRef = useRef<string>("");
 
-  const eventImage = useMemo(() => event?.image_url ?? "", [event?.image_url]);
   const isImportedEvent = useMemo(
     () => !!event?.event_source && event.event_source !== "internal",
     [event?.event_source]
   );
   const sourceName = useMemo(() => sourceLabel(event?.event_source), [event?.event_source]);
-  const sourceAccent = useMemo(() => importedEventAccent(event?.event_source), [event?.event_source]);
   const officialUrl = useMemo(
     () => event?.ticket_url ?? event?.external_url ?? "",
     [event?.external_url, event?.ticket_url]
@@ -248,11 +248,6 @@ export function EventDetails() {
     () => (viewerId && id ? `whozin_invite_prompt:${viewerId}:${id}` : ""),
     [viewerId, id]
   );
-
-  useEffect(() => {
-    setHeroImageOk(true);
-    setHeroImageLoaded(false);
-  }, [event?.id, event?.image_url]);
 
   useEffect(() => {
     if (!id || !isUuid(id) || !event) return;
@@ -433,7 +428,7 @@ export function EventDetails() {
 
       const { data: eventData, error: eventErr } = await supabase
         .from("events")
-        .select("id,title,location,event_date,event_end_date,image_url,description,event_source,venue_name,city,ticket_url,external_url,moderation_status")
+        .select("id,title,location,event_date,event_end_date,image_url,description,event_source,venue_name,city,ticket_url,external_url,moderation_status,organizer_profile_id")
         .eq("id", id)
         .single();
 
@@ -458,6 +453,25 @@ export function EventDetails() {
 
       setEvent((eventData ?? null) as EventRow | null);
       setLoadingEvent(false);
+
+      if ((eventData as EventRow | null)?.organizer_profile_id) {
+        const { data: organizerData, error: organizerErr } = await supabase
+          .from("profiles")
+          .select(
+            "id,username,display_name,avatar_url,partner_badge_label,partner_type,partner_bio_short,partner_instagram_url,partner_website_url,partner_slug"
+          )
+          .eq("id", (eventData as EventRow).organizer_profile_id)
+          .maybeSingle();
+
+        if (organizerErr) {
+          console.error("Failed loading organizer:", organizerErr);
+          setOrganizer(null);
+        } else {
+          setOrganizer((organizerData ?? null) as OrganizerRow);
+        }
+      } else {
+        setOrganizer(null);
+      }
 
       const rows = await loadAttendees(id);
 
@@ -760,46 +774,17 @@ export function EventDetails() {
   };
 
   return (
-    <div className="bg-black min-h-screen pb-40 text-white">
+    <div className="min-h-screen bg-black pb-[calc(12rem+env(safe-area-inset-bottom))] text-white">
       <div className="relative h-72">
-        {eventImage && heroImageOk ? (
-          <>
-            {!heroImageLoaded ? (
-              <div className="absolute inset-0 animate-pulse bg-zinc-900/80" />
-            ) : null}
-            <img
-              src={eventImage}
-              alt={event.title}
-              className={`w-full h-full object-cover transition duration-300 ${
-                heroImageLoaded ? "opacity-100" : "opacity-0"
-              }`}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-              onLoad={() => setHeroImageLoaded(true)}
-              onError={() => setHeroImageOk(false)}
-            />
-          </>
-        ) : (
-          <div className="relative h-full w-full overflow-hidden" style={{ background: sourceAccent }}>
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
-            <div className="absolute -left-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute -bottom-20 right-0 h-48 w-48 rounded-full bg-black/35 blur-3xl" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
-            <div className="relative flex h-full flex-col justify-between p-5">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/85">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {isImportedEvent ? `${sourceName} import` : "Whozin event"}
-              </div>
-              <div className="max-w-[80%]">
-                <div className="text-3xl font-bold leading-tight text-white line-clamp-3">{event.title}</div>
-                <div className="mt-2 text-sm text-white/75">
-                  {event.venue_name ?? event.location ?? event.city ?? "Bay Area"}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <EventArtwork
+          title={event.title}
+          imageUrl={event.image_url}
+          location={event.venue_name ?? event.location ?? event.city ?? "Bay Area"}
+          dateLabel={formatEventDateTimeRange(event)}
+          badge={isImportedEvent ? `${sourceName} import` : "Whozin event"}
+          className="h-full"
+          titleClassName="text-[1.8rem] sm:text-[2rem]"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
         <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
           <Link
@@ -825,6 +810,103 @@ export function EventDetails() {
         ) : null}
         <h1 className="text-3xl font-bold mb-2 leading-none drop-shadow-xl">{event.title}</h1>
 
+        {organizer ? (
+          <div className="mb-6 rounded-2xl border border-fuchsia-400/15 bg-zinc-900/45 p-4">
+            <div className="flex items-start gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  Hosted by
+                </div>
+                {organizer.partner_slug ? (
+                  <Link
+                    to={`/partner/${organizer.partner_slug}`}
+                    className="mt-1 flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3 transition hover:bg-white/[0.05]"
+                  >
+                    {organizer.avatar_url ? (
+                      <img
+                        src={organizer.avatar_url}
+                        alt={organizer.display_name ?? organizer.username ?? "Organizer"}
+                        className="h-14 w-14 rounded-2xl border border-white/10 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xs font-semibold text-zinc-300">
+                        Host
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-lg font-semibold text-white">
+                          {organizer.display_name?.trim() || organizer.username || "Organizer"}
+                        </div>
+                        <div className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100">
+                          {organizer.partner_badge_label?.trim() || "Partner"}
+                        </div>
+                      </div>
+                      <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                        View organizer
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </div>
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="mt-1 flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                    {organizer.avatar_url ? (
+                      <img
+                        src={organizer.avatar_url}
+                        alt={organizer.display_name ?? organizer.username ?? "Organizer"}
+                        className="h-14 w-14 rounded-2xl border border-white/10 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xs font-semibold text-zinc-300">
+                        Host
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-lg font-semibold text-white">
+                          {organizer.display_name?.trim() || organizer.username || "Organizer"}
+                        </div>
+                        <div className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100">
+                          {organizer.partner_badge_label?.trim() || "Partner"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {organizer.partner_bio_short ? (
+                  <div className="mt-3 text-sm text-zinc-300">{organizer.partner_bio_short}</div>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {organizer.partner_instagram_url ? (
+                    <a
+                      href={organizer.partner_instagram_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+                    >
+                      Instagram
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                  {organizer.partner_website_url ? (
+                    <a
+                      href={organizer.partner_website_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+                    >
+                      Website
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/45 p-4">
           {moveSignal ? (
             <div className="mb-4 rounded-2xl border border-fuchsia-400/15 bg-white/[0.03] p-3">
@@ -834,8 +916,8 @@ export function EventDetails() {
               <div className="mt-1 text-sm text-zinc-200">{moveSignal.explainer}</div>
               <div className="mt-1 text-xs text-zinc-500">
                 {friendsGoing.length > 0
-                  ? "Trending with your circle."
-                  : "This is where the night has the cleanest momentum signal."}
+                  ? "Trending with friends."
+                  : "This is where the move has the cleanest momentum signal."}
               </div>
             </div>
           ) : null}
@@ -858,7 +940,7 @@ export function EventDetails() {
             {totalGoing > 0 ? `${totalGoing} going` : "No one is in yet"}
           </div>
           <div className="mt-2 text-xs text-zinc-500">
-            {isGoing ? "You unlocked the crowd." : "RSVP to unlock the crowd"}
+            {isGoing ? "You're in." : "Go to unlock the crowd"}
           </div>
         </div>
 
@@ -866,16 +948,16 @@ export function EventDetails() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                {isGoing ? "Bring your people" : "Fastest way to call it"}
+                {isGoing ? "Invite a friend" : "Fastest way to see the move"}
               </div>
               <div className="mt-1 text-base font-semibold text-white">
                 {isGoing
                   ? "Send this to one friend and see if it turns into the move."
-                  : "RSVP once and Whozin starts working harder for you."}
+                  : "Tap I'm going once and Whozin starts working harder for you."}
               </div>
               <div className="mt-1 text-sm text-zinc-400">
                 {isGoing
-                  ? "One clean share right now is usually enough to get the night moving."
+                  ? "One share right now is usually enough to get the move going."
                   : "You will unlock the full attendee view and make your next share much more credible."}
               </div>
             </div>
@@ -886,16 +968,16 @@ export function EventDetails() {
             ) : null}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {isGoing ? (
               <>
                 <button
                   type="button"
                   onClick={() => void handleShareInvite()}
                   disabled={creatingInviteLink || featureFlags.killSwitchInvites}
-                  className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="whozin-brand-button rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  Bring your crew
+                  Share invite
                 </button>
                 <button
                   type="button"
@@ -911,7 +993,7 @@ export function EventDetails() {
                 type="button"
                 onClick={() => void handleToggleGoing()}
                 disabled={working || featureFlags.killSwitchRsvpWrites}
-                className="rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="whozin-brand-button col-span-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-1"
               >
                 I'm going
               </button>
@@ -922,7 +1004,7 @@ export function EventDetails() {
                 href={officialUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/10"
               >
                 Official listing
                 <ExternalLink className="h-4 w-4" />
@@ -1002,7 +1084,7 @@ export function EventDetails() {
                   className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5 disabled:opacity-60"
                 >
                   {reportingEvent ? "Reporting..." : "Report event"}
-                  <ShieldCheck className="h-4 w-4" />
+                  <PrivateIcon color="currentColor" className="h-4 w-4" />
                 </button>
               </div>
             ) : null}
@@ -1012,7 +1094,7 @@ export function EventDetails() {
         <div className="flex gap-4 my-6">
           <div className="flex-1 bg-zinc-900/50 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
             <div className="bg-purple-500/20 p-2.5 rounded-xl">
-              <Calendar className="w-5 h-5 text-purple-400" />
+              <TimeIcon color="currentColor" className="w-5 h-5 text-purple-400" />
             </div>
             <div>
               <div className="text-xs text-zinc-400">When</div>
@@ -1022,7 +1104,7 @@ export function EventDetails() {
 
           <div className="flex-1 bg-zinc-900/50 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
             <div className="bg-pink-500/20 p-2.5 rounded-xl">
-              <MapPin className="w-5 h-5 text-pink-400" />
+              <LocationIcon color="currentColor" className="w-5 h-5 text-pink-400" />
             </div>
             <div>
               <div className="text-xs text-zinc-400">Where</div>
@@ -1089,7 +1171,7 @@ export function EventDetails() {
 
           {!isGoing ? (
             <div className="text-center py-6 bg-zinc-900/30 rounded-2xl border border-white/5 border-dashed">
-              <p className="text-sm text-zinc-500">RSVP to unlock the rest of the crowd.</p>
+              <p className="text-sm text-zinc-500">Go to unlock the rest of the crowd.</p>
             </div>
           ) : loadingAttendees || loadingFriendMap ? (
             <div className="text-zinc-400 text-sm">Loading the crowd...</div>
@@ -1131,7 +1213,7 @@ export function EventDetails() {
           <div className="mb-8 bg-zinc-900/60 border border-white/10 rounded-2xl p-4">
             <div className="text-sm font-semibold">Send this to one friend and see if it becomes the move.</div>
             <div className="text-xs text-zinc-400 mt-1">
-              I'm thinking {event.title} might be the move. Send it to the friend most likely to say yes.
+              {event.title} might be the move. Send it to the friend most likely to say yes.
             </div>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
@@ -1146,7 +1228,7 @@ export function EventDetails() {
                 type="button"
                 onClick={() => void handleShareInvite()}
                 disabled={creatingInviteLink || featureFlags.killSwitchInvites}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-60"
+                className="whozin-brand-button rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
               >
                 Send now
               </button>
@@ -1170,20 +1252,22 @@ export function EventDetails() {
         ) : null}
       </div>
 
-      <div className="fixed bottom-24 left-0 right-0 z-40 px-5">
-        <button
-          onClick={handleToggleGoing}
-          disabled={working || featureFlags.killSwitchRsvpWrites}
-          className={`w-full py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 ${
-            isGoing
-              ? "bg-green-500/20 border border-green-500/50 text-green-300"
-              : "bg-gradient-to-r from-pink-600 to-purple-600"
-          }`}
-        >
-          <Ticket className="w-5 h-5" />
-          {isGoing ? "You're in (tap to undo)" : "I'm going"}
-          {working && <div className="absolute inset-0 bg-white/10 animate-pulse" />}
-        </button>
+      <div className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 px-5">
+        <div className="mx-auto max-w-2xl rounded-[28px] border border-white/10 bg-black/80 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <button
+            onClick={handleToggleGoing}
+            disabled={working || featureFlags.killSwitchRsvpWrites}
+            className={`relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl py-4 text-base font-bold transition-transform active:scale-[0.98] disabled:opacity-60 ${
+              isGoing
+                ? "border border-green-500/50 bg-green-500/20 text-green-200"
+                : "whozin-brand-button text-white"
+            }`}
+          >
+            <Ticket className="w-5 h-5" />
+            {isGoing ? "You're in (tap to undo)" : "I'm going"}
+            {working && <div className="absolute inset-0 animate-pulse bg-white/10" />}
+          </button>
+        </div>
       </div>
     </div>
   );

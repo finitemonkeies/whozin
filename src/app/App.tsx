@@ -10,6 +10,9 @@ const EventDetails = lazy(() =>
   import("./pages/EventDetails").then((m) => ({ default: m.EventDetails }))
 );
 const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
+const PartnerProfile = lazy(() =>
+  import("./pages/PartnerProfile").then((m) => ({ default: m.PartnerProfile }))
+);
 const EditProfile = lazy(() =>
   import("./pages/EditProfile").then((m) => ({ default: m.EditProfile }))
 );
@@ -62,7 +65,7 @@ function RouteFallback() {
 
   if (path === "/" || path === "/explore") {
     return (
-      <div className="min-h-[100svh] bg-black text-white pb-24">
+      <div className="min-h-[100svh] bg-black pb-32 text-white">
         <div className="h-48 bg-[radial-gradient(1200px_520px_at_20%_20%,rgba(168,85,247,0.35),transparent_55%),radial-gradient(900px_520px_at_80%_10%,rgba(236,72,153,0.35),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0))]" />
         <div className="space-y-4 px-5 pt-5">
           <div className="h-28 rounded-[28px] border border-white/10 bg-zinc-900/60 animate-pulse" />
@@ -73,9 +76,9 @@ function RouteFallback() {
     );
   }
 
-  if (path.startsWith("/event/")) {
+  if (path.startsWith("/event/") || path.startsWith("/partner/")) {
     return (
-      <div className="min-h-[100svh] bg-black text-white pb-24">
+      <div className="min-h-[100svh] bg-black pb-32 text-white">
         <div className="h-72 bg-zinc-900/60 animate-pulse" />
         <div className="space-y-4 px-5 pt-5">
           <div className="h-8 w-2/3 rounded-xl bg-zinc-900/60 animate-pulse" />
@@ -152,8 +155,12 @@ function AppShell() {
         "bg-black text-white font-sans antialiased selection:bg-pink-500/30",
         "min-h-[100svh]",
         "pt-[env(safe-area-inset-top)]",
-        "pb-[env(safe-area-inset-bottom)]",
       ].join(" ")}
+      style={{
+        paddingBottom: hideBottomNav
+          ? "env(safe-area-inset-bottom)"
+          : "calc(6.5rem + env(safe-area-inset-bottom))",
+      }}
     >
       <Routes>
         <Route path="/intro" element={withSuspense(<Onboarding />)} />
@@ -175,6 +182,7 @@ function AppShell() {
         <Route path="/admin/events" element={protectedRoute(<AdminEvents />)} />
         <Route path="/admin/health" element={protectedRoute(<AdminHealth />)} />
         <Route path="/profile" element={protectedRoute(<Profile />)} />
+        <Route path="/partner/:slug" element={withSuspense(<PartnerProfile />)} />
         <Route path="/profile/edit" element={protectedRoute(<EditProfile />)} />
         <Route path="/settings" element={protectedRoute(<Settings />)} />
         <Route path="/tickets" element={protectedRoute(<Tickets />)} />

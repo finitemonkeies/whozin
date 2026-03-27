@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Share2, Sparkles, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   type AppNotification,
@@ -8,6 +7,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/notifications";
+import { ActivityIcon, FriendsGoingIcon, InviteIcon, NewIcon, ShareIcon, TrendingIcon } from "@/app/components/WhozinIcons";
 
 function relativeTime(value: string) {
   const ts = new Date(value).getTime();
@@ -25,13 +25,13 @@ function notificationIcon(type: string) {
   switch (type) {
     case "friend_joined_event":
     case "friend_joined_event_burst":
-      return Users;
+      return FriendsGoingIcon;
     case "event_momentum":
-      return Sparkles;
+      return TrendingIcon;
     case "post_rsvp_invite_nudge":
-      return Share2;
+      return ShareIcon;
     default:
-      return Bell;
+      return ActivityIcon;
   }
 }
 
@@ -58,11 +58,21 @@ export function NotificationsPanel({
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showAll, setShowAll] = useState(false);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read_at).length,
     [notifications]
   );
+  const visibleNotifications = useMemo(() => {
+    if (!compact || showAll) return notifications;
+
+    const unread = notifications.filter((notification) => !notification.read_at);
+    const read = notifications.filter((notification) => !!notification.read_at);
+    const next = [...unread.slice(0, 4), ...read.slice(0, unread.length > 0 ? 1 : 2)];
+    return next.slice(0, Math.min(limit, 5));
+  }, [compact, limit, notifications, showAll]);
+  const hiddenCount = Math.max(0, notifications.length - visibleNotifications.length);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +166,7 @@ export function NotificationsPanel({
         </div>
       ) : notifications.length > 0 ? (
         <div className="space-y-3">
-          {notifications.map((notification) => {
+          {visibleNotifications.map((notification) => {
             const Icon = notificationIcon(notification.type);
             const unread = !notification.read_at;
 
@@ -177,7 +187,7 @@ export function NotificationsPanel({
                       unread ? "bg-fuchsia-500/15 text-fuchsia-200" : "bg-white/5 text-zinc-400"
                     }`}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon color="currentColor" className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
@@ -198,15 +208,24 @@ export function NotificationsPanel({
               </button>
             );
           })}
+          {compact && hiddenCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAll((current) => !current)}
+              className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-white/[0.06]"
+            >
+              {showAll ? "Show less" : `Show earlier activity (${hiddenCount})`}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-black p-6 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800">
-            <Bell className="h-8 w-8 text-zinc-500" />
+            <NewIcon color="currentColor" className="h-8 w-8 text-zinc-500" />
           </div>
           <h3 className="text-lg font-bold">Quiet for now</h3>
           <p className="mt-2 text-sm text-zinc-500">
-            Add one friend, lock one plan, and share it once. That's when Whozin starts talking back.
+            Add one friend, find one move, and share it once. That's when Whozin starts talking back.
           </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -214,14 +233,14 @@ export function NotificationsPanel({
               to="/friends"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-black px-4 py-3 text-sm font-bold hover:bg-zinc-200"
             >
-              <UserPlus className="h-4 w-4" />
+              <InviteIcon color="currentColor" className="h-4 w-4" />
               Find friends
             </Link>
             <Link
               to="/explore"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
             >
-              <Sparkles className="h-4 w-4" />
+              <TrendingIcon color="currentColor" className="h-4 w-4" />
               Find the move
             </Link>
           </div>

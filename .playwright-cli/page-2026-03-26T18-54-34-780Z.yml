@@ -1,0 +1,21 @@
+- generic [ref=e3]:
+  - generic [ref=e30]:
+    - heading "Start With Friends" [level=1] [ref=e31]
+    - paragraph [ref=e32]: Add one real friend, find one move, and Whozin starts feeling useful fast.
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - img [ref=e36]
+        - generic [ref=e40]: Add a friend
+        - generic [ref=e41]: start with friends
+      - generic [ref=e42]:
+        - img [ref=e44]
+        - generic [ref=e47]: Find a move
+        - generic [ref=e48]: pick one worth it
+      - generic [ref=e49]:
+        - img [ref=e51]
+        - generic [ref=e56]: Share once
+        - generic [ref=e57]: invite a friend
+    - button "Find your next move" [ref=e58]
+    - generic [ref=e59]: Private by default. Made for real moves with real friends.
+    - generic [ref=e60]: Friend -> I'm going -> invite
+  - region "Notifications alt+T"

@@ -5,6 +5,7 @@ import {
   getSurfacePriority,
   shouldSurfaceOnPrimaryFeeds,
 } from "@/lib/eventVisibility";
+import { dedupeInternalEventRows } from "@/lib/eventDedupe.shared.js";
 
 type InternalEventRow = {
   id: string;
@@ -18,6 +19,7 @@ type InternalEventRow = {
   event_source?: string | null;
   moderation_status?: string | null;
   ticket_url?: string | null;
+  organizer_profile_id?: string | null;
 };
 
 type TasteProfile = {
@@ -217,25 +219,7 @@ function writeExploreCache(key: string, data: Recommendation[]) {
 }
 
 function dedupeEventRows(rows: InternalEventRow[]): InternalEventRow[] {
-  const deduped = new Map<string, InternalEventRow>();
-
-  for (const row of rows) {
-    const titleKey = normalize(row.title);
-    const locationKey = normalize(row.location);
-    const dateKey = row.event_date ? row.event_date.slice(0, 16) : "no-date";
-    const compositeKey = `${titleKey}|${locationKey}|${dateKey}`;
-    const existing = deduped.get(compositeKey);
-    if (!existing) {
-      deduped.set(compositeKey, row);
-      continue;
-    }
-
-    const existingScore = (existing.image_url ? 1 : 0) + (existing.ticket_url ? 1 : 0);
-    const nextScore = (row.image_url ? 1 : 0) + (row.ticket_url ? 1 : 0);
-    if (nextScore > existingScore) deduped.set(compositeKey, row);
-  }
-
-  return Array.from(deduped.values());
+  return dedupeInternalEventRows(rows) as InternalEventRow[];
 }
 
 function dateProximityScore(eventDate: string | null | undefined): number {
@@ -296,7 +280,7 @@ async function fetchUpcomingEventRows(limit: number, cityHint: string): Promise<
   return withQueryCache(cacheKey, async () => {
     const nowIso = new Date().toISOString();
     const selectClause =
-      "id,title,location,city,event_date,event_end_date,image_url,description,event_source,moderation_status,ticket_url";
+      "id,title,location,city,event_date,event_end_date,image_url,description,event_source,moderation_status,ticket_url,organizer_profile_id";
 
     const normalizedCity = cityHint.trim();
     if (normalizedCity) {
@@ -544,6 +528,7 @@ function toUiEvent(
     date: formatDateLabel(row.event_date),
     eventDateIso: row.event_date ?? undefined,
     eventEndDateIso: row.event_end_date ?? undefined,
+    organizerProfileId: row.organizer_profile_id ?? undefined,
     location: formatEventLocation(row.location, row.city),
     city: row.city ?? undefined,
     image: row.image_url ?? "",

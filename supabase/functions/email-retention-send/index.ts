@@ -9,10 +9,12 @@ const CORS_HEADERS = {
 const DEFAULT_ALLOWED_EMAILS = ["hello@whozin.app", "jvincenthallahan@gmail.com"];
 const DEFAULT_LOOKBACK_DAYS = 7;
 const RETENTION_SUPPRESSION_HOURS = 24;
+const WEEKLY_DIGEST_LIMIT = 5;
 const SUPPORTED_TRIGGER_KEYS = new Set([
   "signup_no_friend",
   "signup_no_rsvp",
   "rsvp_no_invite",
+  "weekly_moves_digest",
 ]);
 
 type CandidateUser = {
@@ -29,6 +31,13 @@ type EventRow = {
   location: string | null;
   city: string | null;
   event_date: string | null;
+  move_score?: number | null;
+  move_status?: string | null;
+  move_label?: string | null;
+  move_secondary?: string | null;
+  move_explainer?: string | null;
+  total_rsvps?: number | null;
+  recent_rsvps_6h?: number | null;
 };
 
 type ReferralCountRow = {
@@ -46,18 +55,51 @@ type EmailEventRow = {
   bounced_at?: string | null;
   complained_at?: string | null;
   provider_message_id?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type CandidateResult = {
   user: CandidateUser;
   templateKey: string;
   triggerKey: string;
+  emailKind: "retention" | "product_updates";
   eventId: string | null;
+  dedupeKey: string;
   subject: string;
   html: string;
   text: string;
   ctaUrl: string;
   unsubscribeUrl: string;
+};
+
+type ExploreSnapshotEvent = {
+  id?: string;
+  title?: string | null;
+  location?: string | null;
+  city?: string | null;
+  event_date?: string | null;
+  move_score?: number | null;
+  move_status?: string | null;
+  move_label?: string | null;
+  move_secondary?: string | null;
+  move_explainer?: string | null;
+  total_rsvps?: number | null;
+  recent_rsvps_6h?: number | null;
+};
+
+type WeeklyDigestEventQueryRow = {
+  id: unknown;
+  title: unknown;
+  location: unknown;
+  city: unknown;
+  event_date: unknown;
+  move_score: unknown;
+  move_status: unknown;
+  move_label: unknown;
+  move_secondary: unknown;
+  move_explainer: unknown;
+  move_total_rsvps: unknown;
+  move_recent_rsvps_6h: unknown;
 };
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
@@ -151,16 +193,120 @@ function eventLocationLabel(event: EventRow | null | undefined): string {
   return location || city || "Bay Area";
 }
 
+function formatCityLabel(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim();
+  return normalized || "your city";
+}
+
+function formatDigestDateRange(now = new Date()): string {
+  const start = new Date(now);
+  const end = new Date(now);
+  end.setDate(end.getDate() + 6);
+
+  const startMonth = start.toLocaleDateString("en-US", { month: "short" });
+  const endMonth = end.toLocaleDateString("en-US", { month: "short" });
+  const startDay = start.toLocaleDateString("en-US", { day: "numeric" });
+  const endDay = end.toLocaleDateString("en-US", { day: "numeric" });
+
+  return startMonth === endMonth
+    ? `${startMonth} ${startDay}-${endDay}`
+    : `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+}
+
+function startOfIsoWeek(value: Date): Date {
+  const result = new Date(value);
+  const day = result.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + diff);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function currentIsoWeekKey(now = new Date()): string {
+  const weekStart = startOfIsoWeek(now);
+  return weekStart.toISOString().slice(0, 10);
+}
+
+function eventCtaUrl(siteUrl: string, eventId: string, source: string): string {
+  return `${siteUrl}/event/${eventId}?src=${source}`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function eventDayKey(value: string | null | undefined): string {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function toWeeklyDigestEvent(row: WeeklyDigestEventQueryRow): EventRow | null {
+  const id = String(row.id ?? "").trim();
+  if (!id) return null;
+
+  return {
+    id,
+    title: typeof row.title === "string" ? row.title : null,
+    location: typeof row.location === "string" ? row.location : null,
+    city: typeof row.city === "string" ? row.city : null,
+    event_date: typeof row.event_date === "string" ? row.event_date : null,
+    move_score: typeof row.move_score === "number" ? row.move_score : null,
+    move_status: typeof row.move_status === "string" ? row.move_status : null,
+    move_label: typeof row.move_label === "string" ? row.move_label : null,
+    move_secondary: typeof row.move_secondary === "string" ? row.move_secondary : null,
+    move_explainer: typeof row.move_explainer === "string" ? row.move_explainer : null,
+    total_rsvps: typeof row.move_total_rsvps === "number" ? row.move_total_rsvps : null,
+    recent_rsvps_6h: typeof row.move_recent_rsvps_6h === "number" ? row.move_recent_rsvps_6h : null,
+  };
+}
+
+function diversifyWeeklyDigestEvents(events: EventRow[]): EventRow[] {
+  const selected: EventRow[] = [];
+  const usedIds = new Set<string>();
+  const usedDays = new Set<string>();
+
+  for (const event of events) {
+    const dayKey = eventDayKey(event.event_date);
+    if (usedIds.has(event.id) || usedDays.has(dayKey)) continue;
+    selected.push(event);
+    usedIds.add(event.id);
+    usedDays.add(dayKey);
+    if (selected.length >= WEEKLY_DIGEST_LIMIT) return selected;
+  }
+
+  for (const event of events) {
+    if (usedIds.has(event.id)) continue;
+    selected.push(event);
+    usedIds.add(event.id);
+    if (selected.length >= WEEKLY_DIGEST_LIMIT) return selected;
+  }
+
+  return selected;
+}
+
 async function buildUnsubscribeUrl(args: {
   user: CandidateUser;
   siteUrl: string;
   unsubscribeSecret: string;
+  emailKind?: "retention" | "product_updates";
 }): Promise<string> {
   const unsubscribeToken = await signUnsubscribeToken(
     {
       user_id: args.user.id,
       email: args.user.email,
-      email_kind: "retention",
+      email_kind: args.emailKind ?? "retention",
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90,
     },
     args.unsubscribeSecret,
@@ -289,7 +435,9 @@ async function buildSignupNoFriendEmail(args: {
     user,
     templateKey: "retention_signup_no_friend_v1",
     triggerKey: "signup_no_friend",
+    emailKind: "retention",
     eventId: null,
+    dedupeKey: "signup_no_friend",
     subject,
     html: body.html,
     text: body.text,
@@ -329,7 +477,9 @@ async function buildSignupNoRsvpEmail(args: {
     user,
     templateKey: "retention_signup_no_rsvp_v1",
     triggerKey: "signup_no_rsvp",
+    emailKind: "retention",
     eventId: null,
+    dedupeKey: "signup_no_rsvp",
     subject,
     html: body.html,
     text: body.text,
@@ -372,10 +522,234 @@ async function buildRsvpNoInviteEmail(args: {
     user,
     templateKey: "retention_rsvp_no_invite_v1",
     triggerKey: "rsvp_no_invite",
+    emailKind: "retention",
     eventId: args.event.id,
+    dedupeKey: `rsvp_no_invite:${args.event.id}`,
     subject,
     html: body.html,
     text: body.text,
+    ctaUrl,
+    unsubscribeUrl,
+  };
+}
+
+async function loadWeeklyDigestEvents(
+  service: ReturnType<typeof createClient>,
+  city: string | null,
+): Promise<EventRow[]> {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(end.getDate() + 7);
+
+  let query = service
+    .from("events")
+    .select(
+      "id,title,location,city,event_date,move_score,move_status,move_label,move_secondary,move_explainer,move_total_rsvps,move_recent_rsvps_6h",
+    )
+    .gte("event_date", now.toISOString())
+    .lte("event_date", end.toISOString())
+    .or("moderation_status.is.null,moderation_status.eq.approved")
+    .order("move_score", { ascending: false, nullsFirst: false })
+    .order("event_date", { ascending: true })
+    .limit(24);
+
+  if (city) {
+    query = query.or(`city.ilike.%${city}%,location.ilike.%${city}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return diversifyWeeklyDigestEvents(
+    ((data ?? []) as WeeklyDigestEventQueryRow[])
+      .map((event) => toWeeklyDigestEvent(event))
+      .filter((event): event is EventRow => !!event),
+  );
+}
+
+async function loadWeeklyDigestUsers(
+  service: ReturnType<typeof createClient>,
+  args: { userId?: string | null },
+): Promise<CandidateUser[]> {
+  let query = service
+    .from("profiles")
+    .select("id,email,username,display_name,created_at")
+    .not("email", "is", null)
+    .is("email_unsubscribed_at", null)
+    .eq("email_product_updates_opt_in", true)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (args.userId) query = query.eq("id", args.userId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return ((data ?? []) as CandidateUser[]).filter((user) => !!user.id && !!user.email);
+}
+
+async function buildWeeklyMovesDigestEmail(args: {
+  user: CandidateUser;
+  events: EventRow[];
+  siteUrl: string;
+  unsubscribeSecret: string;
+  city: string | null;
+  editorNote?: string | null;
+  postalAddress?: string | null;
+}): Promise<CandidateResult> {
+  if (args.events.length === 0) {
+    throw new Error("Weekly digest requires at least one event");
+  }
+
+  const name = buildDisplayName(args.user);
+  const cityLabel = formatCityLabel(args.city ?? args.events[0]?.city ?? null);
+  const dateRange = formatDigestDateRange();
+  const weekKey = currentIsoWeekKey();
+  const ctaUrl = `${args.siteUrl}/explore?time=thisWeek&src=email_weekly_moves_digest`;
+  const unsubscribeUrl = await buildUnsubscribeUrl({
+    user: args.user,
+    siteUrl: args.siteUrl,
+    unsubscribeSecret: args.unsubscribeSecret,
+    emailKind: "product_updates",
+  });
+  const subject = `The moves this week in ${cityLabel}`;
+  const editorNote = (args.editorNote ?? "").trim();
+  const introBody = editorNote
+    ? `Quick note for ${dateRange}: ${editorNote}`
+    : `${name}, here is the cleanest read on where the week is building in ${cityLabel}.`;
+
+  const eventCardsHtml = args.events
+    .map((event, index) => {
+      const title = escapeHtml((event.title ?? "Untitled event").trim() || "Untitled event");
+      const meta = escapeHtml(`${formatEventDateLabel(event.event_date)} at ${eventLocationLabel(event)}`);
+      const moveLabel = escapeHtml((event.move_label ?? "Worth watching").trim() || "Worth watching");
+      const moveSecondary = escapeHtml(
+        (event.move_secondary ?? event.move_explainer ?? "Momentum is building.").trim() ||
+          "Momentum is building.",
+      );
+      const cta = eventCtaUrl(args.siteUrl, event.id, "email_weekly_moves_digest");
+
+      return `
+        <div style="margin:0 0 14px;padding:18px;border-radius:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);">
+          <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#f9a8d4;margin-bottom:8px;">
+            Pick ${index + 1}
+          </div>
+          <div style="font-size:20px;line-height:1.2;font-weight:800;color:#ffffff;margin-bottom:6px;">
+            ${title}
+          </div>
+          <div style="font-size:14px;line-height:1.6;color:#d4d4d8;margin-bottom:8px;">
+            ${meta}
+          </div>
+          <div style="font-size:13px;line-height:1.6;color:#f9a8d4;margin-bottom:10px;">
+            ${moveLabel}
+          </div>
+          <div style="font-size:14px;line-height:1.6;color:#a1a1aa;margin-bottom:14px;">
+            ${moveSecondary}
+          </div>
+          <a href="${cta}" style="display:inline-block;color:#ffffff;text-decoration:none;font-weight:700;">
+            Open event
+          </a>
+        </div>
+      `.trim();
+    })
+    .join("");
+
+  const html = `
+    <div style="margin:0;padding:0;background:#000000;font-family:Inter,Segoe UI,Arial,sans-serif;color:#ffffff;">
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+        The week is taking shape. Here are the events with the strongest signal right now.
+      </div>
+      <div style="background:
+        radial-gradient(circle at 15% 10%, rgba(147,51,234,0.26), transparent 28%),
+        radial-gradient(circle at 85% 85%, rgba(219,39,119,0.24), transparent 30%),
+        linear-gradient(180deg, #050505 0%, #000000 100%);
+        padding:40px 16px;">
+        <div style="max-width:560px;margin:0 auto;">
+          <div style="margin:0 auto 20px;width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#db2777,#9333ea);box-shadow:0 0 40px rgba(219,39,119,0.35);text-align:center;line-height:72px;font-size:34px;font-weight:800;color:#ffffff;">
+            W
+          </div>
+          <div style="text-align:center;margin-bottom:18px;font-size:12px;letter-spacing:0.22em;text-transform:uppercase;color:#f9a8d4;">
+            Whozin Weekly
+          </div>
+          <div style="background:rgba(17,17,17,0.92);border:1px solid rgba(255,255,255,0.08);border-radius:28px;padding:32px 28px;box-shadow:0 24px 80px rgba(0,0,0,0.45);">
+            <h1 style="margin:0 0 12px;font-size:34px;line-height:1.05;font-weight:800;letter-spacing:-0.03em;">
+              The moves this week
+            </h1>
+            <p style="margin:0 0 8px;color:#f9a8d4;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;">
+              ${escapeHtml(cityLabel)} | ${escapeHtml(dateRange)}
+            </p>
+            <p style="margin:0 0 18px;color:#d4d4d8;font-size:16px;line-height:1.65;">
+              ${escapeHtml(introBody)}
+            </p>
+            ${editorNote
+              ? `<p style="margin:0 0 18px;color:#a1a1aa;font-size:15px;line-height:1.65;">${escapeHtml(name)}, the list below is still fully data-backed from current RSVPs and move signals.</p>`
+              : ""}
+            ${eventCardsHtml}
+            <div style="margin-top:24px;padding:16px 18px;border-radius:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(249,168,212,0.14);">
+              <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#f9a8d4;margin-bottom:8px;">
+                Why these
+              </div>
+              <div style="font-size:15px;line-height:1.6;color:#e4e4e7;">
+                These picks come from Whozin move scores, current RSVP momentum, and this week's upcoming event slate.
+              </div>
+            </div>
+            <a href="${ctaUrl}" style="display:inline-block;margin-top:24px;background:linear-gradient(90deg,#db2777,#9333ea);color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:16px;font-weight:800;font-size:15px;box-shadow:0 0 24px rgba(219,39,119,0.28);">
+              Open full weekly list
+            </a>
+            <p style="margin:22px 0 0;color:#71717a;font-size:13px;line-height:1.6;">
+              Or open this link:<br />
+              <a href="${ctaUrl}" style="color:#f9a8d4;text-decoration:none;">${ctaUrl}</a>
+            </p>
+            <p style="margin:22px 0 0;color:#71717a;font-size:12px;line-height:1.6;">
+              You are receiving this because you asked for optional Whozin email updates.
+              <a href="${unsubscribeUrl}" style="color:#f9a8d4;text-decoration:none;">Unsubscribe instantly</a>
+              or turn them off in your account settings.
+            </p>
+            ${args.postalAddress
+              ? `<p style="margin:10px 0 0;color:#52525b;font-size:12px;line-height:1.6;">${escapeHtml(args.postalAddress)}</p>`
+              : ""}
+          </div>
+        </div>
+      </div>
+    </div>
+  `.trim();
+
+  const textBlocks = args.events.map((event, index) => {
+    const cta = eventCtaUrl(args.siteUrl, event.id, "email_weekly_moves_digest");
+    return [
+      `${index + 1}. ${(event.title ?? "Untitled event").trim() || "Untitled event"}`,
+      `${formatEventDateLabel(event.event_date)} at ${eventLocationLabel(event)}`,
+      (event.move_label ?? "Worth watching").trim() || "Worth watching",
+      (event.move_secondary ?? event.move_explainer ?? "Momentum is building.").trim() || "Momentum is building.",
+      cta,
+    ].join("\n");
+  });
+
+  const text = [
+    `The moves this week in ${cityLabel}`,
+    "",
+    introBody,
+    "",
+    ...textBlocks.flatMap((block) => [block, ""]),
+    "Why these:",
+    "These picks come from Whozin move scores, current RSVP momentum, and this week's upcoming event slate.",
+    "",
+    `Open full weekly list: ${ctaUrl}`,
+    `Unsubscribe: ${unsubscribeUrl}`,
+    "You can also turn off optional Whozin email updates in your account settings.",
+    ...(args.postalAddress ? ["", args.postalAddress] : []),
+  ].join("\n");
+
+  return {
+    user: args.user,
+    templateKey: "weekly_moves_digest_v1",
+    triggerKey: "weekly_moves_digest",
+    emailKind: "product_updates",
+    eventId: null,
+    dedupeKey: `weekly_moves_digest:${weekKey}:${(args.city ?? "").trim().toLowerCase() || "all"}`,
+    subject,
+    html,
+    text,
     ctaUrl,
     unsubscribeUrl,
   };
@@ -611,9 +985,33 @@ async function loadCandidates(
     lookbackDays: number;
     siteUrl: string;
     unsubscribeSecret: string;
+    city?: string | null;
+    editorNote?: string | null;
     postalAddress?: string | null;
   },
 ): Promise<CandidateResult[]> {
+  if (args.triggerKey === "weekly_moves_digest") {
+    const users = await loadWeeklyDigestUsers(service, { userId: args.userId });
+    if (users.length === 0) return [];
+
+    const events = await loadWeeklyDigestEvents(service, args.city ?? null);
+    if (events.length === 0) return [];
+
+    return Promise.all(
+      users.map((user) =>
+        buildWeeklyMovesDigestEmail({
+          user,
+          events,
+          siteUrl: args.siteUrl,
+          unsubscribeSecret: args.unsubscribeSecret,
+          city: args.city ?? null,
+          editorNote: args.editorNote ?? null,
+          postalAddress: args.postalAddress,
+        }),
+      ),
+    );
+  }
+
   if (args.forceSend && args.userId) {
     const user = await loadUserById(service, args.userId);
     if (!user) return [];
@@ -712,18 +1110,19 @@ async function loadCandidates(
 
 async function getExistingEmailEvent(
   service: ReturnType<typeof createClient>,
-  userId: string,
-  triggerKey: string,
-  eventId: string | null,
+  candidate: CandidateResult,
 ): Promise<EmailEventRow | null> {
   let query = service
     .from("email_events")
-    .select("id,status,sent_at,delivered_at,opened_at,clicked_at,bounced_at,complained_at,provider_message_id")
-    .eq("user_id", userId)
-    .eq("trigger_key", triggerKey)
+    .select("id,status,sent_at,delivered_at,opened_at,clicked_at,bounced_at,complained_at,provider_message_id,metadata")
+    .eq("user_id", candidate.user.id)
+    .eq("trigger_key", candidate.triggerKey)
     .limit(1);
 
-  query = eventId ? query.eq("event_id", eventId) : query.is("event_id", null);
+  query = candidate.eventId ? query.eq("event_id", candidate.eventId) : query.is("event_id", null);
+  if (candidate.triggerKey === "weekly_moves_digest") {
+    query = query.contains("metadata", { dedupe_key: candidate.dedupeKey });
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -751,17 +1150,12 @@ async function shouldSuppressCandidate(
 ): Promise<{ suppress: boolean; reason?: string; existingEvent?: EmailEventRow | null }> {
   const { data: emailable, error: emailableErr } = await service.rpc("is_user_emailable", {
     p_user_id: candidate.user.id,
-    p_email_kind: "retention",
+    p_email_kind: candidate.emailKind,
   });
   if (emailableErr) throw emailableErr;
   if (emailable !== true) return { suppress: true, reason: "user_not_emailable" };
 
-  const existingEvent = await getExistingEmailEvent(
-    service,
-    candidate.user.id,
-    candidate.triggerKey,
-    candidate.eventId,
-  );
+  const existingEvent = await getExistingEmailEvent(service, candidate);
   if (
     existingEvent &&
     (existingEvent.sent_at ||
@@ -841,6 +1235,7 @@ async function persistEmailEvent(
       email: args.candidate.user.email,
       cta_url: args.candidate.ctaUrl,
       unsubscribe_url: args.candidate.unsubscribeUrl,
+      dedupe_key: args.candidate.dedupeKey,
       ...(args.metadata ?? {}),
     },
   };
@@ -899,6 +1294,8 @@ Deno.serve(async (req) => {
     const lookbackDays = Number.isFinite(Number(body?.lookback_days))
       ? Math.max(1, Number(body.lookback_days))
       : DEFAULT_LOOKBACK_DAYS;
+    const city = typeof body?.city === "string" ? body.city.trim() : null;
+    const editorNote = typeof body?.editor_note === "string" ? body.editor_note.trim() : null;
     const siteUrl = normalizeSiteUrl(rawSiteUrl);
 
     if (!SUPPORTED_TRIGGER_KEYS.has(triggerKey)) {
@@ -915,6 +1312,8 @@ Deno.serve(async (req) => {
       lookbackDays,
       siteUrl,
       unsubscribeSecret,
+      city,
+      editorNote,
       postalAddress: emailPostalAddress,
     });
 

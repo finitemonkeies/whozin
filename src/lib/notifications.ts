@@ -41,6 +41,10 @@ function coalesceFriendNames(notifications: AppNotification[]) {
   return `${names[0]}, ${names[1]} +${names.length - 2}`;
 }
 
+function actorName(notification: AppNotification) {
+  return notification.title.replace(/\s+is going out$/i, "").trim();
+}
+
 export function prioritizeNotifications(
   rows: AppNotification[],
   { limit }: { limit?: number } = {}
@@ -48,6 +52,7 @@ export function prioritizeNotifications(
   const sorted = [...rows].sort((a, b) => createdAtMs(b.created_at) - createdAtMs(a.created_at));
   const grouped: AppNotification[] = [];
   const friendBurstMap = new Map<string, AppNotification[]>();
+  const friendActorMap = new Map<string, AppNotification[]>();
   let newestNudge: AppNotification | null = null;
 
   for (const notification of sorted) {
@@ -59,18 +64,51 @@ export function prioritizeNotifications(
     }
 
     if (notification.type === "friend_joined_event" && notification.event_id) {
+      const actor = actorName(notification);
       const dayKey = new Date(notification.created_at).toISOString().slice(0, 10);
       const key = `${notification.event_id}:${dayKey}:${notification.read_at ? "read" : "unread"}`;
       const burst = friendBurstMap.get(key) ?? [];
       burst.push(notification);
       friendBurstMap.set(key, burst);
+
+      if (actor) {
+        const actorKey = `${actor}:${dayKey}:${notification.read_at ? "read" : "unread"}`;
+        const actorBurst = friendActorMap.get(actorKey) ?? [];
+        actorBurst.push(notification);
+        friendActorMap.set(actorKey, actorBurst);
+      }
       continue;
     }
 
     grouped.push(notification);
   }
 
-  for (const burst of friendBurstMap.values()) {
+  const usedFriendBurstKeys = new Set<string>();
+
+  for (const [actorKey, burst] of friendActorMap.entries()) {
+    if (burst.length < 2) continue;
+
+    const newest = [...burst].sort((a, b) => createdAtMs(b.created_at) - createdAtMs(a.created_at))[0];
+    const actor = actorName(newest) || "Your friend";
+    grouped.push({
+      ...newest,
+      title: `${actor} is going out`,
+      body: `${actor} is stacking plans. Open the strongest move first.`,
+      type: "friend_joined_event_burst",
+      read_at: burst.every((item) => !!item.read_at) ? newest.read_at : null,
+    });
+
+    for (const notification of burst) {
+      const dayKey = new Date(notification.created_at).toISOString().slice(0, 10);
+      usedFriendBurstKeys.add(
+        `${notification.event_id}:${dayKey}:${notification.read_at ? "read" : "unread"}`
+      );
+    }
+    usedFriendBurstKeys.add(actorKey);
+  }
+
+  for (const [key, burst] of friendBurstMap.entries()) {
+    if (usedFriendBurstKeys.has(key)) continue;
     if (burst.length === 1) {
       grouped.push(burst[0]);
       continue;
@@ -157,5 +195,12 @@ export async function markNotificationRead(
 
 export async function markAllNotificationsRead(): Promise<void> {
   const { error } = await supabase.rpc("mark_all_notifications_read");
-  if (error) throw error;
+  if (!error) return;
+
+  const fallback = await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .is("read_at", null);
+
+  if (fallback.error) throw fallback.error;
 }

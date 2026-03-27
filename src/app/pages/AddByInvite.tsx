@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Calendar, MapPin, Share2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/analytics";
@@ -12,6 +11,7 @@ import {
 } from "@/lib/referrals";
 import { formatEventDateTimeRange } from "@/lib/eventDates";
 import { isEventVisible } from "@/lib/eventVisibility";
+import { FriendsGoingIcon, InviteIcon, LocationIcon, ShareIcon, TimeIcon } from "@/app/components/WhozinIcons";
 
 type InviteProfile = {
   username: string | null;
@@ -38,10 +38,10 @@ function isUuid(value: string | null | undefined): value is string {
 }
 
 function displayName(profile: InviteProfile | null, fallbackHandle: string) {
-  const username = profile?.username?.trim();
-  if (username) return `@${username}`;
   const name = profile?.display_name?.trim();
   if (name) return name;
+  const username = profile?.username?.trim();
+  if (username) return `@${username}`;
   return `@${fallbackHandle}`;
 }
 
@@ -255,7 +255,7 @@ export default function AddByInvite() {
             )}
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.22em] text-pink-300">
-                From your circle
+                From a friend
               </div>
               <div className="mt-1 text-lg font-semibold text-white">
                 {inviterLabel} wants you there
@@ -276,7 +276,7 @@ export default function AddByInvite() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
                 <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-3 py-1 text-[11px] font-semibold text-white/85">
-                  <Users className="h-3.5 w-3.5" />
+                  <FriendsGoingIcon color="currentColor" className="h-3.5 w-3.5" />
                   {attendeeCount > 0 ? `${attendeeCount} going` : "Be early here"}
                 </div>
                 <div className="absolute bottom-4 left-4 right-4">
@@ -291,7 +291,7 @@ export default function AddByInvite() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
                     <div className="inline-flex items-center gap-2 text-xs text-zinc-500">
-                      <Calendar className="h-3.5 w-3.5" />
+                      <TimeIcon color="currentColor" className="h-3.5 w-3.5" />
                       Date
                     </div>
                     <div className="mt-2 text-sm font-semibold text-white">
@@ -300,7 +300,7 @@ export default function AddByInvite() {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
                     <div className="inline-flex items-center gap-2 text-xs text-zinc-500">
-                      <MapPin className="h-3.5 w-3.5" />
+                      <LocationIcon color="currentColor" className="h-3.5 w-3.5" />
                       Location
                     </div>
                     <div className="mt-2 text-sm font-semibold text-white">
@@ -323,7 +323,7 @@ export default function AddByInvite() {
             <div className="rounded-[28px] border border-white/10 bg-zinc-900/50 p-5">
               <div className="text-lg font-semibold text-white">Connect with {inviterLabel}</div>
               <div className="mt-2 text-sm text-zinc-400">
-                This gets you into their Whozin circle so you can spot the right nights sooner.
+                This gets you into Whozin so you can spot the right move sooner.
               </div>
             </div>
           )}
@@ -332,9 +332,13 @@ export default function AddByInvite() {
             type="button"
             onClick={() => void handlePrimaryAction()}
             disabled={working}
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-4 text-sm font-semibold text-white disabled:opacity-60"
+            className="whozin-brand-button mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-4 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {sessionReady ? <UserPlus className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            {sessionReady ? (
+              <InviteIcon color="currentColor" className="h-4 w-4" />
+            ) : (
+              <ShareIcon color="currentColor" className="h-4 w-4" />
+            )}
             {working
                 ? "Joining..."
               : sessionReady
@@ -347,7 +351,7 @@ export default function AddByInvite() {
           </button>
 
           <div className="mt-3 text-center text-xs text-zinc-500">
-            Private by default. You stay inside the circle unless you choose to show up.
+            Private by default. You stay with friends unless you choose to show up.
           </div>
 
           {event ? (

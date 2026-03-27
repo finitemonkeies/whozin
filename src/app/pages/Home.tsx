@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { Suspense, lazy } from "react";
 import { startTransition } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Calendar, MapPin, Share2, Ticket, Users } from "lucide-react";
+import { Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
 import { isEventUpcomingOrOngoing } from "@/lib/eventDates";
@@ -12,9 +12,11 @@ import { featureFlags } from "@/lib/featureFlags";
 import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
 import { MakeTheMoveHero, TheMoveHero } from "@/app/components/TheMoveHero";
+import { EventArtwork } from "@/app/components/EventArtwork";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { getSurfacePriority, isEventVisible, shouldSurfaceOnPrimaryFeeds } from "@/lib/eventVisibility";
 import { useAuth } from "@/app/providers/AuthProvider";
+import { FriendsGoingIcon, LocationIcon, ShareIcon, TimeIcon } from "@/app/components/WhozinIcons";
 
 const ActivationChecklist = lazy(() =>
   import("@/app/components/ActivationChecklist").then((m) => ({ default: m.ActivationChecklist }))
@@ -30,6 +32,7 @@ type EventRow = {
   ticket_url?: string | null;
   event_source?: string | null;
   moderation_status?: string | null;
+  organizer_profile_id?: string | null;
 };
 
 type AttendeeRow = {
@@ -94,10 +97,10 @@ function relativeRsvp(ts?: string | null): string {
   if (Number.isNaN(t)) return "";
   const mins = Math.floor((Date.now() - t) / 60000);
   if (mins < 0) return "";
-  if (mins < 10) return "just RSVPed";
-  if (mins < 60) return `RSVPed ${mins}m ago`;
+  if (mins < 10) return "just in";
+  if (mins < 60) return `in ${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `RSVPed ${hrs}h ago`;
+  if (hrs < 24) return `in ${hrs}h ago`;
   return "";
 }
 
@@ -174,8 +177,6 @@ export function Home() {
 
   const [othersAvatarPoolByEvent, setOthersAvatarPoolByEvent] = useState<Record<string, string[]>>({
   });
-
-  const [badThumbs, setBadThumbs] = useState<Set<string>>(new Set());
 
   const [workingByEvent, setWorkingByEvent] = useState<Record<string, boolean>>({});
 
@@ -313,7 +314,7 @@ export function Home() {
   const loadFallbackFeed = async (uid: string, fset: Set<string>, nowTs: number) => {
     const { data: fallbackEvents, error: eventErr } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status")
+      .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status,organizer_profile_id")
       .order("event_date", { ascending: true })
       .limit(24);
 
@@ -413,7 +414,7 @@ export function Home() {
 
       const eventRowsPromise = supabase
         .from("events")
-        .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status")
+        .select("id,title,location,event_date,event_end_date,image_url,ticket_url,event_source,moderation_status,organizer_profile_id")
         .in("id", socialEventIds)
         .order("event_date", { ascending: true });
       const eventAttendeesPromise = supabase
@@ -489,6 +490,9 @@ export function Home() {
       const bTs = new Date(b.event_date ?? 0).getTime();
       if (aMove !== bMove) return bMove - aMove;
       if (aFriends !== bFriends) return bFriends - aFriends;
+      const aPartner = a.organizer_profile_id ? 1 : 0;
+      const bPartner = b.organizer_profile_id ? 1 : 0;
+      if (aPartner !== bPartner) return bPartner - aPartner;
       const aSource = getSurfacePriority(a.event_source);
       const bSource = getSurfacePriority(b.event_source);
       if (aSource !== bSource) return bSource - aSource;
@@ -631,15 +635,15 @@ export function Home() {
               <h1 className="text-[2rem] font-bold tracking-tight sm:text-3xl">Tonight</h1>
               <p className="mt-1 text-sm text-zinc-400 sm:text-base">
                 {feedMode === "social"
-                  ? "See where your people are leaning before the night gets crowded."
-                  : "Start with the strongest rooms in the Bay while your circle is still forming."}
+                  ? "See where your friends are leaning before it gets crowded."
+                  : "Start with the strongest rooms in the Bay while your friends are still forming."}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 px-4 pt-4 sm:px-5 sm:pt-5">
+      <div className="space-y-4 px-4 pt-3 sm:px-5 sm:pt-5">
         {viewerId ? (
           <Suspense fallback={null}>
             <ActivationChecklist />
@@ -650,7 +654,7 @@ export function Home() {
           <TheMoveHero
             eventId={topMoveEvent.id}
             title={topMoveEvent.title}
-            context={feedMode === "social" ? "Your circle tonight" : "Best place to start tonight"}
+            context={feedMode === "social" ? "Your friends tonight" : "Best place to start tonight"}
             meta={topMoveEvent.location ?? "Location TBD"}
             signal={topMoveSignal}
             source="home"
@@ -667,9 +671,9 @@ export function Home() {
 
         {viewerId && !hasAtLeastOneFriend && (
           <div className="rounded-2xl border border-white/10 bg-zinc-900/55 p-4">
-            <div className="text-sm font-semibold text-zinc-100">Whozin gets sharper with your people</div>
+            <div className="text-sm font-semibold text-zinc-100">Whozin gets sharper with friends</div>
             <div className="mt-1 text-xs text-zinc-400">
-              Add a few friends to sharpen the feed and make the night easier to call.
+              Add a few friends to sharpen the feed and make the move easier to call.
             </div>
             <Link
               to="/friends"
@@ -683,10 +687,10 @@ export function Home() {
         {feedMode === "fallback" ? (
           <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
             <div className="text-sm font-semibold text-white">
-              {hasFriendSignal ? "Your circle is still thin, so we widened the lens." : "No friend signal yet, so Home is starting Bay-wide."}
+              {hasFriendSignal ? "Your friend signal is still thin, so we widened the lens." : "No friend signal yet, so Home is starting Bay-wide."}
             </div>
             <div className="mt-1 text-xs text-zinc-300">
-              We are showing the strongest nearby events with real momentum so your first RSVP still feels useful.
+              We are showing the strongest nearby events with real momentum so your first I'm going still feels useful.
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
@@ -706,10 +710,6 @@ export function Home() {
         ) : null}
 
         {feedEvents.map((event) => {
-          const hasImage = !!event.image_url && event.image_url.trim().length > 0;
-          const thumbOk = !badThumbs.has(event.id);
-          const showThumb = hasImage && thumbOk;
-
           const going = myGoing.has(event.id);
           const working = !!workingByEvent[event.id];
 
@@ -755,37 +755,16 @@ export function Home() {
               }}
               className="group block overflow-hidden rounded-[26px] border border-white/10 bg-zinc-900/70 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition duration-200 hover:border-white/20 hover:-translate-y-0.5"
             >
-              <div className="relative h-44 overflow-hidden bg-zinc-900 sm:h-52">
-                {showThumb ? (
-                  <img
-                    src={event.image_url!}
-                    alt={event.title}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    onError={() =>
-                      setBadThumbs((prev) => {
-                        const n = new Set(prev);
-                        n.add(event.id);
-                        return n;
-                      })
-                    }
-                  />
-                ) : (
-                  <div className="relative h-full w-full">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/35 via-fuchsia-500/20 to-orange-400/25" />
-                    <div className="absolute inset-0 bg-black/30" />
-                    <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-purple-500/30 blur-3xl" />
-                    <div className="absolute -bottom-10 right-0 h-36 w-36 rounded-full bg-pink-500/25 blur-3xl" />
-                    <div className="relative flex h-full items-end p-4">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1.5">
-                        <Ticket className="h-4 w-4 text-white/75" />
-                        <span className="text-[11px] font-semibold text-white/75">Poster coming soon</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+              <div className="relative h-40 overflow-hidden bg-zinc-900 sm:h-48">
+                <EventArtwork
+                  title={event.title}
+                  imageUrl={event.image_url}
+                  location={event.location}
+                  dateLabel={formatDateRange(event.event_date, event.event_end_date)}
+                  badge={event.organizer_profile_id ? "Partner event" : moveRanking.signalsById[event.id]?.secondary}
+                  className="h-full"
+                  titleClassName="text-[1.5rem] sm:text-[1.7rem]"
+                />
 
                 <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4">
                   {moveRanking.signalsById[event.id] ? (
@@ -813,16 +792,9 @@ export function Home() {
                   </button>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 p-4">
-                  <div className="max-w-[18rem]">
-                    <h2 className="line-clamp-2 text-[1.6rem] font-semibold leading-[1.05] text-white sm:text-[1.8rem]">
-                      {event.title}
-                    </h2>
-                  </div>
-                </div>
               </div>
 
-              <div className="space-y-4 p-4 sm:p-5">
+              <div className="space-y-3 p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     {socialUrls.length > 0 ? (
@@ -833,12 +805,12 @@ export function Home() {
                       />
                     ) : (
                       <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
-                        <Users className="h-4 w-4 text-zinc-500" />
+                        <FriendsGoingIcon color="currentColor" className="h-4 w-4 text-zinc-500" />
                         Be first in
                       </div>
                     )}
                     {moveRanking.signalsById[event.id] ? (
-                      <div className="mt-3 text-sm leading-relaxed text-pink-100/85">
+                      <div className="mt-2 text-sm leading-relaxed text-pink-100/85">
                         {moveRanking.signalsById[event.id].explainer}
                       </div>
                     ) : null}
@@ -863,13 +835,13 @@ export function Home() {
 
                 <div className="grid grid-cols-1 gap-2.5 text-sm text-zinc-300">
                   <div className="inline-flex min-w-0 items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-                    <Calendar className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+                    <TimeIcon color="currentColor" className="h-4 w-4 flex-shrink-0 text-zinc-500" />
                     <span className="truncate">
                       {formatDateRange(event.event_date, event.event_end_date)}
                     </span>
                   </div>
                   <div className="inline-flex min-w-0 items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-                    <MapPin className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+                    <LocationIcon color="currentColor" className="h-4 w-4 flex-shrink-0 text-zinc-500" />
                     <span className="truncate">{event.location ?? "Location TBD"}</span>
                   </div>
                 </div>
@@ -879,8 +851,8 @@ export function Home() {
                     {totalGoing > 0
                       ? !going
                         ? feedMode === "social"
-                          ? "RSVP to join your circle"
-                          : "RSVP to join the room early"
+                          ? "Go to join your friends"
+                          : "Go to join early"
                         : "You're in"
                       : "Quiet for now"}
                   </div>
@@ -895,7 +867,7 @@ export function Home() {
                       }}
                       className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-zinc-200 hover:bg-white/10"
                     >
-                      <Share2 className="h-3.5 w-3.5" />
+                      <ShareIcon color="currentColor" className="h-3.5 w-3.5" />
                       Share
                     </button>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 transition group-hover:text-zinc-300">
@@ -913,7 +885,7 @@ export function Home() {
             <div>{feedMode === "social" ? "Your night is still quiet." : "We could not find a strong starting room yet."}</div>
             <div className="mt-1 text-sm text-zinc-600">
               {feedMode === "social"
-                ? "Add one friend or lock one plan and this starts feeling alive fast."
+                ? "Add one friend or find one move and this starts feeling alive fast."
                 : "Check Explore for the broader Bay stack, or add one friend to personalize Home."}
             </div>
             <Link

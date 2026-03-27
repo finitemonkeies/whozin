@@ -18,3 +18,9 @@ verify_jwt = false
 
 [functions.push-dispatch]
 verify_jwt = false
+
+[functions.server]
+verify_jwt = false
+
+[functions.make-server-3b9fa398]
+verify_jwt = false

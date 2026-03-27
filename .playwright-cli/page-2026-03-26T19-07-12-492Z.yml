@@ -1,0 +1,43 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - heading "Get Back In" [level=1] [ref=e9]
+      - paragraph [ref=e10]: Use Google or a magic link.
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - checkbox "Email me optional updates about events, friend activity, new features, and offers. I can unsubscribe anytime. Account, security, and service emails can still go out when needed." [ref=e13]
+        - generic [ref=e14]:
+          - text: Email me optional updates about events, friend activity, new features, and offers. I can unsubscribe anytime.
+          - generic [ref=e15]: Account, security, and service emails can still go out when needed.
+      - button "Use Google" [ref=e16]
+    - generic [ref=e19]: or
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - text: Email
+        - textbox "you@example.com" [ref=e23]: jvincenthallahan@gmail.com
+      - button "Wait 23s..." [disabled] [ref=e46]
+      - button "Not now" [ref=e25]
+    - generic [ref=e26]:
+      - generic [ref=e27]: Dev Debug
+      - generic [ref=e28]:
+        - text: "redirect param:"
+        - code [ref=e29]: /profile
+      - generic [ref=e30]:
+        - text: "callbackUrl:"
+        - code [ref=e31]: http://127.0.0.1:4173/auth/callback
+      - generic [ref=e32]:
+        - text: "supabase project ref:"
+        - code [ref=e33]: ecdyglakdtgeweisxxpv
+      - generic [ref=e34]:
+        - text: "phone auth enabled:"
+        - code [ref=e35]: "false"
+      - generic [ref=e36]:
+        - text: "supabase url:"
+        - code [ref=e37]: https://ecdyglakdtgeweisxxpv.supabase.co
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=e39]:
+        - img [ref=e41]
+        - generic [ref=e43]:
+          - generic [ref=e44]: Check your inbox
+          - generic [ref=e45]: Your sign-in link is on the way.

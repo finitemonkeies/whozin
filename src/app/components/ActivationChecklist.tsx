@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ChevronRight, Sparkles } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/app/providers/AuthProvider";
+import { NewIcon } from "@/app/components/WhozinIcons";
 
 type ChecklistItem = {
   key: string;
@@ -70,15 +71,15 @@ export function ActivationChecklist() {
         {
           key: "friends",
           label: "Bring in one friend",
-          description: "Whozin gets way better once your people are in.",
+          description: "Whozin gets way better once your friends are in.",
           href: "/friends",
-          cta: "Bring your crew",
+          cta: "Add a friend",
           done: Array.isArray(friendIdsRes.data) && friendIdsRes.data.length > 0,
         },
         {
           key: "rsvp",
-          label: "Lock one plan",
-          description: "Say you're in once and the night starts to take shape.",
+          label: "Find one move",
+          description: "Tap I'm going once and the move starts to take shape.",
           href: "/explore",
           cta: "Find the move",
           done: (attendeeCountRes.count ?? 0) > 0,
@@ -86,9 +87,9 @@ export function ActivationChecklist() {
         {
           key: "invite",
           label: "Send one invite",
-          description: "One clean share is usually enough to get the night moving.",
+          description: "One share is usually enough to get the move going.",
           href: "/profile",
-          cta: "Start the group chat",
+          cta: "Share invite",
           done: (inviteCountRes.count ?? 0) > 0,
         },
       ];
@@ -127,14 +128,14 @@ export function ActivationChecklist() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-pink-200">
-            <Sparkles className="h-3.5 w-3.5" />
+            <NewIcon color="currentColor" className="h-3.5 w-3.5" />
             Get It Moving
           </div>
           <div className="mt-3 text-lg font-semibold text-white">
             {completedCount} of {totalCount} done
           </div>
           <div className="mt-1 text-sm text-zinc-400">
-            Start with friends, RSVPs, and one share. That's when this starts to hit.
+            Start with friends, I'm going, and one share. That's when this starts to work.
           </div>
         </div>
         <div className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-300">

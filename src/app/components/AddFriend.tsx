@@ -54,9 +54,9 @@ export default function AddFriend({ onSuccess, sticky = true }: Props) {
   return (
     <div className={`${sticky ? "sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20" : ""} mt-8`}>
       <div className="rounded-[28px] border border-white/10 bg-black/85 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-        <h2 className="text-xl font-bold mb-3">Bring Your People In</h2>
+        <h2 className="text-xl font-bold mb-3">Bring Friends In</h2>
         <div className="mb-3 text-xs text-zinc-500">
-          Add one real friend and the app starts reading your actual night, not just the city.
+          Add one real friend and the app starts reading your actual move, not just the city.
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">

@@ -13,6 +13,7 @@ export interface Event {
   date: string;
   eventDateIso?: string;
   eventEndDateIso?: string;
+  organizerProfileId?: string;
   location: string;
   city?: string;
   image: string;

@@ -248,16 +248,26 @@ async function upsertEvents(supabase, rows) {
     new Map(rows.map((row) => [`${row.event_source}::${row.source_event_id}`, row])).values()
   );
   const chunkSize = 25;
-  let upserted = 0;
+  const summary = {
+    processed: 0,
+    upserted: 0,
+    inserted: 0,
+    updated: 0,
+    deduped: 0,
+    skipped: 0,
+  };
   for (let i = 0; i < dedupedRows.length; i += chunkSize) {
     const chunk = dedupedRows.slice(i, i + chunkSize);
-    const { error } = await supabase.from("events").upsert(chunk, {
-      onConflict: "event_source,source_event_id",
-    });
+    const { data, error } = await supabase.rpc("ingest_external_events", { p_events: chunk });
     if (error) throw error;
-    upserted += chunk.length;
+    summary.processed += Number(data?.processed ?? chunk.length);
+    summary.upserted += Number(data?.upserted ?? 0);
+    summary.inserted += Number(data?.inserted ?? 0);
+    summary.updated += Number(data?.updated ?? 0);
+    summary.deduped += Number(data?.deduped ?? 0);
+    summary.skipped += Number(data?.skipped ?? 0);
   }
-  return { upserted };
+  return summary;
 }
 
 async function refreshMoveScores(supabase) {

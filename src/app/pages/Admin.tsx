@@ -7,6 +7,7 @@ import { isAllowedAdminEmail } from "@/lib/adminAccess";
 import { createReferralInviteLink } from "@/lib/referrals";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { sourceLabel } from "@/lib/eventVisibility";
+import { normalizePartnerSlug } from "@/lib/partnerProfiles";
 
 type EventRow = {
   id: string;
@@ -21,6 +22,7 @@ type EventRow = {
   moderation_note?: string | null;
   ticket_url?: string | null;
   external_url?: string | null;
+  organizer_profile_id?: string | null;
 };
 
 type FormState = {
@@ -135,6 +137,52 @@ type SafetyReportRow = {
   target_event_id?: string | null;
 };
 
+type PartnerProfileRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  account_type: "person" | "partner";
+  partner_type: string | null;
+  partner_status: string | null;
+  partner_badge_label: string | null;
+  partner_slug: string | null;
+  partner_bio_short: string | null;
+  partner_instagram_url: string | null;
+  partner_website_url: string | null;
+  partner_contact_email: string | null;
+};
+
+type PartnerFormState = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  accountType: "person" | "partner";
+  partnerType: string;
+  partnerStatus: string;
+  partnerBadgeLabel: string;
+  partnerSlug: string;
+  partnerBioShort: string;
+  partnerInstagramUrl: string;
+  partnerWebsiteUrl: string;
+  partnerContactEmail: string;
+  organizerEventId: string;
+};
+
+type PartnerShellFormState = {
+  accountType: "person" | "partner";
+  username: string;
+  displayName: string;
+  partnerType: string;
+  badgeLabel: string;
+  partnerSlug: string;
+  contactEmail: string;
+  instagramUrl: string;
+  websiteUrl: string;
+  bioShort: string;
+};
+
 function toDatetimeLocal(value: string | null) {
   if (!value) return "";
   const d = new Date(value);
@@ -149,17 +197,22 @@ function toDatetimeLocal(value: string | null) {
   return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
-function chicagoDay(value: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
+function chicagoDateOffset(daysOffset: number) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Chicago",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(value);
+  });
+  const todayChicago = formatter.format(new Date());
+  const base = new Date(`${todayChicago}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + daysOffset);
+  return base.toISOString().slice(0, 10);
 }
 
 export default function Admin() {
   const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const partnerAvatarFileRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
 
@@ -186,6 +239,41 @@ export default function Admin() {
   const [safetyStatusFilter, setSafetyStatusFilter] = useState<"all" | "open" | "reviewed" | "resolved" | "dismissed">("all");
   const [showUpcomingEvents, setShowUpcomingEvents] = useState(false);
   const [showPastEvents, setShowPastEvents] = useState(false);
+  const [loadingPartners, setLoadingPartners] = useState(false);
+  const [partnerProfiles, setPartnerProfiles] = useState<PartnerProfileRow[]>([]);
+  const [selectedPartnerId, setSelectedPartnerId] = useState("");
+  const [organizerEventSearch, setOrganizerEventSearch] = useState("");
+  const [savingPartner, setSavingPartner] = useState(false);
+  const [creatingPartnerShell, setCreatingPartnerShell] = useState(false);
+  const [uploadingPartnerAvatar, setUploadingPartnerAvatar] = useState(false);
+  const [partnerForm, setPartnerForm] = useState<PartnerFormState>({
+    id: "",
+    username: "",
+    displayName: "",
+    avatarUrl: "",
+    accountType: "person",
+    partnerType: "",
+    partnerStatus: "none",
+    partnerBadgeLabel: "",
+    partnerSlug: "",
+    partnerBioShort: "",
+    partnerInstagramUrl: "",
+    partnerWebsiteUrl: "",
+    partnerContactEmail: "",
+    organizerEventId: "",
+  });
+  const [partnerShellForm, setPartnerShellForm] = useState<PartnerShellFormState>({
+    accountType: "partner",
+    username: "",
+    displayName: "",
+    partnerType: "promoter",
+    badgeLabel: "Founding Partner",
+    partnerSlug: "",
+    contactEmail: "",
+    instagramUrl: "",
+    websiteUrl: "",
+    bioShort: "",
+  });
 
   const [form, setForm] = useState<FormState>({
     id: null,
@@ -214,6 +302,24 @@ export default function Admin() {
   }, [events]);
 
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const isPartnerSelected = partnerForm.accountType === "partner";
+  const filteredOrganizerEvents = useMemo(() => {
+    const query = organizerEventSearch.trim().toLowerCase();
+    const pool = upcomingEvents.filter((event) => !event.organizer_profile_id || event.organizer_profile_id === partnerForm.id);
+    if (!query) return pool.slice(0, 20);
+    return pool
+      .filter((event) => {
+        const haystack = [
+          event.title,
+          event.location ?? "",
+          formatEventDateTimeRange(event),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      })
+      .slice(0, 20);
+  }, [organizerEventSearch, partnerForm.id, upcomingEvents]);
   const latestDailyKpi = dailyKpis[0] ?? null;
   const totalRetentionEmailSent = retentionEmailSummary.reduce((sum, row) => sum + row.sent, 0);
   const totalRetentionEmailOpened = retentionEmailSummary.reduce((sum, row) => sum + row.opened, 0);
@@ -330,7 +436,7 @@ export default function Admin() {
 
     const { data, error } = await supabase
       .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,description,event_source,moderation_status,moderation_note,ticket_url,external_url")
+      .select("id,title,location,event_date,event_end_date,image_url,description,event_source,moderation_status,moderation_note,ticket_url,external_url,organizer_profile_id")
       .order("event_date", { ascending: true });
 
     if (error) {
@@ -443,17 +549,23 @@ export default function Admin() {
   const loadDailyKpis = async () => {
     setLoadingDailyKpis(true);
     try {
+      const endDate = chicagoDateOffset(-1);
+      const startDate = chicagoDateOffset(-14);
       const [{ data: metrics, error: metricsErr }, { data: sources, error: sourcesErr }] = await Promise.all([
         supabase
           .from("daily_kpi_metrics")
           .select(
             "metric_date,new_users,active_users,wau_7d,rsvps,friend_adds,events_happening,activated_new_users,activation_rate_pct,new_users_with_friend_24h,friend_24h_rate_pct,new_users_with_rsvp_24h,rsvp_24h_rate_pct,new_users_with_invite_72h,invite_72h_rate_pct,d1_retained_users,d1_eligible_users,d1_retention_pct,d7_retained_users,d7_eligible_users,d7_retention_pct,d30_retained_users,d30_eligible_users,d30_retention_pct,event_detail_views,invite_sent,invite_opened,invite_signup_completed,invite_rsvp_completed"
           )
+          .gte("metric_date", startDate)
+          .lte("metric_date", endDate)
           .order("metric_date", { ascending: false })
           .limit(14),
         supabase
           .from("daily_kpi_rsvp_sources")
           .select("metric_date,source,rsvp_count,pct_of_day")
+          .gte("metric_date", startDate)
+          .lte("metric_date", endDate)
           .order("metric_date", { ascending: false })
           .limit(32),
       ]);
@@ -653,8 +765,8 @@ export default function Admin() {
   const refreshDailyKpis = async () => {
     setRefreshingDailyKpis(true);
     try {
-      const startDate = chicagoDay(new Date(Date.now() - 35 * 24 * 60 * 60 * 1000));
-      const endDate = chicagoDay(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const startDate = chicagoDateOffset(-35);
+      const endDate = chicagoDateOffset(-1);
       const {
         data: { session },
         error: sessionErr,
@@ -710,6 +822,194 @@ export default function Admin() {
     }
   };
 
+  const createPartnerShell = async () => {
+    const username = partnerShellForm.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const displayName = partnerShellForm.displayName.trim();
+    const accountType = partnerShellForm.accountType === "person" ? "person" : "partner";
+
+    if (!username || username.length < 3) {
+      toast.error("Username must be at least 3 characters");
+      return;
+    }
+
+    if (!displayName) {
+      toast.error("Display name is required");
+      return;
+    }
+
+    if (!partnerShellForm.contactEmail.trim()) {
+      toast.error("Contact email is required");
+      return;
+    }
+
+    setCreatingPartnerShell(true);
+    try {
+      const {
+        data: { session },
+        error: sessionErr,
+      } = await supabase.auth.getSession();
+      if (sessionErr || !session?.access_token) {
+        throw new Error(sessionErr?.message ?? "No active session");
+      }
+
+      const response = await fetch("/api/admin-create-partner", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          accountType,
+          username,
+          displayName,
+          contactEmail: partnerShellForm.contactEmail.trim(),
+          partnerType: partnerShellForm.partnerType,
+          badgeLabel: partnerShellForm.badgeLabel,
+          partnerSlug: normalizePartnerSlug(partnerShellForm.partnerSlug),
+          instagramUrl: partnerShellForm.instagramUrl,
+          websiteUrl: partnerShellForm.websiteUrl,
+          bioShort: partnerShellForm.bioShort,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; profile?: PartnerProfileRow }
+        | null;
+
+      if (!response.ok || !payload?.profile) {
+        throw new Error(payload?.error ?? "Failed creating partner shell");
+      }
+
+      await loadPartnerProfiles();
+      setSelectedPartnerId(payload.profile.id);
+      hydratePartnerForm(payload.profile);
+      resetPartnerShellForm();
+      toast.success(accountType === "partner" ? "Partner account created" : "User account created");
+    } catch (err: any) {
+      console.error("Failed creating partner shell:", err);
+      toast.error(err?.message ?? "Failed to create account");
+    } finally {
+      setCreatingPartnerShell(false);
+    }
+  };
+
+  const savePartnerProfile = async () => {
+    if (!partnerForm.id) {
+      toast.error("Pick a profile first");
+      return;
+    }
+
+    setSavingPartner(true);
+    try {
+      const payload = {
+        account_type: partnerForm.accountType,
+        avatar_url: partnerForm.avatarUrl || null,
+        partner_type: partnerForm.accountType === "partner" ? partnerForm.partnerType || null : null,
+        partner_status: partnerForm.accountType === "partner" ? partnerForm.partnerStatus || "active" : "none",
+        partner_badge_label:
+          partnerForm.accountType === "partner" ? partnerForm.partnerBadgeLabel.trim() || "Partner" : null,
+        partner_slug:
+          partnerForm.accountType === "partner"
+            ? normalizePartnerSlug(partnerForm.partnerSlug) || null
+            : null,
+        partner_bio_short: partnerForm.accountType === "partner" ? partnerForm.partnerBioShort.trim() || null : null,
+        partner_instagram_url:
+          partnerForm.accountType === "partner" ? partnerForm.partnerInstagramUrl.trim() || null : null,
+        partner_website_url:
+          partnerForm.accountType === "partner" ? partnerForm.partnerWebsiteUrl.trim() || null : null,
+        partner_contact_email:
+          partnerForm.accountType === "partner" ? partnerForm.partnerContactEmail.trim() || null : null,
+      };
+
+      const { error } = await supabase.from("profiles").update(payload).eq("id", partnerForm.id);
+      if (error) throw error;
+
+      toast.success(partnerForm.accountType === "partner" ? "Partner profile saved" : "Profile reverted to person");
+      await loadPartnerProfiles();
+    } catch (err: any) {
+      console.error("Failed saving partner profile:", err);
+      toast.error(err?.message ?? "Failed to save partner profile");
+    } finally {
+      setSavingPartner(false);
+    }
+  };
+
+  const uploadPartnerAvatar = async (file: File) => {
+    if (!partnerForm.id) {
+      toast.error("Create or select a partner first");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    if (file.size > 6 * 1024 * 1024) {
+      toast.error("Image too large", { description: "Max size is 6MB." });
+      return;
+    }
+
+    setUploadingPartnerAvatar(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${partnerForm.id}/partner-${randomId()}.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type,
+      });
+      if (uploadErr) throw uploadErr;
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+      const publicUrl = data?.publicUrl;
+      if (!publicUrl) throw new Error("Upload worked, but URL is missing");
+
+      setPartnerForm((prev) => ({ ...prev, avatarUrl: publicUrl }));
+      const { error: profileErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", partnerForm.id);
+      if (profileErr) throw profileErr;
+
+      await loadPartnerProfiles();
+      toast.success("Partner image uploaded");
+    } catch (err: any) {
+      console.error("Failed uploading partner avatar:", err);
+      toast.error(err?.message ?? "Failed to upload partner image");
+    } finally {
+      setUploadingPartnerAvatar(false);
+    }
+  };
+
+  const assignOrganizerToEvent = async () => {
+    if (!partnerForm.id || !partnerForm.organizerEventId) {
+      toast.error("Pick a partner and an event first");
+      return;
+    }
+
+    setSavingPartner(true);
+    try {
+      const { error } = await supabase
+        .from("events")
+        .update({ organizer_profile_id: partnerForm.id })
+        .eq("id", partnerForm.organizerEventId);
+
+      if (error) throw error;
+
+      toast.success("Event linked to partner");
+      setPartnerForm((prev) => ({ ...prev, organizerEventId: "" }));
+      setOrganizerEventSearch("");
+      await loadEvents();
+    } catch (err: any) {
+      console.error("Failed assigning organizer to event:", err);
+      toast.error(err?.message ?? "Failed to link event");
+    } finally {
+      setSavingPartner(false);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -736,6 +1036,7 @@ export default function Admin() {
       if (ok) {
         await Promise.all([
           loadEvents(),
+          loadPartnerProfiles(),
           loadGrowthMetrics(),
           loadDailyKpis(),
           loadRetentionEmailMetrics(),
@@ -759,6 +1060,90 @@ export default function Admin() {
       moderation_status: e.moderation_status === "quarantined" ? "quarantined" : "approved",
       moderation_note: e.moderation_note ?? "",
     });
+  };
+
+  const resetPartnerShellForm = () => {
+    setPartnerShellForm({
+      accountType: "partner",
+      username: "",
+      displayName: "",
+      partnerType: "promoter",
+      badgeLabel: "Founding Partner",
+      partnerSlug: "",
+      contactEmail: "",
+      instagramUrl: "",
+      websiteUrl: "",
+      bioShort: "",
+    });
+  };
+
+  const hydratePartnerForm = (profile: PartnerProfileRow | null) => {
+    if (!profile) {
+      setPartnerForm({
+        id: "",
+        username: "",
+        displayName: "",
+        avatarUrl: "",
+        accountType: "person",
+        partnerType: "",
+        partnerStatus: "none",
+        partnerBadgeLabel: "",
+        partnerSlug: "",
+        partnerBioShort: "",
+        partnerInstagramUrl: "",
+        partnerWebsiteUrl: "",
+        partnerContactEmail: "",
+        organizerEventId: "",
+      });
+      setOrganizerEventSearch("");
+      return;
+    }
+
+    setPartnerForm({
+      id: profile.id,
+      username: profile.username ?? "",
+      displayName: profile.display_name ?? "",
+      avatarUrl: profile.avatar_url ?? "",
+      accountType: profile.account_type === "partner" ? "partner" : "person",
+      partnerType: profile.partner_type ?? "",
+      partnerStatus: profile.partner_status ?? "none",
+      partnerBadgeLabel: profile.partner_badge_label ?? "",
+      partnerSlug: profile.partner_slug ?? "",
+      partnerBioShort: profile.partner_bio_short ?? "",
+      partnerInstagramUrl: profile.partner_instagram_url ?? "",
+      partnerWebsiteUrl: profile.partner_website_url ?? "",
+      partnerContactEmail: profile.partner_contact_email ?? "",
+      organizerEventId: "",
+    });
+    setOrganizerEventSearch("");
+  };
+
+  const loadPartnerProfiles = async () => {
+    setLoadingPartners(true);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "id,username,display_name,avatar_url,account_type,partner_type,partner_status,partner_badge_label,partner_slug,partner_bio_short,partner_instagram_url,partner_website_url,partner_contact_email"
+        )
+        .order("updated_at", { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      const rows = (data ?? []) as PartnerProfileRow[];
+      setPartnerProfiles(rows);
+
+      if (selectedPartnerId) {
+        const match = rows.find((row) => row.id === selectedPartnerId) ?? null;
+        if (match) hydratePartnerForm(match);
+      }
+    } catch (err: any) {
+      console.error("Failed loading partner profiles:", err);
+      toast.error(err?.message ?? "Failed to load partner profiles");
+      setPartnerProfiles([]);
+    } finally {
+      setLoadingPartners(false);
+    }
   };
 
   const upsertEvent = async () => {
@@ -962,6 +1347,384 @@ export default function Admin() {
             </Link>
             <div className="px-4 py-2 rounded-xl border border-white/10 bg-black/20 text-sm text-zinc-300">
               {loadingEvents ? "Loading event counts..." : `${upcomingEvents.length} upcoming, ${pastEvents.length} past`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8 rounded-2xl border border-fuchsia-400/20 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="text-sm font-semibold">Partner Accounts</div>
+            <div className="text-xs text-zinc-500">
+              Convert a normal profile into an organizer surface, then attach one anchor event so the hosted-by treatment shows up in-product.
+            </div>
+          </div>
+          <button
+            onClick={() => void loadPartnerProfiles()}
+            disabled={loadingPartners}
+            className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+          >
+            {loadingPartners ? "Loading..." : "Reload partners"}
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+          <div className="text-sm font-semibold text-white">Create account</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            Use this for either a regular user or a partner account. Partner-only fields stay hidden until you need them.
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Account type</div>
+              <select
+                value={partnerShellForm.accountType}
+                onChange={(e) =>
+                  setPartnerShellForm((prev) => ({
+                    ...prev,
+                    accountType: e.target.value === "person" ? "person" : "partner",
+                  }))
+                }
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+              >
+                <option value="partner">Partner</option>
+                <option value="person">Person</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Display name</div>
+              <input
+                value={partnerShellForm.displayName}
+                onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, displayName: e.target.value }))}
+                placeholder="Display name"
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Username</div>
+              <input
+                value={partnerShellForm.username}
+                onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, username: e.target.value }))}
+                placeholder="Username"
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Contact email</div>
+              <input
+                value={partnerShellForm.contactEmail}
+                onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                placeholder="Contact email"
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+              />
+            </div>
+          </div>
+
+          {partnerShellForm.accountType === "partner" ? (
+            <>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <div className="text-xs text-zinc-400 mb-2">Partner type</div>
+                  <select
+                    value={partnerShellForm.partnerType}
+                    onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, partnerType: e.target.value }))}
+                    className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  >
+                    <option value="promoter">Promoter</option>
+                    <option value="venue">Venue</option>
+                    <option value="collective">Collective</option>
+                    <option value="dj">DJ</option>
+                    <option value="artist">Artist</option>
+                    <option value="brand">Brand</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-400 mb-2">Badge label</div>
+                  <input
+                    value={partnerShellForm.badgeLabel}
+                    onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, badgeLabel: e.target.value }))}
+                    placeholder="Badge label"
+                    className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-400 mb-2">Partner slug</div>
+                  <input
+                    value={partnerShellForm.partnerSlug}
+                    onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, partnerSlug: e.target.value }))}
+                    placeholder="Partner slug"
+                    className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-400 mb-2">Instagram URL</div>
+                  <input
+                    value={partnerShellForm.instagramUrl}
+                    onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, instagramUrl: e.target.value }))}
+                    placeholder="Instagram URL"
+                    className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="text-xs text-zinc-400 mb-2">Website URL</div>
+                  <input
+                    value={partnerShellForm.websiteUrl}
+                    onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, websiteUrl: e.target.value }))}
+                    placeholder="Website URL"
+                    className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <div className="text-xs text-zinc-400 mb-2">Short bio</div>
+                <textarea
+                  value={partnerShellForm.bioShort}
+                  onChange={(e) => setPartnerShellForm((prev) => ({ ...prev, bioShort: e.target.value }))}
+                  placeholder="Short bio"
+                  className="w-full min-h-[96px] rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                />
+              </div>
+            </>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={() => void createPartnerShell()}
+              disabled={creatingPartnerShell}
+              className="px-4 py-3 rounded-xl bg-white text-black font-medium hover:bg-zinc-200 disabled:opacity-60"
+            >
+              {creatingPartnerShell ? "Creating..." : "Create account"}
+            </button>
+            <div className="px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-xs text-zinc-400">
+              Best for white-glove setup before someone signs in themselves.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs text-zinc-400 mb-2">Profile image</div>
+              <div className="flex items-center gap-4">
+                {partnerForm.avatarUrl ? (
+                  <img
+                    src={partnerForm.avatarUrl}
+                    alt={partnerForm.displayName || partnerForm.username || "Partner"}
+                    className="h-16 w-16 rounded-2xl border border-white/10 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xs text-zinc-400">
+                    No image
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => partnerAvatarFileRef.current?.click()}
+                    disabled={!partnerForm.id || uploadingPartnerAvatar}
+                    className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50 text-sm"
+                  >
+                    {uploadingPartnerAvatar ? "Uploading..." : "Upload image"}
+                  </button>
+                  <input
+                    ref={partnerAvatarFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      if (file) void uploadPartnerAvatar(file);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Choose account</div>
+              <select
+                value={selectedPartnerId}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setSelectedPartnerId(nextId);
+                  const match = partnerProfiles.find((row) => row.id === nextId) ?? null;
+                  hydratePartnerForm(match);
+                }}
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+              >
+                <option value="">Select an account</option>
+                {partnerProfiles.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {(row.display_name?.trim() || row.username || row.id.slice(0, 8))} {row.account_type === "partner" ? "[partner]" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-zinc-400 mb-2">Account type</div>
+                <select
+                  value={partnerForm.accountType}
+                  onChange={(e) =>
+                    setPartnerForm((prev) => ({
+                      ...prev,
+                      accountType: e.target.value === "partner" ? "partner" : "person",
+                      partnerStatus: e.target.value === "partner" ? "active" : "none",
+                    }))
+                  }
+                  className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                >
+                  <option value="person">Person</option>
+                  <option value="partner">Partner</option>
+                </select>
+              </div>
+            </div>
+
+            {isPartnerSelected ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-2">Partner type</div>
+                    <select
+                      value={partnerForm.partnerType}
+                      onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerType: e.target.value }))}
+                      className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                    >
+                      <option value="">Select type</option>
+                      <option value="promoter">Promoter</option>
+                      <option value="venue">Venue</option>
+                      <option value="collective">Collective</option>
+                      <option value="dj">DJ</option>
+                      <option value="artist">Artist</option>
+                      <option value="brand">Brand</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-2">Badge label</div>
+                    <input
+                      value={partnerForm.partnerBadgeLabel}
+                      onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerBadgeLabel: e.target.value }))}
+                      placeholder="Badge label"
+                      className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-2">Partner slug</div>
+                    <input
+                      value={partnerForm.partnerSlug}
+                      onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerSlug: e.target.value }))}
+                      placeholder="Partner slug"
+                      className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-2">Instagram URL</div>
+                    <input
+                      value={partnerForm.partnerInstagramUrl}
+                      onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerInstagramUrl: e.target.value }))}
+                      placeholder="Instagram URL"
+                      className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="text-xs text-zinc-400 mb-2">Website URL</div>
+                    <input
+                      value={partnerForm.partnerWebsiteUrl}
+                      onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerWebsiteUrl: e.target.value }))}
+                      placeholder="Website URL"
+                      className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-400 mb-2">Short bio</div>
+                  <textarea
+                    value={partnerForm.partnerBioShort}
+                    onChange={(e) => setPartnerForm((prev) => ({ ...prev, partnerBioShort: e.target.value }))}
+                    placeholder="Short bio"
+                    className="w-full min-h-[110px] rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-zinc-500">
+                This account is set to `Person`. Switch it to `Partner` to unlock organizer fields and event hosting.
+              </div>
+            )}
+
+            <button
+              onClick={() => void savePartnerProfile()}
+              disabled={savingPartner || !partnerForm.id}
+              className="whozin-brand-button rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {savingPartner ? "Saving..." : "Save account settings"}
+            </button>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Selected account</div>
+              <div className="text-lg font-semibold text-white">
+                {partnerForm.displayName || partnerForm.username || "No profile selected"}
+              </div>
+              <div className="mt-1 text-xs text-zinc-500">
+                {partnerForm.username ? `@${partnerForm.username}` : "Pick an account to edit it or turn it into a partner."}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs text-zinc-400 mb-2">Attach one anchor event</div>
+              <input
+                value={organizerEventSearch}
+                onChange={(e) => setOrganizerEventSearch(e.target.value)}
+                disabled={!partnerForm.id || !isPartnerSelected}
+                className="mb-2 w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white disabled:opacity-50"
+                placeholder="Search by title, location, or date"
+              />
+              <select
+                value={partnerForm.organizerEventId}
+                onChange={(e) => setPartnerForm((prev) => ({ ...prev, organizerEventId: e.target.value }))}
+                disabled={!partnerForm.id || !isPartnerSelected}
+                className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm text-white disabled:opacity-50"
+              >
+                <option value="">Select upcoming event</option>
+                {filteredOrganizerEvents.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.title} - {formatEventDateTimeRange(event)}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-2 text-xs text-zinc-500">
+                This sets the in-app `Hosted by` attribution on the event page. Search narrows to upcoming events and hides ones already attached to another partner.
+              </div>
+            </div>
+
+            <button
+              onClick={() => void assignOrganizerToEvent()}
+              disabled={savingPartner || !partnerForm.organizerEventId || !isPartnerSelected}
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-zinc-100 hover:bg-white/10 disabled:opacity-50"
+            >
+              Attach event to partner
+            </button>
+
+            <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-3 text-xs text-zinc-200">
+              Recommended flow: convert Queen Out to `partner`, set badge to `Founding Partner`, add IG + site, then attach their next event so the organizer card becomes visible immediately.
             </div>
           </div>
         </div>
@@ -1730,7 +2493,7 @@ export default function Admin() {
           <button
             onClick={upsertEvent}
             disabled={working}
-            className="w-full px-6 py-4 rounded-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 disabled:opacity-50"
+            className="whozin-brand-button w-full rounded-2xl px-6 py-4 font-semibold text-white disabled:opacity-50"
           >
             {working ? "Saving…" : form.id ? "Update Event" : "Create Event"}
           </button>

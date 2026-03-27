@@ -1,0 +1,124 @@
+Create a polished brand asset system for a mobile nightlife app called Whozin.
+
+Brand summary:
+Whozin helps you see who is going before you go.
+It is the private social layer for nights out and live events.
+
+Core brand feeling:
+dark, immersive, nightlife-native, private by default, high-signal, selective, social-first, premium, modern, energetic without chaos
+
+Audience:
+social event-goers, nightlife crews, concert/club/festival audiences, friend groups deciding where to go based on who else is going
+
+What the brand should communicate:
+social proof first
+private confidence
+late-night energy
+fast decisions
+premium but accessible
+not a generic event marketplace
+
+Visual direction:
+Use a dark-mode-first visual system with deep black and zinc neutrals as the base, then controlled bursts of saturated pink, purple, and subtle blue glow.
+The look should feel like club posters, neon haze, smoked glass, blurred ambient light, and backstage social access.
+Keep it clean and high-contrast. Avoid clutter, cheesy party tropes, or loud festival flyer chaos.
+
+Color palette:
+Black: #000000
+Canvas: #09090B
+Surface: #18181B
+Elevated surface: #27272A
+Primary text: #FFFFFF
+Secondary text: #A1A1AA
+Muted text: #71717A
+Hot pink: #DB2777
+Electric purple: #9333EA
+Signal blue: #3B82F6
+Violet: #A855F7
+Success green: #22C55E
+Rose: #F43F5E
+Orange: #F97316
+
+Primary gradients:
+Brand CTA gradient: linear-gradient(to right, #DB2777, #9333EA)
+Icon gradient: linear-gradient(135deg, #EC4899, #9333EA)
+
+Shape language:
+rounded square geometry
+premium, not cute
+generous corner radius
+soft but structured
+glassmorphism and smoked acrylic surfaces
+subtle translucent borders
+ambient glow and blur behind elements
+
+Typography direction:
+bold, compact sans-serif headlines
+clean, neutral sans-serif UI text
+tight tracking for headlines
+wide tracking for micro-labels, pills, and status tags
+tone is confident, warm, short, and in-the-know
+
+Logo direction:
+Build the primary Whozin mark as a rounded-square gradient tile with a bold white W glyph centered inside it.
+The W should be simple, geometric, highly legible at small sizes, and feel direct and premium.
+No outlines, no bevels, no chrome, no 3D gimmicks.
+Create:
+1. icon-only mark
+2. horizontal lockup with icon + wordmark
+3. stacked lockup
+4. one-color dark version
+5. one-color light version
+
+Asset set to create:
+1. App icon system
+- iOS / Android app icon concept
+- favicon concept
+- square social avatar version
+- monochrome small-size version
+- safe-area and small-scale legibility checks
+
+2. Social media profile assets
+- Instagram profile icon
+- TikTok profile icon
+- X profile icon
+- Spotify / event-partner friendly avatar variant
+All should feel consistent and highly recognizable at tiny sizes.
+
+3. Social share system
+- Open Graph / Twitter card, 1200x630
+- Instagram story promo frame, 1080x1920
+- square social announcement post, 1080x1080
+Use the messaging:
+“See who’s going before you go.”
+Optional supporting line:
+“The private social layer for nights out.”
+
+4. Brand toolkit
+- color swatches
+- gradient recipes
+- logo clear space rules
+- icon spacing and radius specs
+- sample background treatments
+- social-proof-inspired badges or chips
+- a “Private by default” pill
+- a “The Move” badge style
+
+Important stylistic constraints:
+Lead with people and social momentum, not ticketing or logistics.
+This should feel selective and alive, not mass-market.
+Avoid generic event app visuals, loud EDM clichés, neon overload, emojis, confetti, crowds, or cheesy nightlife stock imagery.
+Color should be controlled: mostly dark neutrals with focused accent glow.
+Make the system feel premium, minimal, and instantly brandable.
+
+Output frames:
+- Brand overview board
+- Logo exploration board
+- Final logo system board
+- App icon presentation board
+- Social profile icon board
+- Social card mockups board
+- Mini style guide board
+
+Final deliverable goal:
+A cohesive asset family that makes Whozin feel like a private, premium nightlife social product with strong recognition across app icons, profile icons, and social media surfaces.

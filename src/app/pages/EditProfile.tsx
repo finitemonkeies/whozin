@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@/lib/analytics";
+import { normalizePartnerSlug, type PartnerProfileFields } from "@/lib/partnerProfiles";
 
 function sanitizeUsername(input: string) {
   const v = input.trim().toLowerCase();
@@ -28,6 +29,15 @@ export function EditProfile() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [accountType, setAccountType] = useState<"person" | "partner">("person");
+  const [partnerType, setPartnerType] = useState<string>("");
+  const [partnerBadgeLabel, setPartnerBadgeLabel] = useState("");
+  const [partnerSlug, setPartnerSlug] = useState("");
+  const [partnerBioShort, setPartnerBioShort] = useState("");
+  const [partnerInstagramUrl, setPartnerInstagramUrl] = useState("");
+  const [partnerWebsiteUrl, setPartnerWebsiteUrl] = useState("");
+  const [partnerContactEmail, setPartnerContactEmail] = useState("");
   const normalizedUsername = useMemo(() => sanitizeUsername(username), [username]);
 
   const [avatarUrl, setAvatarUrl] = useState<string>("");
@@ -50,7 +60,9 @@ export function EditProfile() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("username,avatar_url")
+        .select(
+          "username,display_name,avatar_url,account_type,partner_type,partner_badge_label,partner_slug,partner_bio_short,partner_instagram_url,partner_website_url,partner_contact_email"
+        )
         .eq("id", session.user.id)
         .maybeSingle();
 
@@ -60,6 +72,15 @@ export function EditProfile() {
 
       if (data) {
         setUsername(data.username ?? "");
+        setDisplayName(data.display_name ?? "");
+        setAccountType(data.account_type === "partner" ? "partner" : "person");
+        setPartnerType(data.partner_type ?? "");
+        setPartnerBadgeLabel(data.partner_badge_label ?? "");
+        setPartnerSlug(data.partner_slug ?? "");
+        setPartnerBioShort(data.partner_bio_short ?? "");
+        setPartnerInstagramUrl(data.partner_instagram_url ?? "");
+        setPartnerWebsiteUrl(data.partner_website_url ?? "");
+        setPartnerContactEmail(data.partner_contact_email ?? "");
         setAvatarUrl(data.avatar_url ?? defaultAvatar(data.username ?? session.user.id));
       } else {
         setAvatarUrl(defaultAvatar(session.user.id));
@@ -157,7 +178,19 @@ export function EditProfile() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ username: u, avatar_url: avatarUrl || defaultAvatar(u) })
+        .update({
+          username: u,
+          display_name: displayName.trim() || null,
+          avatar_url: avatarUrl || defaultAvatar(u),
+          account_type: accountType,
+          partner_type: accountType === "partner" ? partnerType || null : null,
+          partner_badge_label: accountType === "partner" ? partnerBadgeLabel.trim() || "Partner" : null,
+          partner_slug: accountType === "partner" ? normalizePartnerSlug(partnerSlug || displayName || u) || null : null,
+          partner_bio_short: accountType === "partner" ? partnerBioShort.trim() || null : null,
+          partner_instagram_url: accountType === "partner" ? partnerInstagramUrl.trim() || null : null,
+          partner_website_url: accountType === "partner" ? partnerWebsiteUrl.trim() || null : null,
+          partner_contact_email: accountType === "partner" ? partnerContactEmail.trim() || null : null,
+        })
         .eq("id", userId);
 
       if (error) {
@@ -228,6 +261,20 @@ export function EditProfile() {
 
       <div className="space-y-6">
         <div>
+          <label className="text-xs text-zinc-400 uppercase tracking-wider">Display Name</label>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+            placeholder="Just James"
+            autoComplete="name"
+          />
+          <p className="text-xs text-zinc-500 mt-2">
+            This is the name we should use in invites, emails, and profile surfaces.
+          </p>
+        </div>
+
+        <div>
           <label className="text-xs text-zinc-400 uppercase tracking-wider">Username</label>
           <input
             value={username}
@@ -243,10 +290,98 @@ export function EditProfile() {
           </p>
         </div>
 
+        {accountType === "partner" ? (
+          <>
+            <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3">
+              <div className="text-sm font-semibold text-white">Partner account</div>
+              <div className="mt-1 text-xs text-zinc-300">
+                This profile is treated like an organizer surface. Keep the bio short, add Instagram and website, and use a clear badge label.
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Partner Type</label>
+              <select
+                value={partnerType}
+                onChange={(e) => setPartnerType(e.target.value)}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+              >
+                <option value="">Select type</option>
+                <option value="promoter">Promoter</option>
+                <option value="venue">Venue</option>
+                <option value="collective">Collective</option>
+                <option value="dj">DJ</option>
+                <option value="artist">Artist</option>
+                <option value="brand">Brand</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Badge Label</label>
+              <input
+                value={partnerBadgeLabel}
+                onChange={(e) => setPartnerBadgeLabel(e.target.value)}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="Founding Partner"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Partner Slug</label>
+              <input
+                value={partnerSlug}
+                onChange={(e) => setPartnerSlug(normalizePartnerSlug(e.target.value))}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="queen-out"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Short Bio</label>
+              <textarea
+                value={partnerBioShort}
+                onChange={(e) => setPartnerBioShort(e.target.value)}
+                className="mt-2 w-full min-h-[110px] rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="Queer Bay rave series building high-energy nights and repeat community."
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Instagram URL</label>
+              <input
+                value={partnerInstagramUrl}
+                onChange={(e) => setPartnerInstagramUrl(e.target.value)}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="https://instagram.com/queenoutsf"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Website URL</label>
+              <input
+                value={partnerWebsiteUrl}
+                onChange={(e) => setPartnerWebsiteUrl(e.target.value)}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="https://queenout.com"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider">Contact Email</label>
+              <input
+                value={partnerContactEmail}
+                onChange={(e) => setPartnerContactEmail(e.target.value)}
+                className="mt-2 w-full rounded-xl bg-zinc-900 border border-white/10 px-4 py-3 outline-none focus:border-pink-500/50"
+                placeholder="hello@queenout.com"
+              />
+            </div>
+          </>
+        ) : null}
+
         <button
           onClick={handleProfileSave}
           disabled={savingUsername || uploadingAvatar}
-          className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold disabled:opacity-60"
+          className="whozin-brand-button w-full rounded-xl py-3 font-bold disabled:opacity-60"
         >
           {savingUsername ? "Saving..." : "Save"}
         </button>

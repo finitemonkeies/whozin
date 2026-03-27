@@ -1,0 +1,97 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - link "Settings" [ref=e7] [cursor=pointer]:
+      - /url: /settings
+      - img [ref=e8]
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - img "Avatar" [ref=e15]
+        - generic [ref=e16]:
+          - generic [ref=e18]: James James
+          - generic [ref=e19]: "@justjames"
+          - generic [ref=e20]: Friends and friends-of-friends see you first. Everyone else sees you after you lock in.
+        - generic [ref=e21]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: "2"
+            - generic [ref=e25]: Events
+          - generic [ref=e27]:
+            - generic [ref=e28]: "30"
+            - generic [ref=e29]: Friends
+        - generic [ref=e30]:
+          - link "Add friends" [ref=e31] [cursor=pointer]:
+            - /url: /friends
+          - link "Edit profile" [ref=e32] [cursor=pointer]:
+            - /url: /profile/edit
+        - button "Copy link for a friend" [ref=e34]
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - heading "The Loop" [level=2] [ref=e39]
+            - generic [ref=e40]: Your inbox for friend movement, momentum, and one-friend nudges.
+          - button "All caught up" [disabled] [ref=e41]
+        - generic [ref=e42]:
+          - button "Britt is going out 7d ago Britt is going to FREE DJ DIESEL & WHETHAN POP UP PARTY w/ BROWNIES & LEMONADE at The Midway. Open it" [ref=e43]:
+            - generic [ref=e44]:
+              - img [ref=e46]
+              - generic [ref=e50]:
+                - generic [ref=e51]:
+                  - generic [ref=e52]: Britt is going out
+                  - generic [ref=e54]: 7d ago
+                - generic [ref=e55]: Britt is going to FREE DJ DIESEL & WHETHAN POP UP PARTY w/ BROWNIES & LEMONADE at The Midway.
+                - generic [ref=e56]: Open it
+          - button "Britt is going out 7d ago Britt is going to Galantis Midsommar Block Party. Open it" [ref=e57]:
+            - generic [ref=e58]:
+              - img [ref=e60]
+              - generic [ref=e64]:
+                - generic [ref=e65]:
+                  - generic [ref=e66]: Britt is going out
+                  - generic [ref=e68]: 7d ago
+                - generic [ref=e69]: Britt is going to Galantis Midsommar Block Party.
+                - generic [ref=e70]: Open it
+          - button "Show earlier activity (4)" [ref=e71]
+      - generic [ref=e72]:
+        - heading "Upcoming" [level=2] [ref=e74]
+        - generic [ref=e75]:
+          - link "Griztronics at the Gorge Griztronics at the Gorge Sat, May 23, 12:00 PM - George, WA Confirmed Share invite" [ref=e76] [cursor=pointer]:
+            - /url: /event/ef7b6c23-eecb-48dc-ae30-99077db79ed1?src=profile
+            - generic [ref=e77]:
+              - img "Griztronics at the Gorge" [ref=e79]
+              - generic [ref=e80]:
+                - generic [ref=e81]: Griztronics at the Gorge
+                - generic [ref=e82]: Sat, May 23, 12:00 PM - George, WA
+                - generic [ref=e83]:
+                  - generic [ref=e84]: Confirmed
+                  - button "Share invite" [ref=e85]:
+                    - img [ref=e86]
+                    - text: Share invite
+          - link "Among the Trees 2026 Among the Trees 2026 Thu, Jun 11, 12:00 PM - Lake Shasta, CA Confirmed Share invite" [ref=e91] [cursor=pointer]:
+            - /url: /event/058efc93-c150-4e52-9a3c-1da3aa4de707?src=profile
+            - generic [ref=e92]:
+              - img "Among the Trees 2026" [ref=e94]
+              - generic [ref=e95]:
+                - generic [ref=e96]: Among the Trees 2026
+                - generic [ref=e97]: Thu, Jun 11, 12:00 PM - Lake Shasta, CA
+                - generic [ref=e98]:
+                  - generic [ref=e99]: Confirmed
+                  - button "Share invite" [ref=e100]:
+                    - img [ref=e101]
+                    - text: Share invite
+  - generic [ref=e107]:
+    - link "Feed" [ref=e108] [cursor=pointer]:
+      - /url: /
+      - img [ref=e109]
+      - generic [ref=e111]: Feed
+    - link "Explore" [ref=e112] [cursor=pointer]:
+      - /url: /explore
+      - img [ref=e113]
+      - generic [ref=e117]: Explore
+    - link "Friends" [ref=e118] [cursor=pointer]:
+      - /url: /friends
+      - img [ref=e119]
+      - generic [ref=e123]: Friends
+    - link "1 Profile" [ref=e124] [cursor=pointer]:
+      - /url: /profile
+      - img [ref=e126]
+      - generic [ref=e129]: "1"
+      - generic [ref=e131]: Profile
+  - region "Notifications alt+T"

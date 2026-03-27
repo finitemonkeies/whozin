@@ -19,6 +19,7 @@ type EventRow = {
   event_source?: string | null;
   moderation_status?: string | null;
   moderation_note?: string | null;
+  organizer_profile_id?: string | null;
 };
 
 type FormState = {
@@ -31,6 +32,15 @@ type FormState = {
   description: string;
   moderation_status: "approved" | "quarantined";
   moderation_note: string;
+  organizer_profile_id: string;
+};
+
+type PartnerProfileRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  account_type: "person" | "partner";
+  partner_status: string | null;
 };
 
 function toDatetimeLocal(value: string | null) {
@@ -52,7 +62,9 @@ export default function AdminEvents() {
   const [loading, setLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [partnerProfiles, setPartnerProfiles] = useState<PartnerProfileRow[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
+  const [loadingPartners, setLoadingPartners] = useState(true);
   const [working, setWorking] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showUpcomingEvents, setShowUpcomingEvents] = useState(true);
@@ -67,6 +79,7 @@ export default function AdminEvents() {
     description: "",
     moderation_status: "approved",
     moderation_note: "",
+    organizer_profile_id: "",
   });
 
   const upcomingEvents = useMemo(() => {
@@ -90,6 +103,7 @@ export default function AdminEvents() {
       description: "",
       moderation_status: "approved",
       moderation_note: "",
+      organizer_profile_id: "",
     });
     if (searchParams.has("eventId")) {
       const nextParams = new URLSearchParams(searchParams);
@@ -110,7 +124,7 @@ export default function AdminEvents() {
     const { data, error } = await supabase
       .from("events")
       .select(
-        "id,title,location,event_date,event_end_date,image_url,description,event_source,moderation_status,moderation_note"
+        "id,title,location,event_date,event_end_date,image_url,description,event_source,moderation_status,moderation_note,organizer_profile_id"
       )
       .order("event_date", { ascending: true });
 
@@ -124,6 +138,34 @@ export default function AdminEvents() {
 
     setLoadingEvents(false);
   };
+
+  const loadPartnerProfiles = async () => {
+    setLoadingPartners(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,account_type,partner_status")
+      .eq("account_type", "partner")
+      .eq("partner_status", "active")
+      .order("display_name", { ascending: true });
+
+    if (error) {
+      console.error("Failed to load partners:", error);
+      toast.error(error.message ?? "Failed to load partners");
+      setPartnerProfiles([]);
+    } else {
+      setPartnerProfiles((data ?? []) as PartnerProfileRow[]);
+    }
+
+    setLoadingPartners(false);
+  };
+
+  const partnerLabelById = useMemo(() => {
+    const next: Record<string, string> = {};
+    for (const partner of partnerProfiles) {
+      next[partner.id] = partner.display_name?.trim() || partner.username?.trim() || partner.id.slice(0, 8);
+    }
+    return next;
+  }, [partnerProfiles]);
 
   const uploadEventImage = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -183,6 +225,7 @@ export default function AdminEvents() {
       description: event.description ?? "",
       moderation_status: event.moderation_status === "quarantined" ? "quarantined" : "approved",
       moderation_note: event.moderation_note ?? "",
+      organizer_profile_id: event.organizer_profile_id ?? "",
     });
 
     if (searchParams.get("eventId") !== event.id) {
@@ -243,6 +286,7 @@ export default function AdminEvents() {
       description: form.description.trim() || null,
       moderation_status: form.moderation_status,
       moderation_note: form.moderation_note.trim() || null,
+      organizer_profile_id: form.organizer_profile_id || null,
     };
 
     try {
@@ -350,7 +394,7 @@ export default function AdminEvents() {
       setLoading(false);
 
       if (ok) {
-        await loadEvents();
+        await Promise.all([loadEvents(), loadPartnerProfiles()]);
       }
     };
 
@@ -530,6 +574,25 @@ export default function AdminEvents() {
           </div>
 
           <div>
+            <div className="mb-1 text-sm text-zinc-400">Partner organizer</div>
+            <select
+              value={form.organizer_profile_id}
+              onChange={(e) => handleChange("organizer_profile_id", e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-white focus:outline-none"
+            >
+              <option value="">{loadingPartners ? "Loading partners..." : "No partner assigned"}</option>
+              {partnerProfiles.map((partner) => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.display_name?.trim() || partner.username?.trim() || partner.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 text-xs text-zinc-500">
+              Set this while creating the event to make the `Hosted by` card live immediately.
+            </div>
+          </div>
+
+          <div>
             <div className="mb-1 text-sm text-zinc-400">Moderation state</div>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -602,7 +665,7 @@ export default function AdminEvents() {
             type="button"
             onClick={() => void upsertEvent()}
             disabled={working}
-            className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-6 py-4 font-semibold disabled:opacity-50"
+            className="whozin-brand-button w-full rounded-2xl px-6 py-4 font-semibold disabled:opacity-50"
           >
             {working ? "Saving..." : form.id ? "Update Event" : "Create Event"}
           </button>
@@ -655,6 +718,11 @@ export default function AdminEvents() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-semibold">{event.title}</div>
                     <div className="flex items-center gap-2">
+                      {event.organizer_profile_id ? (
+                        <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-fuchsia-100">
+                          {partnerLabelById[event.organizer_profile_id] ?? "Partner"}
+                        </span>
+                      ) : null}
                       <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-zinc-400">
                         {sourceLabel(event.event_source)}
                       </span>
@@ -710,6 +778,11 @@ export default function AdminEvents() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-semibold">{event.title}</div>
                     <div className="flex items-center gap-2">
+                      {event.organizer_profile_id ? (
+                        <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-fuchsia-100">
+                          {partnerLabelById[event.organizer_profile_id] ?? "Partner"}
+                        </span>
+                      ) : null}
                       <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-zinc-400">
                         {sourceLabel(event.event_source)}
                       </span>

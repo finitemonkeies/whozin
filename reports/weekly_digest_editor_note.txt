@@ -1,0 +1,4 @@
+# Write this week's editor note here.
+# Keep it short: 1-4 sentences.
+# This file is read by scripts/preview-weekly-digest.mjs when --editor-note is not passed.
+

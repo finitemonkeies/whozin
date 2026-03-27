@@ -5,6 +5,9 @@
 */
 
 import { createClient } from "@supabase/supabase-js";
+import { loadLocalEnvFiles } from "./load-local-env.mjs";
+
+loadLocalEnvFiles(".env.ops", ".env");
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -1,0 +1,19 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - link "Feed" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img [ref=e7]
+      - generic [ref=e9]: Feed
+    - link "Explore" [ref=e10] [cursor=pointer]:
+      - /url: /explore
+      - img [ref=e11]
+      - generic [ref=e15]: Explore
+    - link "Friends" [ref=e16] [cursor=pointer]:
+      - /url: /friends
+      - img [ref=e17]
+      - generic [ref=e21]: Friends
+    - link "Profile" [ref=e22] [cursor=pointer]:
+      - /url: /profile
+      - img [ref=e24]
+      - generic [ref=e28]: Profile
+  - region "Notifications alt+T"

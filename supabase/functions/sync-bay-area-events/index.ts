@@ -1238,31 +1238,6 @@ async function upsertEvents(
 ): Promise<{ upserted: number; inserted: number; updated: number }> {
   if (events.length === 0) return { upserted: 0, inserted: 0, updated: 0 };
 
-  const groupedKeys = new Map<string, string[]>();
-  for (const event of events) {
-    const arr = groupedKeys.get(event.source) ?? [];
-    arr.push(event.sourceEventId);
-    groupedKeys.set(event.source, arr);
-  }
-
-  const existingSet = new Set<string>();
-  for (const [source, keys] of groupedKeys.entries()) {
-    const readChunkSize = 75;
-    for (let i = 0; i < keys.length; i += readChunkSize) {
-      const chunk = keys.slice(i, i + readChunkSize);
-      const { data, error } = await service
-        .from("events")
-        .select("event_source,source_event_id")
-        .eq("event_source", source)
-        .in("source_event_id", chunk);
-      if (error) throw error;
-      for (const row of data ?? []) {
-        const typed = row as { event_source: string; source_event_id: string | null };
-        if (typed.source_event_id) existingSet.add(`${typed.event_source}::${typed.source_event_id}`);
-      }
-    }
-  }
-
   const rows = events.map((event) => ({
     title: event.title,
     event_date: event.eventDateIso,
@@ -1282,20 +1257,23 @@ async function upsertEvents(
 
   const chunkSize = 50;
   let upserted = 0;
+  let inserted = 0;
+  let updated = 0;
+  let deduped = 0;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
-    const { error } = await service.from("events").upsert(chunk, {
-      onConflict: "event_source,source_event_id",
-    });
+    const { data, error } = await service.rpc("ingest_external_events", { p_events: chunk });
     if (error) throw error;
-    upserted += chunk.length;
+    upserted += Number(data?.upserted ?? chunk.length);
+    inserted += Number(data?.inserted ?? 0);
+    updated += Number(data?.updated ?? 0);
+    deduped += Number(data?.deduped ?? 0);
   }
 
-  const inserted = rows.filter((row) => !existingSet.has(`${row.event_source}::${row.source_event_id}`)).length;
   return {
     upserted,
     inserted,
-    updated: Math.max(0, upserted - inserted),
+    updated: updated + deduped,
   };
 }
 

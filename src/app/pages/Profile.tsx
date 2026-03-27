@@ -1,7 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Suspense, lazy } from "react";
-import { Settings, Share2 } from "lucide-react";
+import { Settings } from "lucide-react";
+import { ShareIcon } from "@/app/components/WhozinIcons";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { isEventPast, isEventUpcomingOrOngoing } from "@/lib/eventDates";
@@ -11,6 +12,12 @@ import { isEventVisible } from "@/lib/eventVisibility";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { featureFlags } from "@/lib/featureFlags";
 import { useAuth } from "@/app/providers/AuthProvider";
+import {
+  getPartnerBadgeLabel,
+  getPartnerTypeLabel,
+  isPartnerProfile,
+  type PartnerProfileFields,
+} from "@/lib/partnerProfiles";
 import {
   Drawer,
   DrawerContent,
@@ -27,8 +34,9 @@ const NotificationsPanel = lazy(() =>
 type ProfileRow = {
   id: string;
   username: string | null;
+  display_name: string | null;
   avatar_url: string | null;
-};
+} & PartnerProfileFields;
 
 type EventRow = {
   id: string;
@@ -54,7 +62,8 @@ function formatDateTime(value?: string | null) {
   });
 }
 
-function titleize(username?: string | null) {
+function titleize(displayName?: string | null, username?: string | null) {
+  if (displayName?.trim()) return displayName.trim();
   if (!username) return "Your Profile";
   return username
     .split(/[_\-.]/g)
@@ -112,7 +121,10 @@ export function Profile() {
   const [eventsCount, setEventsCount] = useState(0);
   const [friendsCount, setFriendsCount] = useState(0);
 
-  const displayName = useMemo(() => titleize(profile?.username), [profile]);
+  const displayName = useMemo(
+    () => titleize(profile?.display_name, profile?.username),
+    [profile?.display_name, profile?.username]
+  );
   const handle = useMemo(() => (profile?.username ? `@${profile.username}` : "@unknown"), [
     profile?.username,
   ]);
@@ -138,11 +150,15 @@ export function Profile() {
       return;
     }
 
-    const [profileRes, friendIdsRes, countRes, attendeeRowsRes] = await Promise.all([
-      supabase.from("profiles").select("id,username,avatar_url").eq("id", userId).single(),
+    const [profileRes, friendIdsRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select(
+          "id,username,display_name,avatar_url,account_type,partner_type,partner_status,partner_badge_label,partner_slug,partner_contact_email,partner_instagram_url,partner_website_url,partner_bio_short"
+        )
+        .eq("id", userId)
+        .single(),
       supabase.rpc("get_friend_ids"),
-      supabase.from("attendees").select("user_id", { head: true, count: "exact" }).eq("user_id", userId),
-      supabase.from("attendees").select("event_id").eq("user_id", userId),
     ]);
 
     if (profileRes.error) {
@@ -152,43 +168,78 @@ export function Profile() {
       return;
     }
 
-    setProfile(profileRes.data as ProfileRow);
+    const loadedProfile = profileRes.data as ProfileRow;
+    setProfile(loadedProfile);
     if (friendIdsRes.error) console.error(friendIdsRes.error);
     setFriendsCount(Array.isArray(friendIdsRes.data) ? friendIdsRes.data.length : 0);
-    setEventsCount(countRes.count ?? 0);
+    let events: EventRow[] = [];
 
-    if (attendeeRowsRes.error) {
-      console.error(attendeeRowsRes.error);
-      setUpcoming([]);
-      setPastEvents([]);
-      setLoading(false);
-      return;
+    if (isPartnerProfile(loadedProfile)) {
+      const [countRes, hostedEventsRes] = await Promise.all([
+        supabase
+          .from("events")
+          .select("id", { head: true, count: "exact" })
+          .eq("organizer_profile_id", userId),
+        supabase
+          .from("events")
+          .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+          .eq("organizer_profile_id", userId)
+          .order("event_date", { ascending: true }),
+      ]);
+
+      setEventsCount(countRes.count ?? 0);
+
+      if (hostedEventsRes.error) {
+        console.error(hostedEventsRes.error);
+        setUpcoming([]);
+        setPastEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      events = (hostedEventsRes.data ?? []) as EventRow[];
+    } else {
+      const [countRes, attendeeRowsRes] = await Promise.all([
+        supabase.from("attendees").select("user_id", { head: true, count: "exact" }).eq("user_id", userId),
+        supabase.from("attendees").select("event_id").eq("user_id", userId),
+      ]);
+
+      setEventsCount(countRes.count ?? 0);
+
+      if (attendeeRowsRes.error) {
+        console.error(attendeeRowsRes.error);
+        setUpcoming([]);
+        setPastEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      const eventIds = (attendeeRowsRes.data ?? []).map((r: any) => r.event_id).filter(Boolean);
+      if (eventIds.length === 0) {
+        setUpcoming([]);
+        setPastEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      const eventsRes = await supabase
+        .from("events")
+        .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
+        .in("id", eventIds)
+        .order("event_date", { ascending: true });
+
+      if (eventsRes.error) {
+        console.error(eventsRes.error);
+        setUpcoming([]);
+        setPastEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      events = (eventsRes.data ?? []) as EventRow[];
     }
 
-    const eventIds = (attendeeRowsRes.data ?? []).map((r: any) => r.event_id).filter(Boolean);
-
-    if (eventIds.length === 0) {
-      setUpcoming([]);
-      setPastEvents([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data: events, error: eventsErr } = await supabase
-      .from("events")
-      .select("id,title,location,event_date,event_end_date,image_url,event_source,moderation_status")
-      .in("id", eventIds)
-      .order("event_date", { ascending: true });
-
-    if (eventsErr) {
-      console.error(eventsErr);
-      setUpcoming([]);
-      setPastEvents([]);
-      setLoading(false);
-      return;
-    }
-
-    const rows = ((events ?? []) as EventRow[]).filter((e) => isEventVisible(e));
+    const rows = events.filter((e) => isEventVisible(e));
     const nowTs = Date.now();
     setUpcoming(rows.filter((e) => isEventUpcomingOrOngoing(e, nowTs)));
     setPastEvents(
@@ -380,12 +431,12 @@ export function Profile() {
   return (
     <div className="min-h-screen bg-black text-white pb-28">
       {/* Cover */}
-      <div className="relative h-48" style={coverStyle}>
+      <div className="relative h-36 sm:h-44" style={coverStyle}>
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black" />
 
         <Link
           to="/settings"
-          className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/40 border border-white/10 flex items-center justify-center hover:bg-black/55 transition"
+          className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 transition hover:bg-black/55"
           aria-label="Settings"
         >
           <Settings className="w-5 h-5 text-white/90" />
@@ -393,54 +444,125 @@ export function Profile() {
       </div>
 
       {/* Content */}
-      <div className="px-5 -mt-16">
+      <div className="px-5 -mt-12">
         {/* Header: centered stack */}
         <div className="flex flex-col items-center text-center">
           {/* Avatar + Premium glow */}
-          <div className="relative w-36 h-36">
+          <div className="relative h-24 w-24 sm:h-28 sm:w-28">
             <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 blur-2xl opacity-25" />
 
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt="Avatar"
-                className="relative w-36 h-36 rounded-full object-cover border-4 border-black shadow-xl"
+                className="relative h-24 w-24 rounded-full border-4 border-black object-cover shadow-xl sm:h-28 sm:w-28"
                 loading="lazy"
               />
             ) : (
-              <div className="relative w-36 h-36 rounded-full bg-zinc-800 border-4 border-black shadow-xl" />
+              <div className="relative h-24 w-24 rounded-full border-4 border-black bg-zinc-800 shadow-xl sm:h-28 sm:w-28" />
             )}
           </div>
 
           {/* Name + handle */}
-          <div className="mt-5">
-            <div className="text-3xl font-bold tracking-tight">{displayName}</div>
-            <div className="text-zinc-500 text-base mt-1">{handle}</div>
-
-            <div className="mt-3 text-xs text-zinc-500 max-w-sm">
-              Friends and friends-of-friends see you first. Everyone else sees you after you lock in.
+          <div className="mt-4 w-full max-w-md">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <div className="text-[2rem] font-bold tracking-tight sm:text-3xl">{displayName}</div>
+              {isPartnerProfile(profile) ? (
+                <div className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100">
+                  {getPartnerBadgeLabel(profile)}
+                </div>
+              ) : null}
             </div>
+            <div className="mt-1 text-sm text-zinc-500 sm:text-base">{handle}</div>
+
+            {isPartnerProfile(profile) ? (
+              <>
+                <div className="mt-3 text-xs uppercase tracking-[0.18em] text-zinc-500">
+                  {getPartnerTypeLabel(profile?.partner_type)}
+                  {profile?.partner_status === "active" ? " - Active" : ""}
+                </div>
+                {profile?.partner_bio_short ? (
+                  <div className="mt-2 text-sm text-zinc-300 max-w-md">{profile.partner_bio_short}</div>
+                ) : null}
+              </>
+            ) : (
+              <div className="mx-auto mt-3 max-w-sm text-xs text-zinc-500">
+                Friends and friends-of-friends see you first. Everyone else sees you after you lock in.
+              </div>
+            )}
           </div>
 
           {/* Stats (tight cluster + hints when zero) */}
-          <div className="mt-7 flex items-center justify-center gap-10">
-            <Stat value={eventsCount} label="Events" hint="Lock one plan" />
-            <div className="w-px h-10 bg-white/10" />
-            <Stat value={friendsCount} label="Friends" hint="Bring one in" />
+          <div className="mt-5 grid w-full max-w-md grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
+              <Stat
+                value={eventsCount}
+                label={isPartnerProfile(profile) ? "Hosted" : "Events"}
+                hint={isPartnerProfile(profile) ? "Assign first event" : "Find one move"}
+              />
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
+              <Stat
+                value={friendsCount}
+                label={isPartnerProfile(profile) ? "Network" : "Friends"}
+                hint={isPartnerProfile(profile) ? "Add team or allies" : "Bring one in"}
+              />
+            </div>
           </div>
 
+          {isPartnerProfile(profile) ? (
+            <div className="mt-5 flex w-full max-w-md flex-wrap justify-center gap-2">
+              {profile?.partner_slug ? (
+                <Link
+                  to={`/partner/${profile.partner_slug}`}
+                  className="rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-2 text-xs font-semibold text-fuchsia-100 hover:bg-fuchsia-500/15"
+                >
+                  View organizer page
+                </Link>
+              ) : null}
+              {profile?.partner_instagram_url ? (
+                <a
+                  href={profile.partner_instagram_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+                >
+                  Instagram
+                </a>
+              ) : null}
+              {profile?.partner_website_url ? (
+                <a
+                  href={profile.partner_website_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+                >
+                  Website
+                </a>
+              ) : null}
+              {profile?.partner_contact_email ? (
+                <a
+                  href={`mailto:${profile.partner_contact_email}`}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-white/10"
+                >
+                  Contact
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Actions */}
-          <div className="mt-6 w-full max-w-md grid grid-cols-2 gap-3">
+          <div className="mt-5 grid w-full max-w-md grid-cols-2 gap-3">
             <Link
               to="/friends"
-              className="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-center font-semibold"
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center font-semibold transition hover:bg-white/15"
             >
-              Bring your crew
+              Add friends
             </Link>
 
             <Link
               to="/profile/edit"
-              className="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-center font-semibold"
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center font-semibold transition hover:bg-white/15"
             >
               Edit profile
             </Link>
@@ -449,7 +571,7 @@ export function Profile() {
           <div className="mt-3 w-full max-w-md">
             <button
               onClick={() => void handleOpenProfileInvite()}
-              className="w-full px-4 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 text-center font-semibold hover:brightness-110 transition"
+              className="whozin-brand-button w-full rounded-2xl px-4 py-3 text-center font-semibold text-white transition"
             >
               Copy link for a friend
             </button>
@@ -457,18 +579,19 @@ export function Profile() {
 
           {onboardingMode ? (
             <div className="mt-4 w-full max-w-md rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3 text-left">
-              <div className="text-sm font-semibold text-white">Final step: send one invite</div>
+              <div className="text-sm font-semibold text-white">
+                {isPartnerProfile(profile) ? "Final step: share your first event" : "Final step: send one invite"}
+              </div>
               <div className="mt-1 text-xs text-zinc-300">
-                One clean share is enough to get the night moving. Send it to the friend most likely to say yes.
+                {isPartnerProfile(profile)
+                  ? "Get one anchor event live, then send the tracked link to your crowd."
+                  : "One share is enough to get the move going. Send it to the friend most likely to say yes."}
               </div>
             </div>
           ) : null}
         </div>
 
-        {/* Divider */}
-        <div className="mt-10 h-px bg-white/10" />
-
-        <div className="mt-8">
+        <div className="mt-8 rounded-[28px] border border-white/10 bg-zinc-950/55 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
           <Suspense fallback={null}>
             <NotificationsPanel
               compact
@@ -478,8 +601,6 @@ export function Profile() {
             />
           </Suspense>
         </div>
-
-        <div className="mt-10 h-px bg-white/10" />
 
         {/* Upcoming */}
         <div className="mt-8">
@@ -491,7 +612,7 @@ export function Profile() {
             <div className="bg-zinc-900/50 border border-white/10 rounded-2xl p-5 text-zinc-400">
               Nothing locked in yet.
               <div className="text-sm text-zinc-500 mt-1">
-                Lock one good event and it lands here.
+                Find one good move and it lands here.
               </div>
 
               <div className="mt-4">
@@ -515,9 +636,9 @@ export function Profile() {
                     onClick={() => track("event_view", { source: "profile_upcoming", eventId: e.id })}
                     className="block rounded-2xl bg-zinc-900/60 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200"
                   >
-                    <div className="flex gap-4 p-4">
+                    <div className="flex gap-3 p-4">
                       {/* Thumbnail */}
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 border border-white/10 bg-zinc-900 relative">
+                      <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900">
                         {hasThumb ? (
                           <img
                             src={e.image_url!}
@@ -539,8 +660,8 @@ export function Profile() {
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-lg font-semibold truncate">{e.title}</div>
-                        <div className="text-zinc-400 text-sm mt-1">
+                        <div className="truncate text-base font-semibold">{e.title}</div>
+                        <div className="mt-1 text-sm text-zinc-400">
                           {formatDateTime(e.event_date)}
                           {e.location ? ` - ${e.location}` : ""}
                         </div>
@@ -558,8 +679,8 @@ export function Profile() {
                             }}
                             className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-200 hover:bg-white/10"
                           >
-                            <Share2 className="h-3.5 w-3.5" />
-                            Bring your crew
+                            <ShareIcon color="currentColor" className="h-3.5 w-3.5" />
+                            Share invite
                           </button>
                         </div>
                       </div>
@@ -588,8 +709,8 @@ export function Profile() {
                     to={`/event/${e.id}?src=profile`}
                     className="block rounded-2xl bg-zinc-900/45 border border-white/10 hover:border-white/20 transition overflow-hidden"
                   >
-                    <div className="flex gap-4 p-4">
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 border border-white/10 bg-zinc-900 relative">
+                    <div className="flex gap-3 p-4">
+                      <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900">
                         {hasThumb ? (
                           <img
                             src={e.image_url!}
@@ -611,8 +732,8 @@ export function Profile() {
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-lg font-semibold truncate">{e.title}</div>
-                        <div className="text-zinc-400 text-sm mt-1">
+                        <div className="truncate text-base font-semibold">{e.title}</div>
+                        <div className="mt-1 text-sm text-zinc-400">
                           {formatDateTime(e.event_date)}
                           {e.location ? ` - ${e.location}` : ""}
                         </div>
@@ -633,7 +754,7 @@ export function Profile() {
       <Drawer open={inviteDrawerOpen} onOpenChange={setInviteDrawerOpen}>
         <DrawerContent className="border-white/10 bg-zinc-950 text-white">
           <DrawerHeader className="px-5 pb-2">
-            <DrawerTitle className="text-xl">Bring a friend</DrawerTitle>
+            <DrawerTitle className="text-xl">Invite a friend</DrawerTitle>
             <DrawerDescription className="text-zinc-400">
               Share your invite link, or copy the URL below if Safari gets weird.
             </DrawerDescription>
@@ -661,7 +782,7 @@ export function Profile() {
               type="button"
               onClick={() => void handleShareProfileInvite()}
               disabled={loadingProfileInviteUrl || sharingProfileInvite}
-              className="w-full rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              className="whozin-brand-button w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
               {sharingProfileInvite ? "Sharing..." : "Share link"}
             </button>

@@ -14,6 +14,7 @@
     "ops:kpi-export": "node scripts/export-kpi-snapshot.mjs",
     "ops:kpi-refresh": "node scripts/refresh-daily-kpis.mjs",
     "ops:move-refresh": "node scripts/refresh-move-scores.mjs",
+    "ops:weekly-digest-preview": "node scripts/preview-weekly-digest.mjs",
     "ops:event-sync": "node scripts/sync-bay-area-events.mjs",
     "ops:ra-sync": "node scripts/sync-ra-playwright.mjs",
     "ops:shotgun-sync": "node scripts/sync-shotgun-playwright.mjs"

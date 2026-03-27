@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, startTransition } from "react";
 import { addDays, endOfDay, format, isSameDay, startOfDay } from "date-fns";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { EventCard } from "../components/EventCard";
 import { ExploreDatePicker } from "@/app/components/ExploreDatePicker";
@@ -14,6 +14,8 @@ import { rankMoveCandidates } from "@/lib/theMove";
 import { TheMoveHero } from "@/app/components/TheMoveHero";
 import { useAuth } from "@/app/providers/AuthProvider";
 import { getSurfacePriority } from "@/lib/eventVisibility";
+import { dedupeUiEvents } from "@/lib/eventDedupe.shared.js";
+import { TrendingIcon } from "@/app/components/WhozinIcons";
 
 const exploreCoverStyle = {
   background:
@@ -53,6 +55,7 @@ type RsvpState = {
   going: boolean;
   working: boolean;
   count: number;
+  friendCount: number;
   recentCount?: number;
 };
 
@@ -97,6 +100,7 @@ function mergeEventCollections(...collections: Event[][]): Event[] {
         attendees: Math.max(existing.attendees ?? 0, event.attendees ?? 0),
         description:
           existing.description?.trim().length > 0 ? existing.description : event.description,
+        organizerProfileId: existing.organizerProfileId ?? event.organizerProfileId,
         matchReason:
           existing.matchReason?.trim().length > 0 ? existing.matchReason : event.matchReason,
         tags: combinedTags,
@@ -104,7 +108,7 @@ function mergeEventCollections(...collections: Event[][]): Event[] {
     }
   }
 
-  return Array.from(merged.values());
+  return dedupeUiEvents(Array.from(merged.values())) as Event[];
 }
 
 function matchesFeedMode(event: Event, mode: ExploreFeedMode) {
@@ -152,6 +156,7 @@ function scoreForFeed(args: {
   const recentBoost = Math.min(5, recentCount) * 8;
   const trendingBoost = trending ? 6 : 0;
   const tasteBoost = hasTasteSignal(event) ? 6 : 0;
+  const partnerBoost = event.organizerProfileId ? 18 : 0;
 
   let timeBoost = 0;
   if (mode === "tonight") {
@@ -168,7 +173,7 @@ function scoreForFeed(args: {
     else timeBoost = 4;
   }
 
-  return internalBoost + friendBoost + crowdBoost + recentBoost + trendingBoost + tasteBoost + timeBoost;
+  return internalBoost + friendBoost + crowdBoost + recentBoost + trendingBoost + tasteBoost + partnerBoost + timeBoost;
 }
 
 export function Explore() {
@@ -281,6 +286,20 @@ export function Explore() {
     }
 
     const viewerId = user?.id ?? null;
+    let friendIds = new Set<string>();
+
+    if (viewerId) {
+      const { data: rawFriendIds, error: friendErr } = await supabase.rpc("get_friend_ids");
+      if (friendErr) {
+        console.error("Failed loading explore friend graph:", friendErr);
+      } else {
+        friendIds = new Set(
+          Array.isArray(rawFriendIds)
+            ? rawFriendIds.map((value) => String(value)).filter(Boolean)
+            : []
+        );
+      }
+    }
 
     const { data: rows, error } = await supabase
       .from("attendees")
@@ -293,7 +312,7 @@ export function Explore() {
 
     const next: Record<string, RsvpState> = {};
     for (const id of internalEventIds) {
-      next[id] = { going: false, working: false, count: 0 };
+      next[id] = { going: false, working: false, count: 0, friendCount: 0 };
     }
 
     for (const row of (rows ?? []) as Array<{ event_id: string; user_id: string; created_at?: string | null }>) {
@@ -301,6 +320,7 @@ export function Explore() {
       if (!state) continue;
       state.count += 1;
       if (viewerId && row.user_id === viewerId) state.going = true;
+      if (friendIds.has(row.user_id)) state.friendCount += 1;
       if (row.created_at) {
         const createdAt = new Date(row.created_at).getTime();
         if (!Number.isNaN(createdAt) && Date.now() - createdAt <= 6 * 60 * 60 * 1000) {
@@ -369,13 +389,6 @@ export function Explore() {
     return keys;
   }, [events]);
 
-  useEffect(() => {
-    if (feedMode !== "tonight" || hasTonightEvents) return;
-
-    setFeedMode("upcoming");
-    setSelectedUpcomingDate((current) => current ?? nearestUpcomingDate);
-  }, [feedMode, hasTonightEvents, nearestUpcomingDate]);
-
   const activateUpcomingDate = () => {
     setFeedMode("upcoming");
     setSelectedUpcomingDate((current) => current ?? nearestUpcomingDate);
@@ -387,6 +400,7 @@ export function Explore() {
       for (const tag of Array.isArray(event.tags) ? event.tags : []) {
         const cleanTag = tag.trim();
         if (!cleanTag) continue;
+        if (cleanTag.toLowerCase() === "bay area") continue;
         counts.set(cleanTag, (counts.get(cleanTag) ?? 0) + 1);
       }
     }
@@ -427,7 +441,7 @@ export function Explore() {
         title: event.title,
         startAt: event.eventDateIso ?? event.date,
         totalRsvps: rsvpByEventId[event.id]?.count ?? event.attendees ?? 0,
-        friendRsvps: friendCountByEventId[event.id] ?? 0,
+        friendRsvps: rsvpByEventId[event.id]?.friendCount ?? friendCountByEventId[event.id] ?? 0,
         recentRsvps: rsvpByEventId[event.id]?.recentCount ?? 0,
         quality: sourcePriority(event.eventSource) >= 2 ? 1 : 0.92,
       })),
@@ -447,15 +461,17 @@ export function Explore() {
     return ids;
   }, [heroEvent?.id]);
 
-  const rankedFeedEvents = useMemo(() => {
+  const baseRankedFeedEvents = useMemo(() => {
     return [...filteredFeedEvents]
       .sort((a, b) => {
         const aCount = rsvpByEventId[a.id]?.count ?? a.attendees ?? 0;
         const bCount = rsvpByEventId[b.id]?.count ?? b.attendees ?? 0;
+        const aFriendCount = rsvpByEventId[a.id]?.friendCount ?? friendCountByEventId[a.id] ?? 0;
+        const bFriendCount = rsvpByEventId[b.id]?.friendCount ?? friendCountByEventId[b.id] ?? 0;
         const aScore = scoreForFeed({
           event: a,
           mode: feedMode,
-          friendCount: friendCountByEventId[a.id] ?? 0,
+          friendCount: aFriendCount,
           attendeeCount: aCount,
           recentCount: rsvpByEventId[a.id]?.recentCount ?? 0,
           trending: trendingEventIds.has(a.id),
@@ -463,7 +479,7 @@ export function Explore() {
         const bScore = scoreForFeed({
           event: b,
           mode: feedMode,
-          friendCount: friendCountByEventId[b.id] ?? 0,
+          friendCount: bFriendCount,
           attendeeCount: bCount,
           recentCount: rsvpByEventId[b.id]?.recentCount ?? 0,
           trending: trendingEventIds.has(b.id),
@@ -473,8 +489,8 @@ export function Explore() {
         const aSource = sourcePriority(a.eventSource);
         const bSource = sourcePriority(b.eventSource);
         if (aSource !== bSource) return bSource - aSource;
-        const aFriends = friendCountByEventId[a.id] ?? 0;
-        const bFriends = friendCountByEventId[b.id] ?? 0;
+        const aFriends = aFriendCount;
+        const bFriends = bFriendCount;
         if (aFriends !== bFriends) return bFriends - aFriends;
         const aTs = eventTimestamp(a);
         const bTs = eventTimestamp(b);
@@ -483,6 +499,16 @@ export function Explore() {
       })
       .filter((event) => !featuredEventIds.has(event.id));
   }, [featuredEventIds, feedMode, filteredFeedEvents, friendCountByEventId, rsvpByEventId, trendingEventIds]);
+
+  const partnerSpotlightEvents = useMemo(
+    () => baseRankedFeedEvents.filter((event) => !!event.organizerProfileId).slice(0, 3),
+    [baseRankedFeedEvents]
+  );
+
+  const rankedFeedEvents = useMemo(() => {
+    const spotlightIds = new Set(partnerSpotlightEvents.map((event) => event.id));
+    return baseRankedFeedEvents.filter((event) => !spotlightIds.has(event.id));
+  }, [baseRankedFeedEvents, partnerSpotlightEvents]);
 
   const filtersActive = tagFilter !== "all" || (feedMode === "upcoming" && !!selectedUpcomingDate);
   const heroHeading =
@@ -495,11 +521,11 @@ export function Explore() {
   const primarySectionBody =
     feedMode === "tonight"
       ? heroEvent
-        ? "Friend activity, attendance, and momentum are shaping this ranking."
-        : "Signal is still soft, so this is the best stack of options right now."
+        ? "Friend signal, attendance, and momentum shape this stack."
+        : "Signal is still soft, so these are the strongest options right now."
       : selectedUpcomingDate
-        ? "Showing only this date, with friend signal folded into the ranking instead of split into a separate feed."
-        : "Future events start tomorrow and stay ranked Bay-wide, with internal events first.";
+        ? "Showing this date only, with friend signal folded into the ranking."
+        : "Starting tomorrow, ranked Bay-wide with curated and partner events lifted.";
 
   const lowDensityGuideEvent = useMemo(() => {
     if (heroEvent) return heroEvent;
@@ -535,12 +561,19 @@ export function Explore() {
       going: false,
       working: false,
       count: typeof event.attendees === "number" ? event.attendees : 0,
+      friendCount: friendCountByEventId[event.id] ?? 0,
     };
     const nextGoing = !prev.going;
     const nextCount = Math.max(0, prev.count + (nextGoing ? 1 : -1));
     setRsvpByEventId((map) => ({
       ...map,
-      [event.id]: { going: nextGoing, working: true, count: nextCount },
+      [event.id]: {
+        ...(map[event.id] ?? prev),
+        going: nextGoing,
+        working: true,
+        count: nextCount,
+        friendCount: map[event.id]?.friendCount ?? prev.friendCount,
+      },
     }));
 
     void logProductEventLazy({
@@ -598,24 +631,24 @@ export function Explore() {
   };
 
   return (
-    <div className="min-h-screen bg-black pb-24 text-white relative">
-      <div className="relative h-48" style={exploreCoverStyle}>
+    <div className="relative min-h-screen bg-black pb-24 text-white">
+      <div className="relative h-44 sm:h-48" style={exploreCoverStyle}>
         <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black" />
-        <div className="relative px-5 pt-12">
+        <div className="relative px-4 pt-10 sm:px-5 sm:pt-12">
           <h1 className="flex items-center gap-2 text-3xl font-bold">
-            <Sparkles className="h-6 w-6 text-purple-400" />
+            <TrendingIcon color="currentColor" className="h-6 w-6 text-purple-400" />
             Explore
           </h1>
-          <p className="mt-1 text-zinc-400">Bay-wide rave discovery, built for tonight first.</p>
+          <p className="mt-1 text-sm text-zinc-400 sm:text-base">Bay-wide discovery, tuned for tonight first.</p>
         </div>
       </div>
 
-      <div className="space-y-6 px-5 pt-4">
+      <div className="space-y-5 px-4 pt-3 sm:px-5 sm:pt-4">
         {onboardingMode ? (
           <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4">
-            <div className="text-sm font-semibold text-white">Step 2: pick one night</div>
+            <div className="text-sm font-semibold text-white">Step 2: find one move</div>
             <div className="mt-1 text-xs text-zinc-300">
-              Lock one plan and we&apos;ll take you straight to the page where invites and social proof hit hardest.
+              Pick one move and we&apos;ll take you straight to the page where invites and social proof hit hardest.
             </div>
           </div>
         ) : null}
@@ -625,8 +658,8 @@ export function Explore() {
             <div className="text-sm font-semibold text-white">Choose the lens</div>
             <div className="mt-1 text-xs text-zinc-500">
               {hasTonightEvents
-                ? "Tonight helps you decide now. Upcoming starts tomorrow and keeps the next Bay events in one place."
-                : "No events are live tonight, so Explore starts with the closest upcoming date instead."}
+                ? "Tonight helps you decide now. Upcoming starts tomorrow."
+                : "Nothing is live tonight, so Explore starts with the closest upcoming date."}
             </div>
           </div>
 
@@ -661,9 +694,7 @@ export function Explore() {
             />
           </div>
 
-          <div className="text-xs text-zinc-500">
-            Bay Area only for now. Internal events rank first, and friend activity carries the most weight.
-          </div>
+          <div className="text-xs text-zinc-500">Bay Area only for now. Friend signal leads the ranking.</div>
         </div>
 
         {!hasFriendSignal && lowDensityGuideEvent ? (
@@ -723,6 +754,39 @@ export function Explore() {
           </div>
         ) : null}
 
+        {partnerSpotlightEvents.length > 0 ? (
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-lg font-semibold">From Partners</h3>
+              <div className="mt-0.5 text-xs text-zinc-600">
+                Active partner events get a small ranking lift and stay visible here.
+              </div>
+            </div>
+            <div className="grid gap-4">
+              {partnerSpotlightEvents.map((event) => (
+                <EventCard
+                  key={`partner-${event.id}`}
+                  event={event}
+                  surface="explore"
+                  inviteSource="share_link"
+                  quickRsvp={
+                    isUuid(event.id)
+                      ? {
+                          going: rsvpByEventId[event.id]?.going ?? false,
+                          working: rsvpByEventId[event.id]?.working ?? false,
+                          count: rsvpByEventId[event.id]?.count ?? event.attendees,
+                          friendCount:
+                            rsvpByEventId[event.id]?.friendCount ?? friendCountByEventId[event.id] ?? 0,
+                          onToggle: () => void handleQuickRsvp(event),
+                        }
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-4">
           <div className="flex items-end justify-between">
             <div>
@@ -734,12 +798,12 @@ export function Explore() {
             </div>
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
+          <div className="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/65 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-white">Refine the mix</div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  Filter by sound while keeping the Bay-wide ranking logic intact.
+                  Filter by sound without breaking the ranking.
                 </div>
               </div>
               {filtersActive ? (
@@ -817,10 +881,12 @@ export function Explore() {
                   inviteSource="share_link"
                   quickRsvp={
                     isUuid(event.id)
-                      ? {
+                        ? {
                           going: rsvpByEventId[event.id]?.going ?? false,
                           working: rsvpByEventId[event.id]?.working ?? false,
                           count: rsvpByEventId[event.id]?.count ?? event.attendees,
+                          friendCount:
+                            rsvpByEventId[event.id]?.friendCount ?? friendCountByEventId[event.id] ?? 0,
                           onToggle: () => void handleQuickRsvp(event),
                         }
                       : undefined

@@ -18,10 +18,55 @@ available in the current Supabase instance.
 - `signup_no_friend`
 - `signup_no_rsvp`
 - `rsvp_no_invite`
+- `weekly_moves_digest`
 
 These are all handled by the same edge function:
 
 - `email-retention-send`
+
+## Weekly digest
+
+The same edge function now supports a weekly editorial-style email:
+
+- Trigger key: `weekly_moves_digest`
+- Audience: users with `email_product_updates_opt_in = true`
+- Data source: upcoming `events` with move scores
+- Selection strategy: first spread picks across different days of the week, then fill remaining slots by strongest score
+- Dedupe: once per ISO week per city filter
+
+You can optionally pass:
+
+- `city`: limits the digest to a city/local market
+- `editor_note`: a short hand-written note that appears above the auto-selected events
+
+### Local preview command
+
+Use this to dry-run the weekly digest without sending:
+
+```bash
+npm run ops:weekly-digest-preview -- --email jvincenthallahan@gmail.com
+```
+
+Optional flags:
+
+- `--city "San Francisco"`
+- `--editor-note "This week feels strongest on Friday."`
+- `--editor-note-file "reports/weekly_digest_editor_note.txt"`
+- `--live` to send instead of preview
+
+Examples:
+
+```bash
+npm run ops:weekly-digest-preview -- --email jvincenthallahan@gmail.com --city "San Francisco"
+```
+
+```bash
+npm run ops:weekly-digest-preview -- --email jvincenthallahan@gmail.com --editor-note "Friday is the cleanest bet this week."
+```
+
+```bash
+npm run ops:weekly-digest-preview -- --email jvincenthallahan@gmail.com --editor-note-file "reports/weekly_digest_editor_note.txt"
+```
 
 ## Prerequisites
 
@@ -151,6 +196,71 @@ Body:
 }
 ```
 
+## Job 4: weekly_moves_digest
+
+Use this to send a Thursday "the moves this week" email powered by current event momentum.
+
+- Job name: `email-weekly-moves-digest`
+- Method: `POST`
+- Schedule: `0 17 * * 4`
+- URL:
+  - `https://ecdyglakdtgeweisxxpv.supabase.co/functions/v1/email-retention-send`
+
+Headers:
+
+- Header name: `Content-Type`
+  - Value: `application/json`
+- Header name: `Authorization`
+  - Value: `Bearer YOUR_SERVICE_ROLE_KEY`
+
+Body:
+
+```json
+{
+  "trigger_key": "weekly_moves_digest",
+  "dry_run": false,
+  "city": "San Francisco",
+  "editor_note": "This week feels stronger on Friday than Saturday. If you only pick one night, start there."
+}
+```
+
+Notes:
+
+- `0 17 * * 4` is every Thursday at `17:00 UTC`
+- In America/Chicago that is `12:00 PM` during daylight saving time
+- Omit `city` to send one broader digest using the top weekly events across the current dataset
+- Omit `editor_note` if you want the intro to be fully automatic
+
+## Suggested editorial workflow
+
+Recommended weekly operating loop:
+
+1. Wednesday morning: run the digest in dry-run mode to preview the spread of events.
+2. Review whether the picks feel balanced across days and whether the city filter is right.
+3. Write or tweak the `editor_note` in [weekly_digest_editor_note.txt](C:/Users/jvinc/Desktop/Whozin/reports/weekly_digest_editor_note.txt).
+4. Send yourself one live test.
+5. Thursday: run the real send for the audience you want.
+
+The simplest Codex automation is a Wednesday recurring inbox task that runs the dry-run preview command, summarizes the selected events, and asks you for the `editor_note` to use for Thursday.
+
+## Current-account marketing override
+
+If you want to temporarily include all existing profiles in marketing emails, run:
+
+- [029_force_marketing_opt_in_existing_profiles.sql](C:/Users/jvinc/Desktop/Whozin/supabase/sql/029_force_marketing_opt_in_existing_profiles.sql)
+
+What it does:
+
+- sets `email_retention_opt_in = true`
+- sets `email_product_updates_opt_in = true`
+- clears `email_unsubscribed_at`
+- stamps `email_marketing_consent_source` with `founder_override_2026_03_19` when empty
+
+What it does not do:
+
+- it does not change future signup defaults
+- it does not clear `email_pause_until`, so bounced or paused addresses still stay suppressed
+
 ## Recommended rollout
 
 Do not start with live sends immediately.
@@ -180,6 +290,7 @@ Review the cron job output and confirm:
 - function executes successfully
 - eligible users are found when expected
 - no authorization errors occur
+- weekly digest preview includes the expected top events and any editorial note you passed
 
 ### Phase 2: live sends
 
@@ -201,6 +312,8 @@ The default schedules are staggered five minutes apart:
 
 This spacing reduces overlap and makes failures easier to isolate.
 
+For the Thursday digest, start with a dry run on the exact Thursday body you plan to use, then switch `dry_run` to `false` once the event picks look right.
+
 ## Verification checklist
 
 After cron jobs are created, verify:
@@ -212,6 +325,7 @@ After cron jobs are created, verify:
 5. The body uses the correct `trigger_key`
 6. First run succeeds with `dry_run: true`
 7. Then switch to `dry_run: false`
+8. For `weekly_moves_digest`, confirm the preview is selecting the right city scope and top events
 
 ## Operational notes
 

@@ -1,0 +1,162 @@
+{
+  "generated_at": "2026-03-22T12:17:48.338Z",
+  "timezone": "America/Chicago",
+  "window": {
+    "now": "2026-03-22T12:17:46.957Z",
+    "plus_24h": "2026-03-23T12:17:46.957Z",
+    "minus_24h": "2026-03-21T12:17:46.957Z"
+  },
+  "counts": {
+    "events_in_next_24h": 10,
+    "attendees_24h": 2,
+    "invite_events_24h": 0,
+    "rsvp_users_24h": 1
+  },
+  "top5": [
+    {
+      "id": "d9132b2d-3a22-4a46-8349-cc3b88b4193b",
+      "title": "Floating Points, Pharoah Sanders & The Lso - Promises",
+      "event_date": "2026-03-22T13:30:00+00:00",
+      "event_end_date": null,
+      "city": "San Francisco",
+      "location": "Envelop At The Midway, San Francisco",
+      "venue_name": "Envelop At The Midway",
+      "image_url": "/e/_next/image?url=https%3A%2F%2Fimg.evbuc.com%2Fhttps%253A%252F%252Fcdn.evbuc.com%252Fimages%252F1177688451%252F248887875397%252F1%252Foriginal.20260217-013101%3Fcrop%3Dfocalpoint%26fit%3Dcrop%26w%3D480%26auto%3Dformat%252Ccompress%26q%3D75%26sharp%3D10%26fp-x%3D0.5%26fp-y%3D0.5%26s%3D80fb15511903a9b852bc5b7b9034701b&w=940&q=75",
+      "ticket_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-130pm-tickets-1983326843980",
+      "description": "Tags: ambient, jazz, experimental | Imported from 19hz Bay Area listings.",
+      "event_source": "19hz",
+      "move_score": 11,
+      "move_status": null,
+      "external_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-130pm-tickets-1983326843980",
+      "total_rsvps": 0,
+      "recent_rsvps_24h": 0,
+      "invite_sent_24h": 0
+    },
+    {
+      "id": "a0c6dc69-1691-4bb0-8546-561b21ea8924",
+      "title": "Floating Points, Pharoah Sanders & The Lso - Promises",
+      "event_date": "2026-03-22T13:30:00+00:00",
+      "event_end_date": null,
+      "city": "San Francisco",
+      "location": "Envelop At The Midway, San Francisco",
+      "venue_name": "Envelop At The Midway",
+      "image_url": "/e/_next/image?url=https%3A%2F%2Fimg.evbuc.com%2Fhttps%253A%252F%252Fcdn.evbuc.com%252Fimages%252F1177688451%252F248887875397%252F1%252Foriginal.20260217-013101%3Fcrop%3Dfocalpoint%26fit%3Dcrop%26w%3D480%26auto%3Dformat%252Ccompress%26q%3D75%26sharp%3D10%26fp-x%3D0.5%26fp-y%3D0.5%26s%3D80fb15511903a9b852bc5b7b9034701b&w=940&q=75",
+      "ticket_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-130pm-tickets-1983326843980",
+      "description": "Tags: ambient, jazz, experimental | Imported from 19hz Bay Area listings.",
+      "event_source": "19hz",
+      "move_score": 11,
+      "move_status": null,
+      "external_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-130pm-tickets-1983326843980",
+      "total_rsvps": 0,
+      "recent_rsvps_24h": 0,
+      "invite_sent_24h": 0
+    },
+    {
+      "id": "ff917aa2-e40a-4528-ae89-d7dda84941e4",
+      "title": "Floating Points, Pharoah Sanders & The Lso - Promises",
+      "event_date": "2026-03-22T15:30:00+00:00",
+      "event_end_date": null,
+      "city": "San Francisco",
+      "location": "Envelop At The Midway, San Francisco",
+      "venue_name": "Envelop At The Midway",
+      "image_url": "/e/_next/image?url=https%3A%2F%2Fimg.evbuc.com%2Fhttps%253A%252F%252Fcdn.evbuc.com%252Fimages%252F1177694480%252F248887875397%252F1%252Foriginal.20260217-031712%3Fcrop%3Dfocalpoint%26fit%3Dcrop%26w%3D480%26auto%3Dformat%252Ccompress%26q%3D75%26sharp%3D10%26fp-x%3D0.5%26fp-y%3D0.5%26s%3D0555d0dbc7ac9f43c13f8078c97aecb8&w=940&q=75",
+      "ticket_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-330pm-tickets-1983326846989",
+      "description": "Tags: ambient, jazz, experimental | Imported from 19hz Bay Area listings.",
+      "event_source": "19hz",
+      "move_score": 9,
+      "move_status": null,
+      "external_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-330pm-tickets-1983326846989",
+      "total_rsvps": 0,
+      "recent_rsvps_24h": 0,
+      "invite_sent_24h": 0
+    },
+    {
+      "id": "31c9f466-633f-4475-827a-c564284ff9f7",
+      "title": "Floating Points, Pharoah Sanders & The Lso - Promises",
+      "event_date": "2026-03-22T15:30:00+00:00",
+      "event_end_date": null,
+      "city": "San Francisco",
+      "location": "Envelop At The Midway, San Francisco",
+      "venue_name": "Envelop At The Midway",
+      "image_url": "/e/_next/image?url=https%3A%2F%2Fimg.evbuc.com%2Fhttps%253A%252F%252Fcdn.evbuc.com%252Fimages%252F1177694480%252F248887875397%252F1%252Foriginal.20260217-031712%3Fcrop%3Dfocalpoint%26fit%3Dcrop%26w%3D480%26auto%3Dformat%252Ccompress%26q%3D75%26sharp%3D10%26fp-x%3D0.5%26fp-y%3D0.5%26s%3D0555d0dbc7ac9f43c13f8078c97aecb8&w=940&q=75",
+      "ticket_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-330pm-tickets-1983326846989",
+      "description": "Tags: ambient, jazz, experimental | Imported from 19hz Bay Area listings.",
+      "event_source": "19hz",
+      "move_score": 9,
+      "move_status": null,
+      "external_url": "https://www.eventbrite.com/e/floating-points-pharoah-sanders-the-lso-promises-envelop-sf-330pm-tickets-1983326846989",
+      "total_rsvps": 0,
+      "recent_rsvps_24h": 0,
+      "invite_sent_24h": 0
+    },
+    {
+      "id": "79ed1791-50a2-490e-ab29-c218f236be4b",
+      "title": "Feelmore Sunday",
+      "event_date": "2026-03-22T19:00:00+00:00",
+      "event_end_date": null,
+      "city": "San Francisco",
+      "location": "White Rabbit Bar, San Francisco",
+      "venue_name": "White Rabbit Bar",
+      "image_url": "/e/_next/image?url=https%3A%2F%2Fimg.evbuc.com%2Fhttps%253A%252F%252Fcdn.evbuc.com%252Fimages%252F1179528338%252F170329272792%252F1%252Foriginal.20260310-205643%3Fcrop%3Dfocalpoint%26fit%3Dcrop%26w%3D480%26auto%3Dformat%252Ccompress%26q%3D75%26sharp%3D10%26fp-x%3D0.5%26fp-y%3D0.5%26s%3Db8d3a20d20dd5818c2db412e46b1eb8e&w=940&q=75",
+      "ticket_url": "https://www.eventbrite.com/e/feelmore-sunday-tickets-1984926297990",
+      "description": "Tags: house | Price/Age: Sole Channel Events | Imported from 19hz Bay Area listings.",
+      "event_source": "19hz",
+      "move_score": 9,
+      "move_status": null,
+      "external_url": "https://www.eventbrite.com/e/feelmore-sunday-tickets-1984926297990",
+      "total_rsvps": 0,
+      "recent_rsvps_24h": 0,
+      "invite_sent_24h": 0
+    }
+  ],
+  "momentum_weak_social": [],
+  "nudge_users": [
+    {
+      "user_id": "daeb53b8-c14a-4232-94d3-f19185748452",
+      "display_name": "James James",
+      "rsvps_without_invite_24h": 2,
+      "event_ids": [
+        "139717ec-46bb-4930-8b23-0ff19eae9999",
+        "a020a940-38e8-4d51-b060-7120b4caa633"
+      ]
+    }
+  ],
+  "low_quality_events": [
+    {
+      "id": "3519d530-47ba-4403-80a3-27455f2f29f1",
+      "title": "Christian Lovers, Scott Arford, Leaking, Blood of Chhinnamastika",
+      "city": "Oakland",
+      "event_date": "2026-03-22T19:00:00+00:00",
+      "missing": [
+        "image"
+      ]
+    },
+    {
+      "id": "d8156cb3-ab2d-4fc3-af9b-4db9d8c49f3b",
+      "title": "Christian Lovers, Scott Arford, Leaking, Blood of Chhinnamastika",
+      "city": "Oakland",
+      "event_date": "2026-03-22T19:00:00+00:00",
+      "missing": [
+        "image"
+      ]
+    },
+    {
+      "id": "f021e996-4aec-48c5-868c-f06e22de8b76",
+      "title": "::The Box:: w/ DJs X-Christ, Goblyn, Hex, Exocomp, Shadow Angel & Zeldris",
+      "city": "Santa Cruz",
+      "event_date": "2026-03-22T21:30:00+00:00",
+      "missing": [
+        "image"
+      ]
+    },
+    {
+      "id": "102ccc05-9058-472b-abfa-b79674ea27cf",
+      "title": "::The Box:: w/ DJs X-Christ, Goblyn, Hex, Exocomp, Shadow Angel & Zeldris",
+      "city": "Santa Cruz",
+      "event_date": "2026-03-22T21:30:00+00:00",
+      "missing": [
+        "image"
+      ]
+    }
+  ]
+}

@@ -26,6 +26,18 @@ import {
   loadPushStatus,
   type PushStatus,
 } from "@/lib/pushNotifications";
+import { ActivityIcon, FriendsOnlyIcon, PrivateIcon, ProfileIcon, ShareIcon, VisibilityIcon } from "@/app/components/WhozinIcons";
+
+function visibilityIcon(mode: AttendanceVisibility) {
+  switch (mode) {
+    case "private":
+      return PrivateIcon;
+    case "public":
+      return VisibilityIcon;
+    default:
+      return FriendsOnlyIcon;
+  }
+}
 
 export function Settings() {
   const navigate = useNavigate();
@@ -52,6 +64,7 @@ export function Settings() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("whozin:push-install-hint-dismissed") !== "1";
   });
+  const VisibilityModeIcon = visibilityIcon(visibility);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,7 +346,7 @@ export function Settings() {
               className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                <User className="w-5 h-5 text-zinc-400" />
+                <ProfileIcon color="currentColor" className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Profile Details</div>
                   <div className="text-xs text-zinc-500">Name, Handle, Avatar</div>
@@ -375,7 +388,7 @@ export function Settings() {
           <div className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden">
             <div className="p-4 flex items-center justify-between border-b border-white/5">
               <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-zinc-400" />
+                <VisibilityModeIcon color="currentColor" className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Default Visibility</div>
                   <div className="text-xs text-zinc-500">Who sees your events</div>
@@ -397,7 +410,7 @@ export function Settings() {
 
             <div className="p-4 flex items-center justify-between border-b border-white/5">
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-zinc-400" />
+                <ShareIcon color="currentColor" className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Confirm before notifying</div>
                   <div className="text-xs text-zinc-500">Ask before sharing new tickets</div>
@@ -412,7 +425,7 @@ export function Settings() {
 
             <div className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <MessageCircle className="w-5 h-5 text-zinc-400" />
+                <MessageCircle className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Allow SMS Notifications</div>
                   <div className="text-xs text-zinc-500">Receive texts about friends</div>
@@ -427,7 +440,7 @@ export function Settings() {
 
             <div className="p-4 flex items-center justify-between border-t border-white/5">
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-zinc-400" />
+                <ActivityIcon color="currentColor" className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Marketing Emails</div>
                   <div className="text-xs text-zinc-500">
@@ -444,7 +457,7 @@ export function Settings() {
 
             <div className="p-4 flex items-center justify-between border-t border-white/5">
               <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-zinc-400" />
+                <ActivityIcon color="currentColor" className="h-[22px] w-[22px] text-zinc-300" />
                 <div>
                   <div className="font-medium">Browser Push Alerts</div>
                   <div className="text-xs text-zinc-500">
@@ -452,7 +465,7 @@ export function Settings() {
                       ? "On iPhone, add Whozin to your Home Screen first."
                       : pushStatus.permission === "denied"
                         ? "Notifications are blocked in browser settings right now."
-                      : "Get heads up when your people start moving."}
+                      : "Get heads up when your friends start moving."}
                   </div>
                 </div>
               </div>
@@ -471,7 +484,7 @@ export function Settings() {
             <div className="p-4 border-b border-white/5">
               <div className="font-medium">Blocked Users</div>
               <div className="text-xs text-zinc-500 mt-1">
-                Blocking removes them from your circle and hides each other&apos;s attendance.
+                Blocking removes them from your friends and hides each other&apos;s attendance.
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -7,8 +7,8 @@ import AddFriend from "../components/AddFriend";
 import { featureFlags } from "@/lib/featureFlags";
 import { shareInviteLink } from "@/lib/inviteSharing";
 import { blockUser, getBlockedUserIds, reportUser } from "@/lib/privacySafety";
-import { Share2 } from "lucide-react";
 import { useAuth } from "@/app/providers/AuthProvider";
+import { ShareIcon } from "@/app/components/WhozinIcons";
 
 type FriendRow = {
   friend_id: string;
@@ -54,16 +54,62 @@ function mutualPreviewText(names: string[], count: number) {
 function suggestionReason(profile: SuggestedProfile) {
   if ((profile.sharedEventCount ?? 0) > 0 && profile.sharedEventTitle) {
     return profile.recentSharedEventCount
-      ? `Seen around ${profile.sharedEventTitle} and other nights`
+      ? `Seen around ${profile.sharedEventTitle} and other moves`
       : `Seen around ${profile.sharedEventTitle}`;
   }
   if ((profile.sharedEventCount ?? 0) > 1) {
-    return `In the same orbit on ${profile.sharedEventCount} events`;
+    return `In the same mix on ${profile.sharedEventCount} moves`;
   }
   if ((profile.mutualCount ?? 0) > 0) {
     return mutualPreviewText(profile.mutualPreview ?? [], profile.mutualCount ?? 0);
   }
   return "Worth adding";
+}
+
+function profileHandle(username?: string | null) {
+  const value = username?.trim();
+  return value ? `@${value}` : "";
+}
+
+function PersonCard({
+  displayName,
+  handle,
+  avatar,
+  eyebrow,
+  body,
+  action,
+  footer,
+}: {
+  displayName: string;
+  handle?: string;
+  avatar?: string;
+  eyebrow?: string;
+  body: string;
+  action?: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-zinc-900/55 px-4 py-4">
+      <div className="flex items-start gap-3">
+        {avatar ? (
+          <img src={avatar} alt={displayName} className="h-12 w-12 flex-shrink-0 rounded-full object-cover" />
+        ) : (
+          <div className="h-12 w-12 flex-shrink-0 rounded-full bg-zinc-800" />
+        )}
+
+        <div className="min-w-0 flex-1">
+          {eyebrow ? <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{eyebrow}</div> : null}
+          <div className="truncate text-base font-semibold text-white">{displayName}</div>
+          {handle ? <div className="mt-0.5 truncate text-xs text-zinc-500">{handle}</div> : null}
+          <div className="mt-1 line-clamp-2 text-sm leading-snug text-zinc-400">{body}</div>
+        </div>
+
+        {action ? <div className="flex-shrink-0">{action}</div> : null}
+      </div>
+
+      {footer ? <div className="mt-4">{footer}</div> : null}
+    </div>
+  );
 }
 
 export default function Friends() {
@@ -120,7 +166,7 @@ export default function Friends() {
 
     if (error) {
       console.error("Failed to load friends:", error);
-      toast.error(error.message ?? "Could not load your people");
+      toast.error(error.message ?? "Could not load your friends");
       setFriends([]);
       setPending([]);
       setLoading(false);
@@ -144,7 +190,6 @@ export default function Friends() {
     const loadSuggestions = async () => {
       setLoadingSuggestions(true);
       try {
-
         const acceptedList = [...acceptedIds];
         let mutualCounts = new Map<string, number>();
         let mutualPreviewByCandidate = new Map<string, string[]>();
@@ -153,165 +198,151 @@ export default function Friends() {
         let sharedEventTitleByCandidate = new Map<string, string>();
 
         if (acceptedList.length > 0) {
-        const { data: networkRows, error: networkErr } = await supabase
-          .from("friendships")
-          .select("user_id,friend_id,status")
-          .in("user_id", acceptedList)
-          .eq("status", "accepted");
+          const { data: networkRows, error: networkErr } = await supabase
+            .from("friendships")
+            .select("user_id,friend_id,status")
+            .in("user_id", acceptedList)
+            .eq("status", "accepted");
 
-        if (networkErr) {
-          console.error("Failed to load mutual network:", networkErr);
-        } else {
-          mutualCounts = new Map<string, number>();
-          mutualPreviewByCandidate = new Map<string, string[]>();
+          if (networkErr) {
+            console.error("Failed to load mutual network:", networkErr);
+          } else {
+            for (const row of (networkRows ?? []) as Array<{ user_id: string | null; friend_id: string | null }>) {
+              const candidateId = row.friend_id as string | null;
+              if (
+                !candidateId ||
+                candidateId === user.id ||
+                connectedIds.has(candidateId) ||
+                blockedIds.has(candidateId)
+              ) {
+                continue;
+              }
 
-          for (const row of (networkRows ?? []) as Array<{ user_id: string | null; friend_id: string | null }>) {
-            const candidateId = row.friend_id as string | null;
-            if (
-              !candidateId ||
-              candidateId === user.id ||
-              connectedIds.has(candidateId) ||
-              blockedIds.has(candidateId)
-            ) {
-              continue;
-            }
+              mutualCounts.set(candidateId, (mutualCounts.get(candidateId) ?? 0) + 1);
 
-            mutualCounts.set(candidateId, (mutualCounts.get(candidateId) ?? 0) + 1);
-
-            const mutualName = acceptedNameById.get(row.user_id ?? "");
-            if (!mutualName) continue;
-            const current = mutualPreviewByCandidate.get(candidateId) ?? [];
-            if (!current.includes(mutualName)) {
-              current.push(mutualName);
-              mutualPreviewByCandidate.set(candidateId, current);
-            }
-          }
-        }
-      }
-
-        const socialSeedUserIds = Array.from(
-        new Set([user.id, ...acceptedList])
-      );
-
-        if (socialSeedUserIds.length > 0) {
-        const recentWindowIso = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: seedAttendance, error: seedAttendanceErr } = await supabase
-          .from("attendees")
-          .select("event_id,user_id,created_at")
-          .in("user_id", socialSeedUserIds)
-          .gte("created_at", recentWindowIso);
-
-        if (seedAttendanceErr) {
-          console.error("Failed to load shared-event suggestions:", seedAttendanceErr);
-        } else {
-          const eventIds = Array.from(
-            new Set(
-              (seedAttendance ?? [])
-                .map((row) => String(row.event_id ?? ""))
-                .filter(Boolean)
-            )
-          );
-
-          if (eventIds.length > 0) {
-            const [{ data: allAttendance, error: allAttendanceErr }, { data: eventRows, error: eventRowsErr }] =
-              await Promise.all([
-                supabase
-                  .from("attendees")
-                  .select("event_id,user_id,created_at")
-                  .in("event_id", eventIds),
-                supabase
-                  .from("events")
-                  .select("id,title")
-                  .in("id", eventIds),
-              ]);
-
-            if (allAttendanceErr) {
-              console.error("Failed to load candidate attendance:", allAttendanceErr);
-            } else {
-              const eventTitleById = new Map(
-                ((eventRows ?? []) as Array<{ id: string; title: string | null }>).map((row) => [
-                  row.id,
-                  (row.title ?? "").trim(),
-                ])
-              );
-              const recentThreshold = Date.now() - 14 * 24 * 60 * 60 * 1000;
-
-              const viewerEventIds = new Set(
-                ((seedAttendance ?? []) as Array<{ event_id: string; user_id: string; created_at?: string | null }>)
-                  .filter((row) => row.user_id === user.id)
-                  .map((row) => row.event_id)
-              );
-
-              for (const row of (allAttendance ?? []) as Array<{
-                event_id: string;
-                user_id: string;
-                created_at?: string | null;
-              }>) {
-                const candidateId = row.user_id;
-                if (
-                  !candidateId ||
-                  candidateId === user.id ||
-                  connectedIds.has(candidateId) ||
-                  blockedIds.has(candidateId)
-                ) {
-                  continue;
-                }
-
-                if (!viewerEventIds.has(row.event_id)) continue;
-
-                sharedEventCounts.set(candidateId, (sharedEventCounts.get(candidateId) ?? 0) + 1);
-
-                const createdAt = row.created_at ? new Date(row.created_at).getTime() : NaN;
-                if (!Number.isNaN(createdAt) && createdAt >= recentThreshold) {
-                  recentSharedEventCounts.set(
-                    candidateId,
-                    (recentSharedEventCounts.get(candidateId) ?? 0) + 1
-                  );
-                }
-
-                if (!sharedEventTitleByCandidate.has(candidateId)) {
-                  const title = eventTitleById.get(row.event_id);
-                  if (title) sharedEventTitleByCandidate.set(candidateId, title);
-                }
+              const mutualName = acceptedNameById.get(row.user_id ?? "");
+              if (!mutualName) continue;
+              const current = mutualPreviewByCandidate.get(candidateId) ?? [];
+              if (!current.includes(mutualName)) {
+                current.push(mutualName);
+                mutualPreviewByCandidate.set(candidateId, current);
               }
             }
+          }
+        }
 
-            if (eventRowsErr) {
-              console.error("Failed to load shared-event titles:", eventRowsErr);
+        const socialSeedUserIds = Array.from(new Set([user.id, ...acceptedList]));
+
+        if (socialSeedUserIds.length > 0) {
+          const recentWindowIso = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: seedAttendance, error: seedAttendanceErr } = await supabase
+            .from("attendees")
+            .select("event_id,user_id,created_at")
+            .in("user_id", socialSeedUserIds)
+            .gte("created_at", recentWindowIso);
+
+          if (seedAttendanceErr) {
+            console.error("Failed to load shared-event suggestions:", seedAttendanceErr);
+          } else {
+            const eventIds = Array.from(
+              new Set(
+                (seedAttendance ?? [])
+                  .map((row) => String(row.event_id ?? ""))
+                  .filter(Boolean)
+              )
+            );
+
+            if (eventIds.length > 0) {
+              const [{ data: allAttendance, error: allAttendanceErr }, { data: eventRows, error: eventRowsErr }] =
+                await Promise.all([
+                  supabase.from("attendees").select("event_id,user_id,created_at").in("event_id", eventIds),
+                  supabase.from("events").select("id,title").in("id", eventIds),
+                ]);
+
+              if (allAttendanceErr) {
+                console.error("Failed to load candidate attendance:", allAttendanceErr);
+              } else {
+                const eventTitleById = new Map(
+                  ((eventRows ?? []) as Array<{ id: string; title: string | null }>).map((row) => [
+                    row.id,
+                    (row.title ?? "").trim(),
+                  ])
+                );
+                const recentThreshold = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+                const viewerEventIds = new Set(
+                  ((seedAttendance ?? []) as Array<{ event_id: string; user_id: string; created_at?: string | null }>)
+                    .filter((row) => row.user_id === user.id)
+                    .map((row) => row.event_id)
+                );
+
+                for (const row of (allAttendance ?? []) as Array<{
+                  event_id: string;
+                  user_id: string;
+                  created_at?: string | null;
+                }>) {
+                  const candidateId = row.user_id;
+                  if (
+                    !candidateId ||
+                    candidateId === user.id ||
+                    connectedIds.has(candidateId) ||
+                    blockedIds.has(candidateId)
+                  ) {
+                    continue;
+                  }
+
+                  if (!viewerEventIds.has(row.event_id)) continue;
+
+                  sharedEventCounts.set(candidateId, (sharedEventCounts.get(candidateId) ?? 0) + 1);
+
+                  const createdAt = row.created_at ? new Date(row.created_at).getTime() : NaN;
+                  if (!Number.isNaN(createdAt) && createdAt >= recentThreshold) {
+                    recentSharedEventCounts.set(
+                      candidateId,
+                      (recentSharedEventCounts.get(candidateId) ?? 0) + 1
+                    );
+                  }
+
+                  if (!sharedEventTitleByCandidate.has(candidateId)) {
+                    const title = eventTitleById.get(row.event_id);
+                    if (title) sharedEventTitleByCandidate.set(candidateId, title);
+                  }
+                }
+              }
+
+              if (eventRowsErr) {
+                console.error("Failed to load shared-event titles:", eventRowsErr);
+              }
             }
           }
         }
-      }
 
         const prioritizedCandidateIds = Array.from(
-        new Set([
-          ...sharedEventCounts.keys(),
-          ...mutualCounts.keys(),
-        ])
-      ).slice(0, 80);
+          new Set([...sharedEventCounts.keys(), ...mutualCounts.keys()])
+        ).slice(0, 80);
 
         const prioritizedProfilesPromise = prioritizedCandidateIds.length
-        ? supabase
-            .from("profiles")
-            .select("id,display_name,username,avatar_url")
-            .in("id", prioritizedCandidateIds)
-        : Promise.resolve({ data: [], error: null });
+          ? supabase
+              .from("profiles")
+              .select("id,display_name,username,avatar_url")
+              .in("id", prioritizedCandidateIds)
+          : Promise.resolve({ data: [], error: null });
 
         const fallbackProfilesPromise = supabase
-        .from("profiles")
-        .select("id,display_name,username,avatar_url")
-        .neq("id", user.id)
-        .not("username", "is", null)
-        .limit(80);
+          .from("profiles")
+          .select("id,display_name,username,avatar_url")
+          .neq("id", user.id)
+          .not("username", "is", null)
+          .limit(80);
 
         const [{ data: prioritizedProfiles, error: prioritizedErr }, { data: fallbackProfiles, error: fallbackErr }] =
-        await Promise.all([prioritizedProfilesPromise, fallbackProfilesPromise]);
+          await Promise.all([prioritizedProfilesPromise, fallbackProfilesPromise]);
 
         const pErr = prioritizedErr ?? fallbackErr;
         const profiles = [
-        ...((prioritizedProfiles ?? []) as SuggestedProfile[]),
-        ...((fallbackProfiles ?? []) as SuggestedProfile[]),
-      ];
+          ...((prioritizedProfiles ?? []) as SuggestedProfile[]),
+          ...((fallbackProfiles ?? []) as SuggestedProfile[]),
+        ];
 
         if (pErr) {
           console.error("Failed to load suggested profiles:", pErr);
@@ -319,37 +350,37 @@ export default function Friends() {
           setSuggested([]);
         } else {
           const prioritized = profiles
-          .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id) && !blockedIds.has(r.id))
-          .filter(
-            (profile, index, arr) => arr.findIndex((candidate) => candidate.id === profile.id) === index
-          )
-          .map((r) => {
-            const next: SuggestedProfile = {
-              ...r,
-              mutualCount: mutualCounts.get(r.id) ?? 0,
-              mutualPreview: (mutualPreviewByCandidate.get(r.id) ?? []).slice(0, 2),
-              sharedEventCount: sharedEventCounts.get(r.id) ?? 0,
-              recentSharedEventCount: recentSharedEventCounts.get(r.id) ?? 0,
-              sharedEventTitle: sharedEventTitleByCandidate.get(r.id) ?? null,
-            };
-            next.reason = suggestionReason(next);
-            return next;
-          })
-          .sort((a, b) => {
-            const aScore =
-              (a.sharedEventCount ?? 0) * 12 +
-              (a.recentSharedEventCount ?? 0) * 6 +
-              (a.mutualCount ?? 0) * 5;
-            const bScore =
-              (b.sharedEventCount ?? 0) * 12 +
-              (b.recentSharedEventCount ?? 0) * 6 +
-              (b.mutualCount ?? 0) * 5;
-            if (bScore !== aScore) return bScore - aScore;
-            const aName = (a.display_name || a.username || "").toLowerCase();
-            const bName = (b.display_name || b.username || "").toLowerCase();
-            return aName.localeCompare(bName);
-          })
-          .slice(0, 20);
+            .filter((r) => !!r.id && !!r.username && !connectedIds.has(r.id) && !blockedIds.has(r.id))
+            .filter(
+              (profile, index, arr) => arr.findIndex((candidate) => candidate.id === profile.id) === index
+            )
+            .map((r) => {
+              const next: SuggestedProfile = {
+                ...r,
+                mutualCount: mutualCounts.get(r.id) ?? 0,
+                mutualPreview: (mutualPreviewByCandidate.get(r.id) ?? []).slice(0, 2),
+                sharedEventCount: sharedEventCounts.get(r.id) ?? 0,
+                recentSharedEventCount: recentSharedEventCounts.get(r.id) ?? 0,
+                sharedEventTitle: sharedEventTitleByCandidate.get(r.id) ?? null,
+              };
+              next.reason = suggestionReason(next);
+              return next;
+            })
+            .sort((a, b) => {
+              const aScore =
+                (a.sharedEventCount ?? 0) * 12 +
+                (a.recentSharedEventCount ?? 0) * 6 +
+                (a.mutualCount ?? 0) * 5;
+              const bScore =
+                (b.sharedEventCount ?? 0) * 12 +
+                (b.recentSharedEventCount ?? 0) * 6 +
+                (b.mutualCount ?? 0) * 5;
+              if (bScore !== aScore) return bScore - aScore;
+              const aName = (a.display_name || a.username || "").toLowerCase();
+              const bName = (b.display_name || b.username || "").toLowerCase();
+              return aName.localeCompare(bName);
+            })
+            .slice(0, 20);
           setSuggested(prioritized);
         }
       } catch (error) {
@@ -385,7 +416,7 @@ export default function Friends() {
       const isDuplicate = msg.includes("duplicate");
       if (!isDuplicate) {
         setAddedIds((prev) => ({ ...prev, [row.id]: false }));
-          toast.error(error.message ?? "Could not add them");
+        toast.error(error.message ?? "Could not add them");
         track("friend_add_failed", { source: "suggested" });
         return;
       }
@@ -397,7 +428,7 @@ export default function Friends() {
     if (row.username && loaded?.acceptedIds.has(row.id)) {
       const unlockCopy = "Nice. Your feed just got sharper.";
       setFriendUnlockMessage(unlockCopy);
-      toast.success(`${unlockCopy} @${row.username} is now in your circle.`);
+      toast.success(`${unlockCopy} @${row.username} is now in your friends.`);
       track("friend_added", { source: "suggested", mode: "accepted" });
       track("friend_add", { source: "suggested", mode: "accepted" });
     } else if (row.username && loaded?.pendingIds.has(row.id)) {
@@ -459,7 +490,7 @@ export default function Friends() {
   };
 
   const handleBlockUser = async (userId: string, label: string) => {
-    const ok = window.confirm(`Block ${label}? They will leave your circle and no longer see your attendance.`);
+    const ok = window.confirm(`Block ${label}? They will be removed from your friends and no longer see your attendance.`);
     if (!ok) return;
 
     setSafetyWorkingId(userId);
@@ -497,14 +528,14 @@ export default function Friends() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white px-5 py-8 pb-[calc(13rem+env(safe-area-inset-bottom))] sm:px-6">
-      <h1 className="text-3xl font-bold mb-6">Your People</h1>
+    <div className="min-h-screen bg-black px-5 py-8 pb-[calc(7rem+env(safe-area-inset-bottom))] text-white sm:px-6">
+      <h1 className="mb-6 text-3xl font-bold">Friends</h1>
 
       {onboardingMode ? (
         <div className="mb-6 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-4 py-3">
-          <div className="text-sm font-semibold text-white">Step 1: pull your people in</div>
+          <div className="text-sm font-semibold text-white">Step 1: bring friends in</div>
           <div className="mt-1 text-xs text-zinc-300">
-            Add one friend, then we'll send you straight to tonight's best picks.
+            Add one friend, then we'll send you straight to the best moves.
           </div>
         </div>
       ) : null}
@@ -513,16 +544,16 @@ export default function Friends() {
         <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
           <div className="text-sm font-semibold text-white">{friendUnlockMessage}</div>
           <div className="mt-1 text-xs text-zinc-300">
-            More of your people means sharper picks, stronger social proof, and faster calls.
+            More friends means sharper picks, stronger social proof, and faster decisions.
           </div>
         </div>
       ) : null}
 
       {!loading ? (
         <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
-          <div className="text-sm font-semibold text-zinc-100">Bring your people in early</div>
+          <div className="text-sm font-semibold text-zinc-100">Bring friends in early</div>
           <div className="mt-1 text-xs text-zinc-400">
-            More friends means stronger picks and more nights that actually turn into plans.
+            More friends means stronger picks and more moves that actually happen.
           </div>
           <button
             type="button"
@@ -530,23 +561,21 @@ export default function Friends() {
             disabled={sharingInvite}
             className="mt-4 inline-flex items-center gap-2 rounded-xl border border-pink-400/30 bg-pink-500/15 px-4 py-2 text-sm font-semibold text-pink-50 hover:bg-pink-500/20 disabled:opacity-60"
           >
-            <Share2 className="h-4 w-4" />
+            <ShareIcon color="currentColor" className="h-4 w-4" />
             {sharingInvite ? "Sharing..." : "Share invite"}
           </button>
         </div>
       ) : null}
 
-      {!loading && !suggestionsHidden && (
+      {!loading && !suggestionsHidden ? (
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-2">Already Here</h2>
-          <p className="text-zinc-500 text-sm mb-4">
+          <h2 className="mb-2 text-xl font-bold">Already Here</h2>
+          <p className="mb-4 text-sm text-zinc-500">
             Start with one person you actually go out with. The app gets better immediately.
           </p>
 
           {loadingSuggestions ? (
-            <div className="text-zinc-500">
-              Looking for the strongest people to pull in...
-            </div>
+            <div className="text-zinc-500">Looking for the strongest people to pull in...</div>
           ) : suggested.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
               <div className="text-sm font-semibold text-white">No more strong suggestions right now</div>
@@ -560,7 +589,7 @@ export default function Friends() {
                   disabled={sharingInvite}
                   className="inline-flex items-center gap-2 rounded-xl border border-pink-400/30 bg-pink-500/15 px-4 py-2 text-sm font-semibold text-pink-50 hover:bg-pink-500/20 disabled:opacity-60"
                 >
-                  <Share2 className="h-4 w-4" />
+                  <ShareIcon color="currentColor" className="h-4 w-4" />
                   {sharingInvite ? "Sharing..." : "Share invite"}
                 </button>
                 <button
@@ -568,7 +597,7 @@ export default function Friends() {
                   onClick={() => navigate("/explore")}
                   className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-zinc-100 hover:bg-white/15"
                 >
-                  Find a night first
+                  Find a move first
                 </button>
               </div>
             </div>
@@ -576,125 +605,113 @@ export default function Friends() {
             <div className="grid grid-cols-1 gap-3">
               {suggested.map((p) => {
                 const displayName = p.display_name?.trim() || p.username || "Anon";
+                const handle = profileHandle(p.username);
                 const avatar = p.avatar_url ?? "";
                 const adding = !!addingIds[p.id];
                 const added = !!addedIds[p.id];
 
                 return (
-                  <div
+                  <PersonCard
                     key={p.id}
-                    className="flex items-center justify-between gap-3 bg-zinc-900/50 border border-white/10 rounded-2xl px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {avatar ? (
-                          <img
-                            src={avatar}
-                            alt={displayName}
-                            className="w-11 h-11 rounded-full object-cover"
-                          />
-                      ) : (
-                        <div className="w-11 h-11 rounded-full bg-zinc-800" />
-                      )}
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <div className="font-semibold truncate">{displayName}</div>
-                        {p.username ? <div className="text-xs text-zinc-500 truncate">@{p.username}</div> : null}
-                        <div className="text-xs text-zinc-500">
-                          {p.reason ?? mutualPreviewText(p.mutualPreview ?? [], p.mutualCount ?? 0)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleReportUser(p.id, displayName)}
-                        disabled={safetyWorkingId === p.id}
-                        className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
-                      >
-                        Report
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleBlockUser(p.id, displayName)}
-                        disabled={safetyWorkingId === p.id}
-                        className="px-3 py-2 rounded-xl text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
-                      >
-                        Block
-                      </button>
+                    displayName={displayName}
+                    handle={handle}
+                    avatar={avatar}
+                    body={p.reason ?? mutualPreviewText(p.mutualPreview ?? [], p.mutualCount ?? 0)}
+                    action={
                       <button
                         onClick={() => addSuggestedFriend(p)}
                         disabled={adding || added || !viewerId || featureFlags.killSwitchFriendAdds}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-pink-600 disabled:opacity-50"
+                        className="inline-flex min-w-[5.5rem] justify-center rounded-xl bg-pink-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                       >
                         {adding ? "Adding..." : added ? "Added" : "Add"}
                       </button>
-                    </div>
-                  </div>
+                    }
+                    footer={
+                      <div className="text-[11px] text-zinc-500">
+                        Safety actions appear after someone is in your friends.
+                      </div>
+                    }
+                  />
                 );
               })}
             </div>
           )}
 
           <div className="mt-4 flex items-center gap-4 text-sm">
-            <button
-              onClick={hideSuggestions}
-              className="text-zinc-400 hover:text-white transition-colors"
-            >
+            <button onClick={hideSuggestions} className="text-zinc-400 transition-colors hover:text-white">
               Not now
             </button>
             <span className="text-zinc-600">You can come back anytime.</span>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {!loading && suggestionsHidden && (
-        <div className="mb-8 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3 flex items-center justify-between gap-3">
+      {!loading && suggestionsHidden ? (
+        <div className="mb-8 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-zinc-900/40 px-4 py-3">
           <div className="text-sm text-zinc-400">Suggestions hidden for now.</div>
           <button
             onClick={showSuggestionsAgain}
-            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/10 hover:bg-white/15"
+            className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/15"
           >
             Show again
           </button>
         </div>
-      )}
+      ) : null}
 
-      {!loading && pending.length > 0 && (
+      {!loading && pending.length > 0 ? (
         <div className="mb-8">
-          <h2 className="text-xl font-bold mb-2">Pending</h2>
+          <h2 className="mb-2 text-xl font-bold">Pending</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
             {pending.map((f) => {
               const displayName =
                 f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
-              const handle = f.friend_profile?.username ? `@${f.friend_profile.username}` : "";
+              const handle = profileHandle(f.friend_profile?.username);
               const avatar = f.friend_profile?.avatar_url ?? "";
 
               return (
-                <div
+                <PersonCard
                   key={f.friend_id}
-                  className="flex min-w-0 items-center gap-4 bg-zinc-900/40 border border-white/10 rounded-2xl p-4"
-                >
-                  {avatar ? (
-                      <img
-                        src={avatar}
-                        alt={displayName}
-                        className="w-14 h-14 rounded-full object-cover"
-                      />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-zinc-800" />
-                  )}
+                  displayName={displayName}
+                  handle={handle}
+                  avatar={avatar}
+                  eyebrow="Pending"
+                  body="Request sent."
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="font-semibold truncate">{displayName}</div>
-                    {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
-                    <div className="text-xs text-zinc-500">Request sent</div>
-                  </div>
-                  <div className="flex flex-col gap-2">
+      {loading ? (
+        <div className="text-zinc-400">Loading your friends...</div>
+      ) : friends.length === 0 && pending.length === 0 ? (
+        <div className="mb-6 text-zinc-500">
+          Nobody here yet. Add one real friend and this starts making sense fast.
+        </div>
+      ) : (
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
+          {friends.map((f) => {
+            const displayName =
+              f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
+            const handle = profileHandle(f.friend_profile?.username);
+            const avatar = f.friend_profile?.avatar_url ?? "";
+
+            return (
+              <PersonCard
+                key={f.friend_id}
+                displayName={displayName}
+                handle={handle}
+                avatar={avatar}
+                eyebrow="Friend"
+                body="In your friends."
+                footer={
+                  <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => void handleReportUser(f.friend_id, displayName)}
                       disabled={safetyWorkingId === f.friend_id}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                      className="flex-1 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/15 disabled:opacity-50"
                     >
                       Report
                     </button>
@@ -702,116 +719,31 @@ export default function Friends() {
                       type="button"
                       onClick={() => void handleBlockUser(f.friend_id, displayName)}
                       disabled={safetyWorkingId === f.friend_id}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
+                      className="flex-1 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold hover:bg-white/15 disabled:opacity-50"
                     >
                       Block
                     </button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-zinc-400">Loading your people...</div>
-      ) : friends.length === 0 && pending.length === 0 ? (
-        <div className="text-zinc-500 mb-6">
-          Nobody here yet. Add one real friend and this starts making sense fast.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 sm:gap-6">
-          {friends.map((f) => {
-            const displayName =
-              f.friend_profile?.display_name?.trim() || f.friend_profile?.username || "Anon";
-            const handle = f.friend_profile?.username ? `@${f.friend_profile.username}` : "";
-            const avatar = f.friend_profile?.avatar_url ?? "";
-
-            return (
-              <div
-                key={f.friend_id}
-                className="flex min-w-0 items-center gap-4 bg-zinc-900/60 border border-white/10 rounded-2xl p-4"
-              >
-                {avatar ? (
-                  <img
-                    src={avatar}
-                    alt={displayName}
-                    className="w-14 h-14 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-full bg-zinc-800" />
-                )}
-
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="font-semibold truncate">{displayName}</div>
-                  {handle ? <div className="text-xs text-zinc-500 truncate">{handle}</div> : null}
-                  <div className="text-xs text-zinc-500">In your circle</div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleReportUser(f.friend_id, displayName)}
-                    disabled={safetyWorkingId === f.friend_id}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
-                  >
-                    Report
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleBlockUser(f.friend_id, displayName)}
-                    disabled={safetyWorkingId === f.friend_id}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-50"
-                  >
-                    Block
-                  </button>
-                </div>
-              </div>
+                }
+              />
             );
           })}
         </div>
       )}
 
-      <div className="mb-24">
+      <div className="mb-10">
         <AddFriend
           sticky={false}
           onSuccess={async () => {
             await loadFriends();
-            setFriendUnlockMessage("Nice. Your feed just got sharper.");
-            toast.success("Nice. Your feed just got sharper.");
+            setFriendUnlockMessage("Nice. Your moves just got sharper.");
+            toast.success("Nice. Your moves just got sharper.");
             if (onboardingMode) {
               navigate("/explore?onboarding=1", { replace: true });
             }
           }}
         />
       </div>
-
-      {!loading ? (
-        <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-20 px-5 sm:px-6">
-          <div className="mx-auto max-w-5xl">
-            <div className="rounded-[28px] border border-white/10 bg-black/85 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-lg font-bold text-white">Bring your people in</div>
-                  <div className="mt-1 text-xs text-zinc-400">
-                    Share your invite and pull real friends into the app while we grow to 100.
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => void handleShareInvite("friends_sticky_cta")}
-                  disabled={sharingInvite}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-pink-600 px-5 py-3 text-sm font-semibold text-white hover:bg-pink-500 disabled:opacity-60"
-                >
-                  <Share2 className="h-4 w-4" />
-                  {sharingInvite ? "Sharing..." : "Share invite"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

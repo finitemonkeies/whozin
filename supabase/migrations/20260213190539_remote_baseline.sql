@@ -1,0 +1,2 @@
+-- Placeholder baseline to align local Supabase CLI migration history with the
+-- remote project. The remote already reports this version as applied.

@@ -1,18 +1,21 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, MapPin, Share2, Ticket, Users } from "lucide-react";
+import { ArrowUpRight, Ticket } from "lucide-react";
 import type { Event } from "../../data/mock";
 import { track } from "@/lib/analytics";
 import type { MoveSignal } from "@/lib/theMove";
 import { TheMoveBadge } from "@/app/components/TheMoveBadge";
+import { EventArtwork } from "@/app/components/EventArtwork";
 import { toast } from "sonner";
 import { featureFlags } from "@/lib/featureFlags";
 import { shareInviteLink } from "@/lib/inviteSharing";
+import { FriendsGoingIcon, LocationIcon, RSVPIcon, ShareIcon } from "@/app/components/WhozinIcons";
 
 type QuickRsvpState = {
   going: boolean;
   working: boolean;
   count?: number;
+  friendCount?: number;
   onToggle: () => void;
 };
 
@@ -27,27 +30,6 @@ function isUuid(value: string): boolean {
   );
 }
 
-const FALLBACK_ART_STYLES = [
-  {
-    background:
-      "linear-gradient(135deg, rgba(236,72,153,0.95), rgba(124,58,237,0.9) 52%, rgba(15,23,42,0.98))",
-    orbClass: "bg-pink-400/35",
-    accentClass: "text-pink-100",
-  },
-  {
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.95), rgba(168,85,247,0.88) 54%, rgba(9,9,11,0.98))",
-    orbClass: "bg-violet-400/30",
-    accentClass: "text-blue-100",
-  },
-  {
-    background:
-      "linear-gradient(135deg, rgba(244,63,94,0.95), rgba(249,115,22,0.88) 54%, rgba(9,9,11,0.98))",
-    orbClass: "bg-orange-300/30",
-    accentClass: "text-rose-100",
-  },
-];
-
 function logProductEventLazy(
   ...args: Parameters<typeof import("@/lib/productEvents")["then"] extends never ? never : never>
 ) {
@@ -55,11 +37,6 @@ function logProductEventLazy(
     // @ts-expect-error typed through call sites below
     logProductEvent(...args)
   );
-}
-
-function pickFallbackArt(seed: string) {
-  const value = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return FALLBACK_ART_STYLES[value % FALLBACK_ART_STYLES.length];
 }
 
 export function EventCard({
@@ -81,10 +58,6 @@ export function EventCard({
   const canOpenDetails = isUuid(event.id);
   const hasTicketUrl = !!event.ticketUrl;
 
-  const hasImageProp = !!event.image && event.image.trim().length > 0;
-  const [imageOk, setImageOk] = useState(true);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const showImage = hasImageProp && imageOk;
   const source = event.eventSource ?? "explore";
   const matchedArtist =
     (event.matchReason ?? "").toLowerCase().includes("like") ||
@@ -96,22 +69,7 @@ export function EventCard({
         .slice(0, 3),
     [event.tags]
   );
-  const fallbackArt = useMemo(
-    () => pickFallbackArt(`${title}-${event.location}-${source}`),
-    [event.location, source, title]
-  );
-  const fallbackLabel = useMemo(() => {
-    if (visibleTags.length > 0) return visibleTags[0];
-    if (source === "19hz") return "Bay Area";
-    if (source === "ra") return "Nightlife";
-    return "Tonight";
-  }, [source, visibleTags]);
   const detailHref = canOpenDetails ? `/event/${event.id}?src=${surface}` : null;
-
-  useEffect(() => {
-    setImageLoaded(false);
-    setImageOk(true);
-  }, [event.id, event.image]);
 
   useEffect(() => {
     if (didTrackImpression.current) return;
@@ -152,7 +110,7 @@ export function EventCard({
     });
   }, [canOpenDetails, event.id, moveSignal, surface]);
 
-  const className = `group rounded-2xl bg-zinc-900/55 border border-white/10 hover:border-white/20 transition overflow-hidden hover:-translate-y-0.5 duration-200 ${
+  const className = `group overflow-hidden rounded-[26px] border border-white/10 bg-zinc-900/70 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition duration-200 hover:-translate-y-0.5 hover:border-white/20 ${
     canOpenDetails
       ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70"
       : ""
@@ -251,76 +209,27 @@ export function EventCard({
 
   const body = (
     <>
-      <div className="relative h-44 bg-zinc-900">
-        {showImage ? (
-          <>
-            {!imageLoaded ? (
-              <div className="absolute inset-0 animate-pulse bg-zinc-900/80" />
-            ) : null}
-            <img
-              src={event.image}
-              alt={title}
-              className={`w-full h-full object-cover transition duration-300 ${
-                imageLoaded ? "opacity-100" : "opacity-0"
-              }`}
-              loading="lazy"
-              decoding="async"
-              fetchPriority="low"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageOk(false)}
-            />
-          </>
-        ) : (
-          <div className="relative h-full w-full overflow-hidden" style={{ background: fallbackArt.background }}>
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:22px_22px] opacity-25" />
-            <div className={`absolute -left-8 -top-12 h-40 w-40 rounded-full blur-3xl ${fallbackArt.orbClass}`} />
-            <div className="absolute -bottom-16 right-0 h-44 w-44 rounded-full bg-black/35 blur-3xl" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />
-
-            <div className="relative flex h-full flex-col justify-between p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/85">
-                  <Ticket className="h-3.5 w-3.5" />
-                  Poster coming
-                </div>
-                <div className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${fallbackArt.accentClass}`}>
-                  {fallbackLabel}
-                </div>
-              </div>
-
-              <div className="max-w-[85%]">
-                <div className="line-clamp-2 text-xl font-semibold leading-tight text-white">{title}</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {visibleTags.slice(0, 2).map((tag) => (
-                    <span
-                      key={`art-${tag}`}
-                      className="rounded-full border border-white/15 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                  {!visibleTags.length && event.location ? (
-                    <span className="rounded-full border border-white/15 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
-                      {event.location}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+      <div className="relative h-40 bg-zinc-900 sm:h-44">
+        <EventArtwork
+          title={title}
+          imageUrl={event.image}
+          location={event.location}
+          dateLabel={event.date}
+          tags={visibleTags}
+          badge={event.organizerProfileId ? "Partner event" : moveSignal?.secondary ?? null}
+          className="h-full"
+          titleClassName="text-[1.5rem] sm:text-[1.65rem]"
+        />
         {moveSignal ? (
-          <div className="absolute left-4 top-4">
+          <div className="absolute left-3 top-12 sm:left-4">
             <TheMoveBadge signal={moveSignal} compact />
           </div>
         ) : null}
       </div>
 
-      <div className="p-5">
+      <div className="space-y-3 p-4 sm:p-5">
         {moveSignal ? (
-          <div className="mb-3">
+          <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-pink-300/90">
               {moveSignal.secondary}
             </div>
@@ -328,9 +237,14 @@ export function EventCard({
           </div>
         ) : null}
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-[18px] font-semibold leading-tight">{title}</div>
-            <div className="mt-1 truncate text-sm text-zinc-400">{event.date}</div>
+          <div className="min-w-0 flex-1">
+            {event.organizerProfileId ? (
+              <div className="mb-2 inline-flex items-center rounded-full border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-100">
+                Partner event
+              </div>
+            ) : null}
+            <div className="line-clamp-2 text-[18px] font-semibold leading-tight text-white">{title}</div>
+            <div className="mt-1 text-sm text-zinc-400">{event.date}</div>
           </div>
 
           {quickRsvp ? (
@@ -345,10 +259,10 @@ export function EventCard({
               className={`flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition active:scale-[0.99] disabled:opacity-60 ${
                 quickRsvp.going
                   ? "bg-green-500/15 border-green-500/30 text-green-200"
-                  : "bg-gradient-to-r from-pink-600 to-purple-600 border-white/10 text-white"
+                  : "whozin-brand-button border-white/10 text-white"
               }`}
             >
-              <Ticket className="w-3.5 h-3.5" />
+              <RSVPIcon color="currentColor" className="w-3.5 h-3.5" />
               {quickRsvp.working ? "Saving..." : quickRsvp.going ? "You're in" : "I'm going"}
             </button>
           ) : event.price ? (
@@ -359,30 +273,45 @@ export function EventCard({
           ) : null}
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-400">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-400">
           {event.location ? (
             <div className="inline-flex items-center gap-1.5 max-w-full">
-              <MapPin className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <LocationIcon color="currentColor" className="w-4 h-4 text-zinc-500 flex-shrink-0" />
               <span className="truncate">{event.location}</span>
             </div>
           ) : null}
 
           {typeof (quickRsvp?.count ?? event.attendees) === "number" ? (
             <div className="inline-flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-zinc-500" />
+              <FriendsGoingIcon color="currentColor" className="w-4 h-4 text-zinc-500" />
               <span>{(quickRsvp?.count ?? event.attendees).toLocaleString()} going</span>
             </div>
           ) : null}
         </div>
 
+        {typeof quickRsvp?.friendCount === "number" && quickRsvp.friendCount > 0 ? (
+          <div className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-100">
+            {quickRsvp.friendCount === 1
+              ? "1 friend already in"
+              : `${quickRsvp.friendCount} friends already in`}
+          </div>
+        ) : typeof (quickRsvp?.count ?? event.attendees) === "number" &&
+          (quickRsvp?.count ?? event.attendees) > 0 ? (
+          <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-zinc-300">
+            {(quickRsvp?.count ?? event.attendees) === 1
+              ? "Crowd just started"
+              : "Crowd already forming"}
+          </div>
+        ) : null}
+
         {event.description ? (
-          <div className="mt-3 text-sm text-zinc-500 leading-relaxed line-clamp-2">
+          <div className="text-sm leading-relaxed text-zinc-500 line-clamp-2">
             {event.description}
           </div>
         ) : null}
 
         {visibleTags.length > 0 ? (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             {visibleTags.map((tag) => (
               <span
                 key={tag}
@@ -394,7 +323,7 @@ export function EventCard({
           </div>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-white/8 pt-1">
           {canOpenDetails ? (
             <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
               Open
@@ -414,8 +343,8 @@ export function EventCard({
               data-no-card-nav="true"
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10"
             >
-              <Share2 className="h-3.5 w-3.5" />
-              Bring your crew
+              <ShareIcon color="currentColor" className="h-3.5 w-3.5" />
+              Share invite
             </button>
           ) : null}
 
