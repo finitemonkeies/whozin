@@ -58,6 +58,48 @@ type TopInviter = {
   invites: number;
 };
 
+type AcquisitionReportRow = {
+  user_id: string;
+  captured_at: string;
+  landing_path: string;
+  landing_url: string | null;
+  referrer: string | null;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_term: string;
+  utm_content: string;
+  fbclid: string | null;
+  gclid: string | null;
+  ttclid: string | null;
+  profile_created_at: string;
+  onboarding_complete: boolean;
+  first_rsvp_at: string | null;
+  first_friend_add_at: string | null;
+  first_invite_at: string | null;
+  first_ticket_click_at: string | null;
+  activated_rsvp_7d: boolean;
+  added_friend_7d: boolean;
+  invited_7d: boolean;
+  ticket_click_7d: boolean;
+  retained_d7: boolean;
+};
+
+type AcquisitionCampaignSummary = {
+  key: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  content: string;
+  users: number;
+  onboardedUsers: number;
+  activatedUsers: number;
+  friendAdders: number;
+  inviters: number;
+  ticketClickers: number;
+  retainedUsers: number;
+};
+
 type DailyKpiRow = {
   metric_date: string;
   new_users: number;
@@ -225,6 +267,8 @@ export default function Admin() {
   const [growthStats, setGrowthStats] = useState<GrowthStats | null>(null);
   const [growthBySource, setGrowthBySource] = useState<SourceStat[]>([]);
   const [topInviters, setTopInviters] = useState<TopInviter[]>([]);
+  const [loadingAcquisition, setLoadingAcquisition] = useState(false);
+  const [acquisitionRows, setAcquisitionRows] = useState<AcquisitionReportRow[]>([]);
   const [loadingDailyKpis, setLoadingDailyKpis] = useState(false);
   const [refreshingDailyKpis, setRefreshingDailyKpis] = useState(false);
   const [dailyKpis, setDailyKpis] = useState<DailyKpiRow[]>([]);
@@ -356,6 +400,69 @@ export default function Admin() {
     if (safetyStatusFilter === "all") return safetyReports;
     return safetyReports.filter((row) => row.status === safetyStatusFilter);
   }, [safetyReports, safetyStatusFilter]);
+  const acquisitionCampaignSummary = useMemo<AcquisitionCampaignSummary[]>(() => {
+    const summary = new Map<string, AcquisitionCampaignSummary>();
+
+    for (const row of acquisitionRows) {
+      const source = row.utm_source || "direct";
+      const medium = row.utm_medium || "unknown";
+      const campaign = row.utm_campaign || "unlabeled";
+      const content = row.utm_content || "n/a";
+      const key = `${source}::${medium}::${campaign}::${content}`;
+      const existing = summary.get(key) ?? {
+        key,
+        source,
+        medium,
+        campaign,
+        content,
+        users: 0,
+        onboardedUsers: 0,
+        activatedUsers: 0,
+        friendAdders: 0,
+        inviters: 0,
+        ticketClickers: 0,
+        retainedUsers: 0,
+      };
+
+      existing.users += 1;
+      if (row.onboarding_complete) existing.onboardedUsers += 1;
+      if (row.activated_rsvp_7d) existing.activatedUsers += 1;
+      if (row.added_friend_7d) existing.friendAdders += 1;
+      if (row.invited_7d) existing.inviters += 1;
+      if (row.ticket_click_7d) existing.ticketClickers += 1;
+      if (row.retained_d7) existing.retainedUsers += 1;
+      summary.set(key, existing);
+    }
+
+    return [...summary.values()].sort((a, b) => {
+      if (b.activatedUsers !== a.activatedUsers) return b.activatedUsers - a.activatedUsers;
+      if (b.users !== a.users) return b.users - a.users;
+      return a.key.localeCompare(b.key);
+    });
+  }, [acquisitionRows]);
+  const acquisitionTotals = useMemo(() => {
+    return acquisitionRows.reduce(
+      (acc, row) => {
+        acc.users += 1;
+        if (row.onboarding_complete) acc.onboardedUsers += 1;
+        if (row.activated_rsvp_7d) acc.activatedUsers += 1;
+        if (row.added_friend_7d) acc.friendAdders += 1;
+        if (row.invited_7d) acc.inviters += 1;
+        if (row.ticket_click_7d) acc.ticketClickers += 1;
+        if (row.retained_d7) acc.retainedUsers += 1;
+        return acc;
+      },
+      {
+        users: 0,
+        onboardedUsers: 0,
+        activatedUsers: 0,
+        friendAdders: 0,
+        inviters: 0,
+        ticketClickers: 0,
+        retainedUsers: 0,
+      }
+    );
+  }, [acquisitionRows]);
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return "N/A";
@@ -367,6 +474,93 @@ export default function Admin() {
       hour: "numeric",
       minute: "2-digit",
     });
+  };
+
+  const downloadCsv = (filename: string, rows: Array<Record<string, string | number | boolean | null>>) => {
+    if (rows.length === 0) {
+      toast.error("No rows to export yet");
+      return;
+    }
+
+    const headers = Object.keys(rows[0]);
+    const escapeCell = (value: string | number | boolean | null | undefined) => {
+      const raw = value == null ? "" : String(value);
+      if (/[",\n]/.test(raw)) {
+        return `"${raw.replace(/"/g, '""')}"`;
+      }
+      return raw;
+    };
+
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) => headers.map((header) => escapeCell(row[header])).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportAcquisitionCampaignCsv = () => {
+    downloadCsv(
+      `whozin-acquisition-campaigns-${new Date().toISOString().slice(0, 10)}.csv`,
+      acquisitionCampaignSummary.map((row) => ({
+        source: row.source,
+        medium: row.medium,
+        campaign: row.campaign,
+        content: row.content,
+        users: row.users,
+        onboarded_users: row.onboardedUsers,
+        onboarded_rate_pct: row.users > 0 ? Number(((row.onboardedUsers / row.users) * 100).toFixed(2)) : 0,
+        rsvp_7d_users: row.activatedUsers,
+        rsvp_7d_rate_pct: row.users > 0 ? Number(((row.activatedUsers / row.users) * 100).toFixed(2)) : 0,
+        friend_7d_users: row.friendAdders,
+        friend_7d_rate_pct: row.users > 0 ? Number(((row.friendAdders / row.users) * 100).toFixed(2)) : 0,
+        invite_7d_users: row.inviters,
+        invite_7d_rate_pct: row.users > 0 ? Number(((row.inviters / row.users) * 100).toFixed(2)) : 0,
+        ticket_click_7d_users: row.ticketClickers,
+        ticket_click_7d_rate_pct: row.users > 0 ? Number(((row.ticketClickers / row.users) * 100).toFixed(2)) : 0,
+        retained_d7_users: row.retainedUsers,
+        retained_d7_rate_pct: row.users > 0 ? Number(((row.retainedUsers / row.users) * 100).toFixed(2)) : 0,
+      }))
+    );
+  };
+
+  const exportAcquisitionUserCsv = () => {
+    downloadCsv(
+      `whozin-acquisition-users-${new Date().toISOString().slice(0, 10)}.csv`,
+      acquisitionRows.map((row) => ({
+        profile_created_at: row.profile_created_at,
+        captured_at: row.captured_at,
+        user_id: row.user_id,
+        source: row.utm_source,
+        medium: row.utm_medium,
+        campaign: row.utm_campaign,
+        content: row.utm_content,
+        term: row.utm_term,
+        landing_path: row.landing_path,
+        referrer: row.referrer,
+        onboarding_complete: row.onboarding_complete,
+        activated_rsvp_7d: row.activated_rsvp_7d,
+        added_friend_7d: row.added_friend_7d,
+        invited_7d: row.invited_7d,
+        ticket_click_7d: row.ticket_click_7d,
+        retained_d7: row.retained_d7,
+        first_rsvp_at: row.first_rsvp_at,
+        first_friend_add_at: row.first_friend_add_at,
+        first_invite_at: row.first_invite_at,
+        first_ticket_click_at: row.first_ticket_click_at,
+        has_fbclid: !!row.fbclid,
+        has_gclid: !!row.gclid,
+        has_ttclid: !!row.ttclid,
+      }))
+    );
   };
 
   const resetForm = () => {
@@ -543,6 +737,30 @@ export default function Admin() {
       setTopInviters([]);
     } finally {
       setLoadingGrowth(false);
+    }
+  };
+
+  const loadAcquisitionAttribution = async () => {
+    setLoadingAcquisition(true);
+    try {
+      const sinceIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("user_acquisition_attribution_report")
+        .select(
+          "user_id,captured_at,landing_path,landing_url,referrer,utm_source,utm_medium,utm_campaign,utm_term,utm_content,fbclid,gclid,ttclid,profile_created_at,onboarding_complete,first_rsvp_at,first_friend_add_at,first_invite_at,first_ticket_click_at,activated_rsvp_7d,added_friend_7d,invited_7d,ticket_click_7d,retained_d7"
+        )
+        .gte("profile_created_at", sinceIso)
+        .order("profile_created_at", { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      setAcquisitionRows((data ?? []) as AcquisitionReportRow[]);
+    } catch (err: any) {
+      console.error("Failed loading acquisition attribution:", err);
+      toast.error(err?.message ?? "Failed to load acquisition attribution");
+      setAcquisitionRows([]);
+    } finally {
+      setLoadingAcquisition(false);
     }
   };
 
@@ -1038,6 +1256,7 @@ export default function Admin() {
           loadEvents(),
           loadPartnerProfiles(),
           loadGrowthMetrics(),
+          loadAcquisitionAttribution(),
           loadDailyKpis(),
           loadRetentionEmailMetrics(),
           loadSafetyReports(),
@@ -1319,6 +1538,13 @@ export default function Admin() {
             className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
           >
             {loadingGrowth ? "Refreshing..." : "Refresh Growth"}
+          </button>
+          <button
+            onClick={() => void loadAcquisitionAttribution()}
+            disabled={loadingAcquisition}
+            className="px-4 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60"
+          >
+            {loadingAcquisition ? "Refreshing Attribution..." : "Refresh Attribution"}
           </button>
           <button
             onClick={() => void refreshDailyKpis()}
@@ -1796,6 +2022,160 @@ export default function Admin() {
         ) : (
           <div className="text-xs text-zinc-500">
             {loadingGrowth ? "Loading growth metrics..." : "No growth data yet."}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-8 rounded-2xl border border-cyan-400/20 bg-zinc-900/40 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-sm font-semibold">Acquisition Attribution</div>
+            <div className="text-xs text-zinc-500">
+              Last 90 days of attributed users, grouped by source, medium, campaign, and content with first-week quality outcomes.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={exportAcquisitionCampaignCsv}
+              disabled={acquisitionCampaignSummary.length === 0}
+              className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+            >
+              Export Campaign CSV
+            </button>
+            <button
+              onClick={exportAcquisitionUserCsv}
+              disabled={acquisitionRows.length === 0}
+              className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+            >
+              Export User CSV
+            </button>
+            <button
+              onClick={() => void loadAcquisitionAttribution()}
+              disabled={loadingAcquisition}
+              className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 disabled:opacity-60 text-sm"
+            >
+              {loadingAcquisition ? "Loading..." : "Reload"}
+            </button>
+          </div>
+        </div>
+
+        {acquisitionRows.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Attributed users</div>
+                <div className="text-xl font-semibold">{acquisitionTotals.users}</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Onboarded</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.onboardedUsers}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.onboardedUsers / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">RSVP in 7d</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.activatedUsers}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.activatedUsers / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Friend add in 7d</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.friendAdders}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.friendAdders / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Invited in 7d</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.inviters}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.inviters / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">Ticket click in 7d</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.ticketClickers}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.ticketClickers / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-xs text-zinc-400">D7 retained</div>
+                <div className="text-xl font-semibold">
+                  {acquisitionTotals.retainedUsers}
+                  <span className="ml-1 text-xs text-zinc-400">
+                    ({acquisitionTotals.users > 0 ? ((acquisitionTotals.retainedUsers / acquisitionTotals.users) * 100).toFixed(1) : "0.0"}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-zinc-500">
+                  <tr>
+                    <th className="text-left pb-2 pr-3">Source</th>
+                    <th className="text-left pb-2 pr-3">Medium</th>
+                    <th className="text-left pb-2 pr-3">Campaign</th>
+                    <th className="text-left pb-2 pr-3">Content</th>
+                    <th className="text-right pb-2 pr-3">Users</th>
+                    <th className="text-right pb-2 pr-3">Onboarded</th>
+                    <th className="text-right pb-2 pr-3">RSVP 7d</th>
+                    <th className="text-right pb-2 pr-3">Friend 7d</th>
+                    <th className="text-right pb-2 pr-3">Invite 7d</th>
+                    <th className="text-right pb-2 pr-3">Ticket 7d</th>
+                    <th className="text-right pb-2">D7 retained</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acquisitionCampaignSummary.map((row) => (
+                    <tr key={row.key} className="border-t border-white/5">
+                      <td className="py-2 pr-3 text-zinc-300">{row.source}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{row.medium}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{row.campaign}</td>
+                      <td className="py-2 pr-3 text-zinc-400">{row.content}</td>
+                      <td className="py-2 pr-3 text-right">{row.users}</td>
+                      <td className="py-2 pr-3 text-right">
+                        {row.onboardedUsers} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.onboardedUsers / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        {row.activatedUsers} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.activatedUsers / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        {row.friendAdders} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.friendAdders / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        {row.inviters} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.inviters / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        {row.ticketClickers} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.ticketClickers / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                      <td className="py-2 text-right">
+                        {row.retainedUsers} <span className="text-xs text-zinc-500">({row.users > 0 ? ((row.retainedUsers / row.users) * 100).toFixed(1) : "0.0"}%)</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            {loadingAcquisition
+              ? "Loading acquisition attribution..."
+              : "No attributed users yet. Apply the attribution migrations, then send tagged links through the app and complete signup/setup."}
           </div>
         )}
       </div>

@@ -7,6 +7,9 @@ import { toast } from "sonner";
 import { claimPendingReferral } from "@/lib/referrals";
 import { resolveFirstSessionRoute } from "@/lib/firstSessionRoute";
 import { WhozinLockup } from "@/app/components/WhozinLogo";
+import { persistStoredMarketingAttribution } from "@/lib/marketingAttribution";
+import { trackMetaCompleteRegistration } from "@/lib/metaPixel";
+import { createMetaEventId, sendMetaConversion } from "@/lib/metaConversions";
 
 type Profile = {
   id: string;
@@ -135,6 +138,13 @@ export default function Setup() {
       }
 
       const prof = data as Profile;
+
+      if (prof.onboarding_complete !== true) {
+        await persistStoredMarketingAttribution(user.id).catch((err) => {
+          console.error("Failed to persist marketing attribution:", err);
+        });
+      }
+
       setProfile(prof);
       setUsername((prof.username || "").trim());
       setDisplayName((prof.display_name || "").trim());
@@ -247,6 +257,23 @@ export default function Setup() {
     }
 
     track("setup_completed", { redirect: redirectTo });
+    const metaEventId = createMetaEventId("complete-registration");
+    trackMetaCompleteRegistration(
+      {
+        status: "completed_setup",
+        method: "whozin_setup",
+      },
+      { eventId: metaEventId }
+    );
+    void sendMetaConversion({
+      eventName: "CompleteRegistration",
+      eventId: metaEventId,
+      eventSourceUrl: typeof window !== "undefined" ? window.location.href : null,
+      customData: {
+        status: "completed_setup",
+        method: "whozin_setup",
+      },
+    });
 
     try {
       const claimed = await claimPendingReferral("share_link");

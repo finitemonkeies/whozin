@@ -4,6 +4,8 @@ import { Toaster } from "sonner";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { RequireAuth } from "./components/RequireAuth";
 import { BottomNav } from "./components/BottomNav";
+import { captureMarketingAttribution } from "@/lib/marketingAttribution";
+import { trackMetaPageView } from "@/lib/metaPixel";
 
 const Home = lazy(() => import("./pages/Home").then((m) => ({ default: m.Home })));
 const EventDetails = lazy(() =>
@@ -16,7 +18,6 @@ const PartnerProfile = lazy(() =>
 const EditProfile = lazy(() =>
   import("./pages/EditProfile").then((m) => ({ default: m.EditProfile }))
 );
-const Tickets = lazy(() => import("./pages/Tickets").then((m) => ({ default: m.Tickets })));
 const Login = lazy(() => import("./pages/Login"));
 const Welcome = lazy(() => import("./pages/Welcome").then((m) => ({ default: m.Welcome })));
 const SignUp = lazy(() => import("./pages/SignUp").then((m) => ({ default: m.SignUp })));
@@ -25,9 +26,6 @@ const Onboarding = lazy(() =>
   import("./pages/Onboarding").then((m) => ({ default: m.Onboarding }))
 );
 const Activity = lazy(() => import("./pages/Activity").then((m) => ({ default: m.Activity })));
-const TicketDetail = lazy(() =>
-  import("./pages/TicketDetail").then((m) => ({ default: m.TicketDetail }))
-);
 const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 const AddByInvite = lazy(() => import("./pages/AddByInvite"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
@@ -51,9 +49,6 @@ const DesktopEventDetail = lazy(() =>
 );
 const DesktopNoMatch = lazy(() =>
   import("./desktop/NoMatch").then((m) => ({ default: m.DesktopNoMatch }))
-);
-const DesktopTickets = lazy(() =>
-  import("./desktop/Tickets").then((m) => ({ default: m.DesktopTickets }))
 );
 const DesktopSettings = lazy(() =>
   import("./desktop/Settings").then((m) => ({ default: m.DesktopSettings }))
@@ -107,6 +102,14 @@ function protectedRoute(node: ReactNode) {
 function AppShell() {
   const location = useLocation();
   const path = location.pathname;
+
+  useEffect(() => {
+    captureMarketingAttribution();
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    trackMetaPageView();
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -185,8 +188,8 @@ function AppShell() {
         <Route path="/partner/:slug" element={withSuspense(<PartnerProfile />)} />
         <Route path="/profile/edit" element={protectedRoute(<EditProfile />)} />
         <Route path="/settings" element={protectedRoute(<Settings />)} />
-        <Route path="/tickets" element={protectedRoute(<Tickets />)} />
-        <Route path="/tickets/:id" element={protectedRoute(<TicketDetail />)} />
+        <Route path="/tickets" element={<Navigate to="/profile" replace />} />
+        <Route path="/tickets/:id" element={<Navigate to="/profile" replace />} />
         <Route path="/explore" element={protectedRoute(<Explore />)} />
 
         <Route path="/web" element={<Navigate to="/web/landing" replace />} />
@@ -197,7 +200,7 @@ function AppShell() {
         <Route path="/web/match" element={withSuspense(<DesktopMatch />)} />
         <Route path="/web/event/:id" element={withSuspense(<DesktopEventDetail />)} />
         <Route path="/web/no-match" element={withSuspense(<DesktopNoMatch />)} />
-        <Route path="/web/tickets" element={withSuspense(<DesktopTickets />)} />
+        <Route path="/web/tickets" element={<Navigate to="/web/landing" replace />} />
         <Route path="/web/settings" element={withSuspense(<DesktopSettings />)} />
 
         <Route path="*" element={<Navigate to="/intro" replace />} />

@@ -21,6 +21,8 @@ import { EventArtwork } from "@/app/components/EventArtwork";
 import { isEventVisible, sourceLabel } from "@/lib/eventVisibility";
 import { reportEvent } from "@/lib/privacySafety";
 import { LocationIcon, PrivateIcon, TimeIcon } from "@/app/components/WhozinIcons";
+import { trackMetaCustomEvent } from "@/lib/metaPixel";
+import { createMetaEventId, sendMetaConversion } from "@/lib/metaConversions";
 
 type EventRow = {
   id: string;
@@ -558,6 +560,24 @@ export function EventDetails() {
         toast.success("You're in.");
         track("rsvp_updated", { source: rsvpSource, action: "add", eventId: id });
         track("rsvp_success", { source: rsvpSource, action: "add", eventId: id });
+        const metaEventId = createMetaEventId("activated-user");
+        trackMetaCustomEvent(
+          "ActivatedUser",
+          {
+            event_id: id,
+            source: rsvpSource,
+          },
+          { eventId: metaEventId }
+        );
+        void sendMetaConversion({
+          eventName: "ActivatedUser",
+          eventId: metaEventId,
+          eventSourceUrl: typeof window !== "undefined" ? window.location.href : null,
+          customData: {
+            event_id: id,
+            source: rsvpSource,
+          },
+        });
 
         if (rsvpSource === "share_link") {
           void logProductEvent({

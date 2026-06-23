@@ -11,6 +11,15 @@ type CheckResult = {
   detail: string;
 };
 
+type MetaHealthStatus = {
+  ok: boolean;
+  configured: boolean;
+  pixel_id_set: boolean;
+  access_token_set: boolean;
+  graph_api_version: string;
+  test_event_code_set: boolean;
+};
+
 type SyncHealthSource = {
   source: string;
   total: number;
@@ -177,6 +186,7 @@ export default function AdminHealth() {
   const [loadingEventFreshness, setLoadingEventFreshness] = useState(false);
   const [pushHealth, setPushHealth] = useState<PushHealthData | null>(null);
   const [loadingPushHealth, setLoadingPushHealth] = useState(false);
+  const [metaHealth, setMetaHealth] = useState<MetaHealthStatus | null>(null);
 
   const deriveProjectRef = (url?: string): string => {
     if (!url) return "unknown";
@@ -197,6 +207,7 @@ export default function AdminHealth() {
         (import.meta.env.VITE_SURFACE_INGESTED_SOURCES as string | undefined) === "true",
       supabaseUrlSet: !!(import.meta.env.VITE_SUPABASE_URL as string | undefined),
       siteUrlSet: !!(import.meta.env.VITE_SITE_URL as string | undefined),
+      metaPixelIdSet: !!(import.meta.env.VITE_META_PIXEL_ID as string | undefined),
     }),
     []
   );
@@ -343,6 +354,41 @@ export default function AdminHealth() {
     } else {
       checks.push({
         label: "Edge health endpoint",
+        ok: false,
+        detail: "VITE_SUPABASE_URL missing",
+      });
+    }
+
+    if (supabaseUrl) {
+      try {
+        const metaHealthUrl = `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/meta-conversions`;
+        const res = await fetchWithTimeout(metaHealthUrl, 10000, {
+          method: "GET",
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+          },
+        });
+        const payload = await res.json().catch(() => null);
+        setMetaHealth((payload ?? null) as MetaHealthStatus | null);
+        checks.push({
+          label: "Meta CAPI readiness",
+          ok: Boolean(res.ok && payload?.configured),
+          detail: res.ok
+            ? `pixel=${payload?.pixel_id_set ? "set" : "missing"}, token=${payload?.access_token_set ? "set" : "missing"}, test_code=${payload?.test_event_code_set ? "set" : "off"}`
+            : `status=${res.status}`,
+        });
+      } catch (e: any) {
+        setMetaHealth(null);
+        checks.push({
+          label: "Meta CAPI readiness",
+          ok: false,
+          detail: e?.message ?? "request failed",
+        });
+      }
+    } else {
+      setMetaHealth(null);
+      checks.push({
+        label: "Meta CAPI readiness",
         ok: false,
         detail: "VITE_SUPABASE_URL missing",
       });
@@ -524,6 +570,49 @@ export default function AdminHealth() {
             <div className="text-xs text-zinc-400 mt-2">{r.detail}</div>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 mb-8">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="text-sm font-semibold">Meta Conversion Health</div>
+            <div className="text-xs text-zinc-500">
+              Frontend pixel visibility plus server-side Conversions API readiness from the `meta-conversions` edge function.
+            </div>
+          </div>
+          <span className={statusChip(!!metaHealth?.configured)}>
+            {metaHealth?.configured ? "READY" : "NOT READY"}
+          </span>
+        </div>
+
+        {metaHealth ? (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-xs text-zinc-400">Frontend Pixel</div>
+              <div className="text-lg font-semibold">{envSummary.metaPixelIdSet ? "Set" : "Missing"}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-xs text-zinc-400">Function Pixel ID</div>
+              <div className="text-lg font-semibold">{metaHealth.pixel_id_set ? "Set" : "Missing"}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-xs text-zinc-400">Access Token</div>
+              <div className="text-lg font-semibold">{metaHealth.access_token_set ? "Set" : "Missing"}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-xs text-zinc-400">Graph Version</div>
+              <div className="text-lg font-semibold">{metaHealth.graph_api_version || "N/A"}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="text-xs text-zinc-400">Test Event Code</div>
+              <div className="text-lg font-semibold">{metaHealth.test_event_code_set ? "On" : "Off"}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-zinc-500">
+            Re-run checks to load Meta conversion health.
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 mb-8">

@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "@/app/App";
 import { AuthProvider } from "@/app/providers/AuthProvider";
 import { initGlobalErrorTracking } from "@/lib/analytics";
+import { captureMarketingAttribution } from "@/lib/marketingAttribution";
+import { initMetaPixel } from "@/lib/metaPixel";
 
 import "@/styles/tailwind.css";
 import "@/styles/theme.css";
@@ -25,6 +27,7 @@ function runInBackground(task: () => void) {
 }
 
 initGlobalErrorTracking();
+captureMarketingAttribution();
 
 createRoot(document.getElementById("root")!).render(
   <AuthProvider>
@@ -36,6 +39,10 @@ runInBackground(() => {
   void import("@/lib/monitoring").then(({ initMonitoring }) => {
     initMonitoring();
   });
+});
+
+runInBackground(() => {
+  initMetaPixel();
 });
 
 runInBackground(() => {
