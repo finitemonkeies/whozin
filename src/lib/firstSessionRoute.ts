@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { decideFirstSessionRoute as decideFirstSessionRouteImpl } from "./firstSessionRoute.shared.js";
+import { deriveFirstSessionCounts } from "./firstSessionCounts.shared.js";
 
 export function decideFirstSessionRoute(
   redirect: string,
@@ -32,13 +33,16 @@ export async function resolveFirstSessionRoute(redirect: string): Promise<string
       .eq("event_name", "invite_sent"),
   ]);
 
-  const friendCount = Array.isArray(friendIdsRes.data) ? friendIdsRes.data.length : 0;
-  const rsvpCount = attendeeCountRes.count ?? 0;
-  const inviteCount = inviteCountRes.count ?? 0;
-
-  return decideFirstSessionRoute(redirect, {
-    friendCount,
-    rsvpCount,
-    inviteCount,
+  const counts = deriveFirstSessionCounts({
+    friendIds: friendIdsRes.data,
+    friendIdsError: friendIdsRes.error,
+    attendeeCount: attendeeCountRes.count,
+    attendeeCountError: attendeeCountRes.error,
+    inviteCount: inviteCountRes.count,
+    inviteCountError: inviteCountRes.error,
   });
+
+  if (!counts) return redirect;
+
+  return decideFirstSessionRoute(redirect, counts);
 }
